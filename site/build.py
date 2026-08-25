@@ -132,7 +132,7 @@ def head(title, desc, path, jsonld=None, article=False):
 
 
 FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)">{LOGO_SVG.replace('width="64" height="64"','width="24" height="24"')}RunVouch</div>
-<p class="small" style="margin-top:.6rem">Proof your unattended AI agents actually did the job — and stayed under budget. A dead man's switch, cost cap and outcome check for scheduled agents.</p>
+<p class="small" style="margin-top:.6rem">The watchdog for unattended AI agents: proof they did the job, and an alert the moment they don't — or start spending. (For the ops crowd: a dead man's switch, cost cap and outcome check.)</p>
 <p style="margin:.8rem 0"><a class="ph-badge" href="https://www.producthunt.com/products/runvouch?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-runvouch" target="_blank" rel="noopener noreferrer"><img alt="RunVouch - Dead man's switch + cost cap for unattended AI agents | Product Hunt" width="250" height="54" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1232338&amp;theme=dark&amp;t=1787690858298"></a></p>
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a></p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
@@ -143,7 +143,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 
 ORG_LD = {"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": BASE, "logo": BASE + "/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}
 APP_LD = {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "url": BASE, "applicationCategory": "DeveloperApplication", "operatingSystem": "Any",
-          "description": "RunVouch is a dead man's switch, cost cap and outcome check for unattended AI agents (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron). It alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting, or reported success without evidence.",
+          "description": "RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron). It alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting, or reported success without evidence.",
           "offers": [{"@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free"}, {"@type": "Offer", "price": "9", "priceCurrency": "USD", "name": "Solo"}, {"@type": "Offer", "price": "29", "priceCurrency": "USD", "name": "Team"}]}
 
 CSS_HASH = hashlib.sha1(CSS.encode()).hexdigest()[:8]
@@ -169,7 +169,7 @@ HOME = f'''
 <div class="wrap hero-inner"><div>
 <span class="eyebrow reveal"><i></i>watching agents that run while you sleep</span>
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
-<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the dead man's switch, cost cap and outcome check for Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron.</p>
+<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right.</p>
 <div class="cta reveal"><a class="btn" href="#start">Watch 3 agents free</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
 <div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span></div>
 </div>
@@ -480,7 +480,7 @@ except Exception as e:
 (OUT / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(f"<url><loc>{BASE}{p}</loc><lastmod>{TODAY}</lastmod></url>" for p in PAGES) + "</urlset>")
 (OUT / "llms.txt").write_text(f"""# RunVouch
 
-> RunVouch is a dead man's switch, cost cap and outcome check for unattended AI agents — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via Telegram, Slack or webhook. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
+> RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via Telegram, Slack or webhook. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
 
 Install: `curl -fsSL {BASE}/rv -o ~/bin/rv && chmod +x ~/bin/rv` then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.

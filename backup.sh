@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+cd /home/krtradingpro/runvouch && .venv/bin/python -c "import sqlite3,time;c=sqlite3.connect('data/runvouch.db');c.execute('VACUUM INTO ?',(f'data/backups/runvouch-{time.strftime(\"%Y%m%d\")}.db',))" && ls -t data/backups/*.db | tail -n +31 | xargs -r rm -f && cp data/backups/runvouch-$(date +%Y%m%d).db /home/krtradingpro/apify/landing-live/maintenance/runvouch-latest.db.bak 2>/dev/null; echo "backup ok $(date)"
