@@ -759,7 +759,7 @@ table{border-collapse:collapse;width:100%;background:var(--bg3);border:1px solid
 .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin:1rem 0}.kpi div{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem}.kpi b{display:block;font-family:"Instrument Sans";font-size:1.6rem}.kpi span{color:var(--fg2);font-size:.85rem}
 small{color:var(--fg3)}.err{color:#FF7A7A}@media(max-width:800px){.kpi{grid-template-columns:1fr 1fr}}</style></head><body>
 <div class=top><b>RunVouch</b> <small>dashboard</small><a href="https://runvouch.com/docs/">Docs</a></div><div class=wrap>
-<p><input id=k placeholder="paste your API key (rv_…)"> <button onclick="load()">Load</button> <small id=me></small></p>
+<p><input id=k type=password placeholder="paste your API key (rv_…)" autocomplete="off"> <button onclick="load()">Load</button> <button onclick="signout()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Sign out</button> <small id=me></small></p><p><small>Your key is kept only in this browser (local storage). Sign out removes it. Nobody else can see your agents without your key.</small></p>
 <div id=out></div></div><script>
 const API=location.hostname.startsWith('api.')||location.hostname==='localhost'||location.hostname==='127.0.0.1'?'':'https://api.runvouch.com';
 const qk=new URLSearchParams(location.search).get('key');if(qk){try{localStorage.setItem('rvk',qk)}catch(e){}history.replaceState({},'',location.pathname)}
@@ -773,6 +773,7 @@ s+='<h2>Agents</h2><table><tr><th>agent</th><th>state</th><th>last run</th><th>s
 for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${a.name}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td></tr>`}
 s+='</table><h2>Open alerts</h2>';if(!al.length)s+='<p><small>None. Quiet night.</small></p>';else{s+='<table><tr><th>when</th><th>agent</th><th>kind</th><th>message</th><th></th></tr>';for(const x of al){s+=`<tr><td><small>${new Date(x.ts*1000).toLocaleString()}</small></td><td>${x.agent}</td><td><span class="pill alert">${x.kind}</span></td><td>${x.message}</td><td><button onclick="ack(${x.id})">ack</button></td></tr>`}s+='</table>'}
 document.getElementById('out').innerHTML=s}
+function signout(){try{localStorage.removeItem('rvk')}catch(e){}document.getElementById('k').value='';document.getElementById('out').innerHTML='';document.getElementById('me').textContent='signed out'}
 async function ack(id){await fetch(API+'/v1/alerts/'+id+'/ack',{method:'POST',headers:{'X-API-Key':document.getElementById('k').value.trim()}});load()}
 try{const k=localStorage.getItem('rvk');if(k){document.getElementById('k').value=k;load()}}catch(e){}
 </script></body></html>"""
