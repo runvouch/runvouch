@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "com.runvouch/runvouch",
   "description": "Dead man's switch, cost cap and outcome check for unattended AI agents: health, alerts, runs.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "websiteUrl": "https://runvouch.com/docs/mcp",
   "remotes": [
     {
@@ -17,5 +17,9 @@
         }
       ]
     }
-  ]
+  ],
+  "repository": {
+    "url": "https://github.com/runvouch/runvouch",
+    "source": "github"
+  }
 }
