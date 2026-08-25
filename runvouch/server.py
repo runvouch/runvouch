@@ -202,7 +202,7 @@ def _email(to: str, subject: str, text: str) -> bool:
         return False
     try:
         req = urllib.request.Request("https://api.resend.com/emails", json.dumps({"from": ALERT_FROM, "to": [to], "subject": subject, "text": text}).encode(),
-                                     {"Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json"})
+                                     {"Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "User-Agent": "runvouch-server/0.3"})
         urllib.request.urlopen(req, timeout=10)
         return True
     except Exception:
@@ -211,7 +211,7 @@ def _email(to: str, subject: str, text: str) -> bool:
 
 def _webhook(url: str, payload: dict) -> bool:
     try:
-        req = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
+        req = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json", "User-Agent": "runvouch-server/0.3"})
         urllib.request.urlopen(req, timeout=10)
         return True
     except Exception:
