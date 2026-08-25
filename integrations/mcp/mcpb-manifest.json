@@ -1,0 +1,18 @@
+{
+  "manifest_version": "0.2",
+  "name": "runvouch",
+  "display_name": "RunVouch",
+  "version": "0.3.2",
+  "description": "Watchdog for unattended AI agents: agent health, alerts, run reports with evidence and cost.",
+  "long_description": "Ask Claude which of your scheduled agents are healthy, read open alerts (missed runs, silent failures, retry storms, cost caps, drift), and report runs with evidence. Free for 3 agents at runvouch.com.",
+  "author": { "name": "RunVouch", "url": "https://runvouch.com" },
+  "homepage": "https://runvouch.com/docs/mcp",
+  "documentation": "https://runvouch.com/docs/mcp",
+  "icon": "icon.png",
+  "server": { "type": "python", "entry_point": "server/runvouch_mcp.py", "mcp_config": { "command": "python3", "args": ["${__dirname}/server/runvouch_mcp.py"], "env": { "RUNVOUCH_KEY": "${user_config.api_key}", "RUNVOUCH_URL": "https://api.runvouch.com" } } },
+  "user_config": { "api_key": { "type": "string", "title": "RunVouch API key", "description": "Get a free key at runvouch.com (3 agents free).", "sensitive": true, "required": true } },
+  "tools": [ {"name":"runvouch_status","description":"Health of all watched agents"}, {"name":"runvouch_alerts","description":"Open alerts"}, {"name":"runvouch_ack","description":"Acknowledge an alert"}, {"name":"runvouch_runs","description":"Recent runs of an agent"}, {"name":"runvouch_run_start","description":"Report a run started"}, {"name":"runvouch_run_end","description":"Report a run ended with evidence"} ],
+  "keywords": ["monitoring","agents","watchdog","cron","claude-code"],
+  "license": "MIT",
+  "compatibility": { "platforms": ["darwin","win32","linux"], "runtimes": { "python": ">=3.9" } }
+}

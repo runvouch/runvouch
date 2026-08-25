@@ -507,6 +507,9 @@ API base: {API} (header X-API-Key).
 # rv client download
 import shutil
 shutil.copy(ROOT.parent / "runvouch" / "cli.py", OUT / "rv")
+import zipfile as _z
+with _z.ZipFile(OUT / "runvouch.mcpb", "w", _z.ZIP_DEFLATED) as zf:
+    zf.write(ROOT.parent / "integrations" / "mcp" / "mcpb-manifest.json", "manifest.json"); zf.write(OUT / "favicon.png", "icon.png"); zf.write(ROOT.parent / "integrations" / "mcp" / "runvouch_mcp.py", "server/runvouch_mcp.py")
 shutil.copy(ROOT.parent / "integrations" / "python" / "runvouch.py", OUT / "runvouch.py")
 shutil.copy(ROOT.parent / "integrations" / "node" / "runvouch.js", OUT / "runvouch.js")
 (OUT / "openclaw" / "runvouch").mkdir(parents=True, exist_ok=True)
