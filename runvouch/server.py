@@ -225,7 +225,9 @@ ALERT_COOLDOWN = int(os.getenv("RUNVOUCH_ALERT_COOLDOWN", "600"))  # same kind+a
 
 def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str) -> None:
     """Persist the alert and hand delivery to a background thread — never block a request on Telegram/email."""
-    if run_id:
+    if kind == "TEST":
+        dup = None
+    elif run_id:
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND run_id=? AND kind=?", agent_id, run_id, kind)
     else:
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - 3600)
