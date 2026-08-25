@@ -4,6 +4,7 @@
 
 Install: `curl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv` then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.
+Claude Desktop bundle: https://runvouch.com/runvouch.mcpb
 Remote MCP (official registry, com.runvouch/runvouch): `claude mcp add --transport http runvouch https://api.runvouch.com/mcp --header "X-API-Key: rv_…"`.
 API base: https://api.runvouch.com (header X-API-Key).
 

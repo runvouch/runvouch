@@ -280,7 +280,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 </div></section>
 </main>'''
 
-page("/", "RunVouch — dead man's switch & cost cap for unattended AI agents", "Know within minutes when a scheduled AI agent (Claude Code Routine, headless claude -p, OpenClaw, n8n, cron) is missing, looping, over budget, or reported success without evidence.", HOME, [APP_LD, ORG_LD])
+page("/", "RunVouch — the watchdog for unattended AI agents", "Proof your scheduled AI agents did the job, and an alert the moment they don't — or start spending. Claude Code Routines, headless claude -p, OpenClaw, n8n, cron.", HOME, [APP_LD, ORG_LD])
 
 # ───────────────────────── PRICING ─────────────────────────
 page("/pricing", "RunVouch pricing — free for 3 agents, $9 Solo, $29 Team", "Simple pricing for agent monitoring: free for 3 agents with all detectors; Solo $9/month for 15 agents; Team $29/month for 100 agents, Slack and PagerDuty.",
@@ -385,6 +385,7 @@ doc("/docs/n8n", "Monitor n8n AI workflows — RunVouch docs", "Catch n8n workfl
 doc("/docs/mcp", "RunVouch MCP server — let agents check on agents", "Add the RunVouch MCP server so Claude and other MCP clients can ask which agents are healthy, read alerts, and report their own runs.",
     "MCP server", "Six tools, stdio transport, no SDK dependency. Lets an agent refuse to build on another agent's unproven output.",
     [("Install (remote, no download)", '<p>RunVouch is listed in the official MCP Registry as <code>com.runvouch/runvouch</code>. Any client that supports remote servers can add it directly:</p><pre>claude mcp add --transport http runvouch https://api.runvouch.com/mcp --header "X-API-Key: rv_…"</pre><p>Cursor / VS Code / Windsurf: add a server with URL <code>https://api.runvouch.com/mcp</code> and header <code>X-API-Key</code>.</p>'),
+     ("Claude Desktop (one-click bundle)", '<p>Download <a href="/runvouch.mcpb">runvouch.mcpb</a> and open it with Claude Desktop (Settings → Extensions → Install from file). It asks for your API key once. Requires Python 3.9+ on your machine.</p>'),
      ("Install (local stdio)", '<pre>claude mcp add runvouch -e RUNVOUCH_KEY=rv_… -e RUNVOUCH_URL=https://api.runvouch.com -- python3 /path/runvouch_mcp.py</pre>'),
      ("Tools", '<table><tr><th>Tool</th><th>Does</th></tr><tr><td><code>runvouch_status</code></td><td>state of every agent (ok / alert / failed / unproven / running / waiting), last run, 24h cost</td></tr><tr><td><code>runvouch_alerts</code></td><td>open alerts</td></tr><tr><td><code>runvouch_ack</code></td><td>acknowledge one</td></tr><tr><td><code>runvouch_runs</code></td><td>recent runs of an agent</td></tr><tr><td><code>runvouch_run_start</code> / <code>runvouch_run_end</code></td><td>report from inside an agent</td></tr></table>'),
      ("Example prompt", '<p class="quote">"Before you summarize yesterday&#39;s data, call runvouch_status. If <code>nightly-etl</code> is not <code>ok</code>, stop and tell me why."</p>')])
@@ -484,6 +485,7 @@ except Exception as e:
 
 Install: `curl -fsSL {BASE}/rv -o ~/bin/rv && chmod +x ~/bin/rv` then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.
+Claude Desktop bundle: https://runvouch.com/runvouch.mcpb
 Remote MCP (official registry, com.runvouch/runvouch): `claude mcp add --transport http runvouch https://api.runvouch.com/mcp --header "X-API-Key: rv_…"`.
 API base: {API} (header X-API-Key).
 

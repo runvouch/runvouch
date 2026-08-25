@@ -1,6 +1,6 @@
 <p align="center"><img src="https://runvouch.com/logo-400.png" width="96" alt="RunVouch"></p>
 <h1 align="center">RunVouch</h1>
-<p align="center"><b>Dead man's switch, cost cap and outcome check for unattended AI agents.</b><br>Claude Code Routines · headless <code>claude -p</code> · OpenClaw · n8n · cron</p>
+<p align="center"><b>The watchdog for unattended AI agents — proof they did the job, and an alert the moment they don't (or start spending).</b><br>Claude Code Routines · headless <code>claude -p</code> · OpenClaw · n8n · cron</p>
 <p align="center"><a href="https://runvouch.com">Website</a> · <a href="https://runvouch.com/docs/">Docs</a> · <a href="https://runvouch.com/blog/">Field notes</a> · <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=runvouch">MCP Registry</a> · <a href="https://www.producthunt.com/products/runvouch">Product Hunt</a></p>
 
 A green run means the scheduler worked, not that the task got done. RunVouch alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting — or reported success without evidence.
