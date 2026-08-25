@@ -53,6 +53,8 @@ LS_VARIANT_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("LS_VARIAN
 RATE_PER_MIN = int(os.getenv("RUNVOUCH_RATE_PER_MIN", "600"))
 SIGNUP_PER_IP_PER_DAY = int(os.getenv("RUNVOUCH_SIGNUPS_PER_IP", "5"))
 CORS_ORIGINS = [o for o in os.getenv("RUNVOUCH_CORS", "").split(",") if o]
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+ALERT_FROM = os.getenv("ALERT_FROM", "RunVouch alerts <alerts@runvouch.com>")
 
 app = FastAPI(title="RunVouch", version="0.2.0")
 if CORS_ORIGINS:
@@ -118,7 +120,7 @@ CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY K
 """
 with _lock:
     _db.executescript(SCHEMA)
-    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT"):
+    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT"):
         try:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -195,6 +197,18 @@ def _telegram(token: str, chat: str, text: str) -> bool:
         return False
 
 
+def _email(to: str, subject: str, text: str) -> bool:
+    if not RESEND_API_KEY or not to:
+        return False
+    try:
+        req = urllib.request.Request("https://api.resend.com/emails", json.dumps({"from": ALERT_FROM, "to": [to], "subject": subject, "text": text}).encode(),
+                                     {"Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
 def _webhook(url: str, payload: dict) -> bool:
     try:
         req = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
@@ -225,6 +239,8 @@ def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str
     if acc["webhook_url"]:
         delivered |= _webhook(acc["webhook_url"], {"kind": kind, "agent": agent["name"] if agent else None,
                                                     "run_id": run_id, "message": message, "ts": time.time()})
+    if acc["alert_email"]:
+        delivered |= _email(acc["alert_email"], f"[RunVouch] {kind}: {agent['name'] if agent else agent_id}", message + "\n\nhttps://runvouch.com/app")
     if delivered:
         with tx() as db:
             db.execute("UPDATE alerts SET delivered=1 WHERE id=?", (alert_id,))
@@ -329,7 +345,7 @@ def weekly_report(now: Optional[float] = None) -> int:
         return 0
     week = time.strftime("%G-W%V", lt)
     sent = 0
-    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL"):
+    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL OR alert_email IS NOT NULL"):
         if q1("SELECT 1 FROM reports_sent WHERE account_id=? AND week=?", acc["id"], week):
             continue
         t0 = now - 7 * 86400
@@ -346,6 +362,8 @@ def weekly_report(now: Optional[float] = None) -> int:
         ok = False
         if acc["telegram_token"] and acc["telegram_chat"]:
             ok |= _telegram(acc["telegram_token"], acc["telegram_chat"], text)
+        if acc["alert_email"]:
+            ok |= _email(acc["alert_email"], f"[RunVouch] weekly report {week}", text)
         if acc["webhook_url"]:
             ok |= _webhook(acc["webhook_url"], {"kind": "WEEKLY_REPORT", "week": week, "cost_7d": round(total_cost, 4), "runs": total_runs, "failed": fails, "alerts": [dict(a) for a in alerts]})
         with tx() as db:
@@ -414,6 +432,7 @@ class SettingsIn(BaseModel):
     telegram_token: Optional[str] = None
     telegram_chat: Optional[str] = None
     webhook_url: Optional[str] = None
+    alert_email: Optional[str] = None
 
 
 def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
@@ -452,6 +471,7 @@ def signup(body: SignupIn, request: Request):
     acc = create_account(email.split("@")[0], "free", email)
     with tx() as db:
         db.execute("INSERT INTO signups(ip, ts) VALUES(?,?)", (ip, time.time()))
+        db.execute("UPDATE accounts SET alert_email=? WHERE id=?", (email, acc["account_id"]))
     return {"api_key": acc["api_key"], "plan": "free", "agents_allowed": PLAN_LIMITS["free"],
             "note": "Store this key now; it is not shown again."}
 
@@ -478,7 +498,7 @@ def contact(body: ContactIn, request: Request):
 @app.get("/v1/me")
 def me(acc=Depends(account_from_key)):
     return {"name": acc["name"], "email": acc["email"], "plan": acc["plan"], "agents_allowed": PLAN_LIMITS.get(acc["plan"], 3),
-            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"])}
+            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"] or acc["alert_email"])}
 
 
 @app.post("/v1/me/rotate-key")
@@ -528,7 +548,7 @@ async def ls_webhook(request: Request):
 def put_settings(s: SettingsIn, acc=Depends(account_from_key)):
     with tx() as db:
         db.execute("UPDATE accounts SET telegram_token=COALESCE(?,telegram_token), telegram_chat=COALESCE(?,telegram_chat), "
-                   "webhook_url=COALESCE(?,webhook_url) WHERE id=?", (s.telegram_token, s.telegram_chat, s.webhook_url, acc["id"]))
+                   "webhook_url=COALESCE(?,webhook_url), alert_email=COALESCE(?,alert_email) WHERE id=?", (s.telegram_token, s.telegram_chat, s.webhook_url, s.alert_email, acc["id"]))
     return {"ok": True}
 
 

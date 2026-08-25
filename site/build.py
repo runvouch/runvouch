@@ -171,7 +171,7 @@ HOME = f'''
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
 <p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the dead man's switch, cost cap and outcome check for Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron.</p>
 <div class="cta reveal"><a class="btn" href="#start">Watch 3 agents free</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
-<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>telegram · slack · webhook</span><span>self-host (MIT)</span></div>
+<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span></div>
 </div>
 <div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;runvouch.com/app · last night · 5 agents</div>
 <ul class="runs">
@@ -261,7 +261,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <section id="start"><div class="wrap">
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
-<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Telegram &amp; webhook alerts</li><li>7-day history</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
+<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram &amp; webhook alerts</li><li>7-day history</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
 <div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts</li></ul>' + ('<a class="btn" href="https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22" data-ls>Upgrade to Solo — $9/mo</a>' if LS_LIVE else '<a class="btn" href="/contact?topic=billing">Start free — paid plans open Sept 2026</a>') + '</div>
 <div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>Slack &amp; PagerDuty</li><li>Shared dashboard</li><li>API export</li></ul>' + ('<a class="btn ghost" href="https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9" data-ls>Upgrade to Team — $29/mo</a>' if LS_LIVE else '<a class="btn ghost" href="/contact?topic=billing">Request Team plan</a>') + '</div>
 </div>
@@ -394,7 +394,7 @@ doc("/docs/api", "RunVouch HTTP API", "REST API reference for RunVouch: agents, 
     [("Endpoints", '''<table><tr><th>Method · path</th><th>Purpose</th></tr>
 <tr><td><code>POST /signup</code></td><td>{"email"} → free account + key (shown once)</td></tr>
 <tr><td><code>GET /v1/me</code> · <code>POST /v1/me/rotate-key</code></td><td>account, plan, key rotation</td></tr>
-<tr><td><code>PUT /v1/settings</code></td><td>telegram_token, telegram_chat, webhook_url · <code>POST /v1/settings/test-alert</code></td></tr>
+<tr><td><code>PUT /v1/settings</code></td><td>alert_email, telegram_token, telegram_chat, webhook_url · <code>POST /v1/settings/test-alert</code></td></tr>
 <tr><td><code>POST /v1/agents</code> · <code>GET /v1/agents</code></td><td>upsert (name, cadence_s, grace_s, max_runtime_s, cap_run_cost, cap_day_cost, cap_run_tokens, evidence_required) · list with state</td></tr>
 <tr><td><code>POST /v1/agents/{name}/pause</code> · <code>GET /v1/agents/{name}/runs</code></td><td>pause/resume · run history</td></tr>
 <tr><td><code>POST /v1/runs/start</code> · <code>/tool</code> · <code>/heartbeat</code> · <code>/end</code></td><td>run lifecycle; tool events carry tool, input (hashed server-side) or input_hash, ok, cost, tokens</td></tr>
