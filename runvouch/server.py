@@ -218,32 +218,57 @@ def _webhook(url: str, payload: dict) -> bool:
         return False
 
 
+import queue as _queue
+_deliver_q: "_queue.Queue[int]" = _queue.Queue()
+ALERT_COOLDOWN = int(os.getenv("RUNVOUCH_ALERT_COOLDOWN", "600"))  # same kind+agent at most once per 10 min
+
+
 def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str) -> None:
-    # dedupe: same kind for same agent+run (or same agent without run within 1h)
+    """Persist the alert and hand delivery to a background thread — never block a request on Telegram/email."""
     if run_id:
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND run_id=? AND kind=?", agent_id, run_id, kind)
     else:
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - 3600)
     if dup:
         return
+    recent = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - ALERT_COOLDOWN)
     with tx() as db:
-        cur = db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message) VALUES(?,?,?,?,?,?)",
-                         (account_id, agent_id, run_id, time.time(), kind, message))
+        cur = db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message, delivered) VALUES(?,?,?,?,?,?,?)",
+                         (account_id, agent_id, run_id, time.time(), kind, message, -1 if recent else 0))
         alert_id = cur.lastrowid
-    acc = q1("SELECT * FROM accounts WHERE id=?", account_id)
-    agent = q1("SELECT name FROM agents WHERE id=?", agent_id)
-    text = f"⚠️ RunVouch [{kind}] {agent['name'] if agent else agent_id}\n{message}"
+    if not recent:  # cooldown: stored, visible in dashboard, but not re-sent
+        _deliver_q.put(alert_id)
+
+
+def _deliver(alert_id: int) -> None:
+    a = q1("SELECT * FROM alerts WHERE id=?", alert_id)
+    if not a:
+        return
+    acc = q1("SELECT * FROM accounts WHERE id=?", a["account_id"])
+    agent = q1("SELECT name FROM agents WHERE id=?", a["agent_id"])
+    name = agent["name"] if agent else str(a["agent_id"])
+    text = f"⚠️ RunVouch [{a['kind']}] {name}\n{a['message']}"
     delivered = False
     if acc["telegram_token"] and acc["telegram_chat"]:
         delivered |= _telegram(acc["telegram_token"], acc["telegram_chat"], text)
     if acc["webhook_url"]:
-        delivered |= _webhook(acc["webhook_url"], {"kind": kind, "agent": agent["name"] if agent else None,
-                                                    "run_id": run_id, "message": message, "ts": time.time()})
+        delivered |= _webhook(acc["webhook_url"], {"kind": a["kind"], "agent": name, "run_id": a["run_id"], "message": a["message"], "ts": a["ts"]})
     if acc["alert_email"]:
-        delivered |= _email(acc["alert_email"], f"[RunVouch] {kind}: {agent['name'] if agent else agent_id}", message + "\n\nhttps://runvouch.com/app")
-    if delivered:
-        with tx() as db:
-            db.execute("UPDATE alerts SET delivered=1 WHERE id=?", (alert_id,))
+        delivered |= _email(acc["alert_email"], f"[RunVouch] {a['kind']}: {name}", a["message"] + "\n\nhttps://runvouch.com/app")
+    with tx() as db:
+        db.execute("UPDATE alerts SET delivered=? WHERE id=?", (1 if delivered else 0, alert_id))
+
+
+def _deliverer():
+    while True:
+        try:
+            _deliver(_deliver_q.get())
+        except Exception:
+            pass
+
+
+if os.getenv("AGENTWATCH_NO_SWEEP") != "1" and os.getenv("RUNVOUCH_NO_SWEEP") != "1":
+    threading.Thread(target=_deliverer, daemon=True).start()
 
 
 # ───────────────────────────── detectors ─────────────────────────────
