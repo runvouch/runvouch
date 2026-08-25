@@ -18,7 +18,7 @@ URL = os.getenv("RUNVOUCH_URL", "http://localhost:8787").rstrip("/")
 KEY = os.getenv("RUNVOUCH_KEY", "")
 
 
-def api(method, path, body=None, params=None, soft=False):
+def api(method, path, body=None, params=None, soft=False, _retries=3):
     """soft=True: never raise/exit (used by `rv run` so monitoring can't break the job)."""
     if not KEY:
         if soft:
@@ -34,6 +34,8 @@ def api(method, path, body=None, params=None, soft=False):
             return json.loads(r.read() or b"{}")
     except Exception as e:
         msg = f"RunVouch {getattr(e, 'code', '')}: {getattr(e, 'reason', e)}"
+        if soft and _retries > 0 and getattr(e, 'code', 0) in (0, 502, 503, 504):
+            time.sleep(3); return api(method, path, body, params, soft, _retries - 1)
         if soft:
             sys.stderr.write("runvouch: " + msg + " (running unmonitored)\n"); return None
         sys.exit(msg)
