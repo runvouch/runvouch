@@ -1,0 +1,20 @@
+# RunVouch
+
+> RunVouch is a dead man's switch, cost cap and outcome check for unattended AI agents — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via Telegram, Slack or webhook. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
+
+Install: `curl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv` then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
+Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.
+Remote MCP (official registry, com.runvouch/runvouch): `claude mcp add --transport http runvouch https://api.runvouch.com/mcp --header "X-API-Key: rv_…"`.
+API base: https://api.runvouch.com (header X-API-Key).
+
+## Docs
+- [Claude Code](https://runvouch.com/docs/claude-code): Routines, headless runs, hooks plugin, transcript cost
+- [Cron & scripts](https://runvouch.com/docs/cron): rv run for any job; GitHub Actions
+- [Python & Node](https://runvouch.com/docs/python-node): LangGraph, OpenAI Agents SDK, CrewAI callbacks
+- [OpenClaw](https://runvouch.com/docs/openclaw) · [n8n](https://runvouch.com/docs/n8n) · [MCP server](https://runvouch.com/docs/mcp) · [HTTP API](https://runvouch.com/docs/api)
+
+## Compare
+- [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)
+
+## Other
+- [Pricing](https://runvouch.com/pricing) · [Security](https://runvouch.com/security) · [Privacy](https://runvouch.com/privacy) · [Changelog](https://runvouch.com/changelog)

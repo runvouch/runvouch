@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RunVouch — your AI agents fail silently. Know within minutes.</title>
+<meta name="description" content="Watchdog for scheduled AI agents (Claude Code Routines, OpenClaw, n8n, cron). Missed runs, green-but-not-done, retry storms, runaway cost, drift. Telegram/Slack alerts.">
+<style>
+:root{--bg:#0b1020;--fg:#e8ecf5;--mut:#9aa5bf;--acc:#3ddc97;--warn:#ff6b6b;--card:#121a33}
+*{box-sizing:border-box}body{margin:0;font:16px/1.55 system-ui,-apple-system,Segoe UI,Inter,sans-serif;background:var(--bg);color:var(--fg)}
+.wrap{max-width:900px;margin:0 auto;padding:3rem 1.25rem}h1{font-size:2.4rem;line-height:1.15;margin:.5rem 0}h2{margin-top:3rem}
+.lead{color:var(--mut);font-size:1.15rem}.cta{display:inline-block;background:var(--acc);color:#06241a;padding:.8rem 1.3rem;border-radius:8px;font-weight:700;text-decoration:none;margin:1rem .5rem 0 0}
+.cta.alt{background:transparent;color:var(--fg);border:1px solid #33406a}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-top:1.5rem}
+.card{background:var(--card);border:1px solid #1f2a4d;border-radius:10px;padding:1.1rem}.card b{color:var(--warn)}
+pre{background:#060a18;border:1px solid #1f2a4d;border-radius:8px;padding:1rem;overflow-x:auto;font-size:.9rem}
+.price{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}.price .card h3{margin:.2rem 0}.price .n{font-size:1.8rem;font-weight:800}
+small,.foot{color:var(--mut)}.foot{margin-top:3rem;font-size:.9rem}
+</style></head><body><div class="wrap">
+<small>RunVouch · early access</small>
+<h1>Your AI agents don't crash.<br>They fail silently — and keep spending.</h1>
+<p class="lead">A green run means the scheduler worked, not that the task got done. RunVouch watches scheduled agents
+(Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n, plain cron) and tells you within minutes when one
+is missing, looping, lying, or burning money.</p>
+<a class="cta" href="#start">Watch 3 agents free</a> <a class="cta alt" href="/app">Dashboard</a><a class="cta alt" href="#how">How it works</a>
+
+<div class="grid">
+<div class="card"><b>MISSED</b><br>Expected run never started. Dead scheduler, expired auth, crashed before first line.</div>
+<div class="card"><b>NO_EVIDENCE</b><br>Run said "ok" but the report isn't there, the URL 404s, the file didn't change. Green ≠ done.</div>
+<div class="card"><b>RETRY_STORM</b><br>Same tool, same input, 40 times. Each call looks fine; together it's a loop that costs $437.</div>
+<div class="card"><b>BUDGET</b><br>Per-run and per-day cost/token caps. The $1,800-in-two-days story doesn't happen to you.</div>
+<div class="card"><b>DRIFT</b><br>Output size or duration jumps off its 7-run baseline. The agent is quietly doing something else.</div>
+<div class="card"><b>STALLED</b><br>Started, never finished, no heartbeat. Hung on a prompt nobody will answer.</div>
+</div>
+
+<h2 id="how">Two lines around any job</h2>
+<pre>pip install runvouch            # or curl the single-file client
+rv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence
+rv run nightly-report --evidence-file out/report.html -- claude -p "build tonight's report"</pre>
+<p>Or install the <b>Claude Code plugin</b> — hooks report start / every tool call / stop automatically. Or the <b>MCP server</b>,
+so your agent can ask <i>"are my other agents healthy?"</i> before it trusts their output. Alerts to Telegram, Slack, or any webhook.</p>
+
+<h2>Why not Healthchecks / Cronitor / Langfuse?</h2>
+<p>Ping monitors know a job ran, not whether it did anything. Trace platforms are built for dev teams debugging prompts, priced per seat or per million spans.
+RunVouch is the missing middle: <b>outcome, cost, and loop detection for people who run agents unattended</b> — solo builders and small teams.</p>
+
+<h2 id="start">Pricing</h2>
+<div class="price">
+<div class="card"><h3>Free</h3><div class="n">$0</div>3 agents · Telegram/webhook alerts · 7-day history</div>
+<div class="card"><h3>Solo</h3><div class="n">$9<small>/mo</small></div>15 agents · 90-day history · cost reports · priority alerts</div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/mo</small></div>100 agents · Slack/PagerDuty · shared dashboard · API export</div>
+</div>
+<form id="su" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" style="padding:.8rem;border-radius:8px;border:1px solid #33406a;background:#060a18;color:var(--fg);width:18rem;max-width:100%">
+<button class="cta" type="submit" style="border:0;cursor:pointer">Get a free API key</button></form>
+<pre id="key" style="display:none"></pre>
+<p><small>Free = 3 agents, no card. Self-host: MIT-licensed single-file server on GitHub.</small></p>
+<script>
+const API = (location.hostname==='localhost'||location.protocol==='file:') ? 'http://localhost:8787' : 'https://api.runvouch.com';
+async function signup(e){e.preventDefault();const k=document.getElementById('key');k.style.display='block';k.textContent='…';
+try{const r=await fetch(API+'/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('em').value})});
+const j=await r.json();if(!r.ok){k.textContent='Error: '+(j.detail||r.status);return}
+k.textContent='RUNVOUCH_KEY='+j.api_key+'\nRUNVOUCH_URL='+API+'\n\n# store this now — it is not shown again\naw agent my-first-agent --cadence 24h --evidence\naw run my-first-agent --evidence-file out.html -- your-command'}
+catch(err){k.textContent='Network error: '+err}return false}
+</script>
+
+<div class="foot">Built by someone who ran autonomous agents and a trading bot unattended for two years and got every one of these failures. RunVouch is the watchdog we wished existed.</div>
+</div></body></html>

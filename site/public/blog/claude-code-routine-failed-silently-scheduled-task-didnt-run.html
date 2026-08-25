@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0B1020">
+<title>Claude Code Routine failed silently? How to know your schedu — RunVouch</title><meta name="description" content="Green does not mean done. The 4 ways a scheduled Claude Code run fails with no error, and heartbeat plus evidence checks that catch each one."><link rel="canonical" href="https://runvouch.com/blog/claude-code-routine-failed-silently-scheduled-task-didnt-run">
+<meta property="og:type" content="article"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="Claude Code Routine failed silently? How to know your schedu — RunVouch"><meta property="og:description" content="Green does not mean done. The 4 ways a scheduled Claude Code run fails with no error, and heartbeat plus evidence checks that catch each one."><meta property="og:url" content="https://runvouch.com/blog/claude-code-routine-failed-silently-scheduled-task-didnt-run"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/logo.svg?v=8d9a912d" type="image/svg+xml"><link rel="icon" href="/favicon.png?v=8d9a912d" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v=8d9a912d"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.8d9a912d.css"><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}, {"@context": "https://schema.org", "@type": "Article", "headline": "Claude Code Routine failed silently? How to know your scheduled agent actually ran", "description": "Green does not mean done. The 4 ways a scheduled Claude Code run fails with no error, and heartbeat plus evidence checks that catch each one.", "datePublished": "2026-08-25", "dateModified": "2026-08-25", "author": {"@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com"}, "publisher": {"@type": "Organization", "name": "RunVouch", "logo": {"@type": "ImageObject", "url": "https://runvouch.com/logo.svg"}}, "mainEntityOfPage": "https://runvouch.com/blog/claude-code-routine-failed-silently-scheduled-task-didnt-run", "image": "https://runvouch.com/og.png"}]</script></head><body>
+<div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig"></canvas></div>
+<header class="top"><div class="wrap nav"><a class="brand" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RunVouch">
+<circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
+<path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · 2026-08-25 · RunVouch</p><h1>Claude Code Routine failed silently? How to know your scheduled agent actually ran</h1><p class="lead muted">Green does not mean done. The 4 ways a scheduled Claude Code run fails with no error, and heartbeat plus evidence checks that catch each one.</p><p>The Claude Code Routines documentation contains one sentence I wish I had read two years earlier, before I started running agents and a trading bot on a schedule. From <a href="https://code.claude.com/docs/en/routines#view-and-interact-with-runs">code.claude.com/docs/en/routines</a>:</p>
+<p>"A green status in the run list means the session started and exited without an infrastructure error. It does not mean the task in your prompt succeeded. Open the run to read the transcript and confirm what Claude actually did."</p>
+<p>That is the whole problem with unattended agents in three sentences. Green is a statement about the container, not about your task. The same is true of cron's exit code, n8n's execution list, and every "succeeded" badge I have ever trusted.</p>
+<p>RunVouch is a dead man's switch, cost cap and outcome check for unattended AI agents: it expects a heartbeat per run, alerts the moment a run or a day crosses a dollar cap, and tells you when a run is missed, stalled, looping or produced no evidence.</p>
+
+<h2>Four ways a scheduled agent fails without an error</h2>
+<p>I hit all four with Claude Code, a headless <code>claude -p</code> cron, and a bot that placed real orders. None of them produced a red status.</p>
+<p><strong>1. It never started.</strong> The machine was asleep. The session-scoped scheduler was not running: Claude Code's own docs note that in-session tasks "only fire while Claude Code is running and idle" and that there is "no catch-up for missed fires" (<a href="https://code.claude.com/docs/en/scheduled-tasks#limitations">scheduled-tasks, Limitations</a>). Routines may "start a few minutes after the scheduled time due to stagger", which is fine, unless your alert threshold is tighter than the stagger. Nothing ran, so nothing failed, so nothing told you.</p>
+<p><strong>2. It started, then hung.</strong> A tool call waiting on a network that was blocked, an MCP server that never answered, a subprocess waiting for stdin. The process exists. The watchdog that checks "is the PID alive" is satisfied. My trading bot once sat for 31 hours holding an open position because a websocket reconnect never completed and the reconnect loop had no timeout.</p>
+<p><strong>3. Exit 0 with no output.</strong> The run finished cleanly and wrote nothing. Claude decided the task was already done, or refused, or the output path was wrong. In Routines, "blocked network requests, missing connector tools, and task-level failures all surface" in the transcript, not in the status indicator. In a bare cron there is not even a transcript unless you saved one.</p>
+<p><strong>4. It produced the wrong output.</strong> The report was written, but it is yesterday's report, or an empty template, or 40 bytes where it is normally 40 KB. This is the one I find hardest to catch by hand, because the file exists and the timestamp is fresh.</p>
+<p>Notice that only the second one is even detectable by looking at the process. The other three require knowing what the run was supposed to produce.</p>
+
+<h2>How to know your scheduled Claude Code task actually ran</h2>
+<p>Two mechanisms cover the four cases. Neither is clever.</p>
+<p><strong>A heartbeat with a deadline.</strong> The agent tells a separate service "I started", "I am still going", "I finished". The service, not the agent, holds the clock. If the start heartbeat does not arrive within the cadence, that is MISSED (case 1). If it starts and heartbeats stop mid-run, that is STALLED (case 2). If the finish heartbeat carries a non-zero exit, that is FAILED. The important property is that silence is an alert. A dead agent cannot report itself dead, so something else has to notice the absence.</p>
+<p><strong>Evidence attached to the finish.</strong> The run has to hand over proof that the outcome exists: a file, a URL that must return 200, or an assertion. No evidence on a green finish is NO_EVIDENCE (case 3). Evidence that exists but is far outside the last seven runs in size or duration is DRIFT (case 4), measured with median absolute deviation so one strange run does not shift the baseline.</p>
+<p>That is what "green does not equal done" means in practice: you decide up front what done looks like, and the run is only counted when it arrives.</p>
+
+<h2>Setting it up for Claude Code Routines and headless claude -p</h2>
+<p>Register the agent with its cadence and say that evidence is required:</p>
+<pre>rv agent nightly-digest --cadence 24h --cap-run-cost 2 --evidence</pre>
+<p>For a cron or any shell scheduler, wrap the command. The heartbeat and the evidence upload happen around your command, and the command is unchanged:</p>
+<pre># crontab
+15 6 * * * rv run nightly-digest --evidence-file /srv/digest/today.html -- \
+  claude -p "Build today's digest into /srv/digest/today.html" \
+    --output-format json --max-turns 40</pre>
+<p>For Routines or an interactive Claude Code session, install the plugin. It hooks SessionStart, PostToolUse and Stop, so every tool call is a heartbeat and the Stop hook closes the run with tokens and cost read from the transcript. Three environment variables configure it, and in a Routine you set them in the cloud environment:</p>
+<pre>RUNVOUCH_KEY=rv_live_...        # your API key
+RUNVOUCH_AGENT=nightly-digest    # which agent this session reports as
+RUNVOUCH_EVIDENCE=/srv/digest/today.html   # a file path, an https:// URL, or cmd:<shell command that must exit 0></pre>
+<p>Evidence can be one of three things:</p>
+<ul>
+<li>A file path. The run is NO_EVIDENCE if the file is missing or was not modified during the run.</li>
+<li>A URL. Checked after the run; a non-200 response fails the check. Good for "the deploy is live" or "the page was regenerated".</li>
+<li>An assertion, such as a command that must exit 0. This is how I check the trading bot: the assertion queries the exchange and confirms the expected order state, not the bot's own log line saying it placed the order.</li>
+</ul>
+<p>Alerts go to Telegram, Slack or a webhook. There is an MCP server too, so an agent can read its own run history and, for example, refuse to start if the previous run is still open.</p>
+
+<h2>What I would not do</h2>
+<p>I would not make the agent responsible for reporting its own failure. It cannot report a run that never started, and a hung run is by definition not reporting. The clock has to live outside.</p>
+<p>I would not treat the evidence check as optional for "simple" jobs. Every one of my silent failures was on a job I considered too simple to need checking.</p>
+<p>I would not let the watchdog become a dependency. <code>rv run</code> fails open: if RunVouch is unreachable, your command runs as normal and you lose one run of monitoring, not the run.</p>
+<p>Free for three agents, $9 Solo, $29 Team, MIT self-host, EU hosting. Details at <a href="https://runvouch.com">runvouch.com</a>.</p>
+
+<h2>FAQ</h2>
+<p><strong>My Routine shows green. Do I still need this?</strong><br>Per the docs, green means the session "started and exited without an infrastructure error" and "does not mean the task in your prompt succeeded". Green covers case 1 partially and cases 2 to 4 not at all. The evidence check is what covers the rest.</p>
+<p><strong>What happens if the run legitimately has nothing to do?</strong><br>Write that as evidence. A small file saying "no changes since 2026-08-24" is a valid outcome, and it keeps DRIFT from firing because the run's size is consistent. Silence and "nothing to do" should never look the same.</p>
+<p><strong>Does the plugin add latency or cost to a Claude Code run?</strong><br>The hooks make small HTTP calls per tool use and at start and stop; they do not add tokens. Cost and token counts are read from the transcript the session already writes, not re-computed with extra model calls.</p>
+
+<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
+<circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
+<path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>RunVouch</div>
+<p class="small" style="margin-top:.6rem">Proof your unattended AI agents actually did the job — and stayed under budget. A dead man's switch, cost cap and outcome check for scheduled agents.</p>
+<p style="margin:.8rem 0"><a class="ph-badge" href="https://www.producthunt.com/products/runvouch?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-runvouch" target="_blank" rel="noopener noreferrer"><img alt="RunVouch - Dead man's switch + cost cap for unattended AI agents | Product Hunt" width="250" height="54" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1232338&amp;theme=dark&amp;t=1787690858298"></a></p>
+<p class="small muted">© 2026 RunVouch · Netherlands · <a href="/contact">contact</a></p></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Docs</h4><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
+<div><h4>Compare</h4><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<script>
+const API="https://api.runvouch.com";
+async function signup(e){e.preventDefault();const k=document.getElementById('keybox');k.classList.add('show');k.innerHTML='<pre>…</pre>';
+try{const r=await fetch(API+'/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('em').value})});
+const j=await r.json();if(!r.ok){k.innerHTML='<div class="alertbox">'+(j.detail||('Error '+r.status))+'</div>';return}
+k.innerHTML='<pre><span class="d"># Your key — shown once. Store it now.</span>\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\nexport RUNVOUCH_URL='+API+'\n\n<span class="d"># Install the client, register an agent, wrap your job</span>\ncurl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\'s report"</pre><p class="small muted">Free plan: 3 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
+catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}return false}
+
+(function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
+document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
+function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
+function add(rand){const y=lanes[Math.floor(Math.random()*lanes.length)];P.push({x:rand?Math.random()*W:-30*D,y,y0:y,v:(0.35+Math.random()*0.5)*D,life:0,fail:Math.random()<0.14,failAt:600+Math.random()*900,vy:0,trail:[]})}
+R();addEventListener('resize',R);
+function draw(){x.clearRect(0,0,W,H);x.lineWidth=1*D;x.strokeStyle='rgba(169,180,214,.11)';for(const y of lanes){x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}
+if(t%95===0)add(false);
+for(const p of P){p.life++;const dropping=p.fail&&p.life>p.failAt;
+if(dropping){p.vy+=0.045*D;p.y+=p.vy;p.x+=p.v*0.6}else{p.x+=p.v;p.y=p.y0+Math.sin(t*0.02+p.x*0.002)*1.2*D}
+p.trail.push([p.x,p.y]);if(p.trail.length>46)p.trail.shift();
+const col=dropping?'255,99,99':'62,207,142';
+for(let i=1;i<p.trail.length;i++){const a=(i/p.trail.length)*(dropping?.7:.5);x.strokeStyle=`rgba(${col},${a})`;x.lineWidth=(dropping?2.6:2.2)*D;x.beginPath();x.moveTo(...p.trail[i-1]);x.lineTo(...p.trail[i]);x.stroke()}
+const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,18*D);g.addColorStop(0,`rgba(${col},.95)`);g.addColorStop(.3,`rgba(${col},.4)`);g.addColorStop(1,`rgba(${col},0)`);x.fillStyle=g;x.beginPath();x.arc(p.x,p.y,18*D,0,7);x.fill();
+x.fillStyle=dropping?'#FFC8C8':'#EAFFF4';x.beginPath();x.arc(p.x,p.y,3*D,0,7);x.fill();
+if(dropping&&p.vy>0.3*D&&p.vy<0.36*D){x.strokeStyle='rgba(255,99,99,.5)';x.lineWidth=1.2*D;x.beginPath();x.arc(p.x,p.y,14*D,0,7);x.stroke()}}
+P=P.filter(p=>p.x<W+40*D&&p.y<H+40*D);t++;requestAnimationFrame(draw)}draw()})();
+document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?checkout[email]='+encodeURIComponent(e)}));
+</script></body></html>

@@ -1,0 +1,10 @@
+# ~/.config/systemd/user/cloudflared.service  (systemctl --user enable --now cloudflared)
+[Unit]
+Description=Cloudflare Tunnel for RunVouch API
+After=network.target
+[Service]
+ExecStart=%h/bin/cloudflared tunnel run runvouch
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=default.target

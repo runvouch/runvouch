@@ -1,0 +1,105 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0B1020">
+<title>My Claude Code cron ran up $1,800 in two nights — the watchd — RunVouch</title><meta name="description" content="Four documented runaway agent bills ($1,818, $6,000, $437, $150), why per-call metrics hide the loop, and per-run/per-day caps with rv."><link rel="canonical" href="https://runvouch.com/blog/claude-code-cron-unexpected-api-bill-runaway-cost-overnight">
+<meta property="og:type" content="article"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="My Claude Code cron ran up $1,800 in two nights — the watchd — RunVouch"><meta property="og:description" content="Four documented runaway agent bills ($1,818, $6,000, $437, $150), why per-call metrics hide the loop, and per-run/per-day caps with rv."><meta property="og:url" content="https://runvouch.com/blog/claude-code-cron-unexpected-api-bill-runaway-cost-overnight"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/logo.svg?v=8d9a912d" type="image/svg+xml"><link rel="icon" href="/favicon.png?v=8d9a912d" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v=8d9a912d"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.8d9a912d.css"><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}, {"@context": "https://schema.org", "@type": "Article", "headline": "My Claude Code cron ran up $1,800 in two nights — the watchdog that stops it at $2", "description": "Four documented runaway agent bills ($1,818, $6,000, $437, $150), why per-call metrics hide the loop, and per-run/per-day caps with rv.", "datePublished": "2026-08-25", "dateModified": "2026-08-25", "author": {"@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com"}, "publisher": {"@type": "Organization", "name": "RunVouch", "logo": {"@type": "ImageObject", "url": "https://runvouch.com/logo.svg"}}, "mainEntityOfPage": "https://runvouch.com/blog/claude-code-cron-unexpected-api-bill-runaway-cost-overnight", "image": "https://runvouch.com/og.png"}]</script></head><body>
+<div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig"></canvas></div>
+<header class="top"><div class="wrap nav"><a class="brand" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RunVouch">
+<circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
+<path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · 2026-08-25 · RunVouch</p><h1>My Claude Code cron ran up $1,800 in two nights — the watchdog that stops it at $2</h1><p class="lead muted">Four documented runaway agent bills ($1,818, $6,000, $437, $150), why per-call metrics hide the loop, and per-run/per-day caps with rv.</p><p>I ran autonomous agents and a crypto trading bot unattended for two years. The most expensive bugs never threw an exception. They ran fine, on schedule, and did the same useless thing hundreds of times until an invoice arrived. This post is about the cost version of that failure and the two-line fix I use now.</p>
+<p>RunVouch is a dead man's switch, cost cap and outcome check for unattended AI agents: it expects a heartbeat per run, alerts the moment a run or a day crosses a dollar cap, and tells you when a run is missed, stalled, looping or produced no evidence.</p>
+
+<h2>What a runaway Claude Code cron bill actually looks like</h2>
+<p>These are public, documented cases. I am linking each one because the numbers matter more than my opinion.</p>
+<ul>
+<li><a href="https://github.com/anthropics/claude-code/issues/37686">anthropics/claude-code #37686</a> (March 2026). A Max subscriber set up cron jobs running <code>claude -p --dangerously-skip-permissions</code>. The shell had an <code>ANTHROPIC_API_KEY</code> in it, so every run billed the API account instead of the subscription. Opus in agentic loops, roughly 47k input tokens per request, dozens of requests per hour. About $858 on day one, about $960 on day two, $1,818 total before anyone looked.</li>
+<li><a href="https://www.makeuseof.com/someone-left-claude-code-running-overnight-and-it-cost-6000/">The $6,000 overnight loop</a>, originally posted on <a href="https://www.reddit.com/r/ClaudeAI/comments/1t11mmy/i_accidentally_burned_6000_of_claude_usage/">r/ClaudeAI</a>. A loop checked for updates every 30 minutes and re-sent a very large conversation each time. The usage dashboard lagged by days; the first warning was the email after the money was gone.</li>
+<li><a href="https://github.com/openclaw/openclaw/issues/16808">openclaw/openclaw #16808</a> (February 2026). An agent called <code>process(action:log, sessionId:X)</code> 1,535 times in about two hours, each call returning an identical "no new output". About $150, memory from 800 MB to 3 GB, then a crash. The existing watchdog checked that the process existed, not what it was doing.</li>
+<li><a href="https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7">The $437 LangChain loop</a> (April 2026). A summarizer called <code>list_files("/data")</code> 14,000 times overnight, got the same 1,200 filenames back every time, and only stopped when a token quota cut it off. The author's line: "Every individual call looks like every other normal call. The only signal is cost, and cost is post-hoc."</li>
+</ul>
+<p>Four different stacks, one shape: a scheduled or looping process, no per-run ceiling, and monitoring that reports on the wrong unit.</p>
+
+<h2>Why per-call metrics hide the loop</h2>
+<p>Every observability tool I used showed me healthy calls. Latency normal, status 200, tokens per request within range. That is exactly what a loop looks like from the inside. The 14,000th <code>list_files</code> call is indistinguishable from the first.</p>
+<p>The loop is only visible at two other granularities:</p>
+<ul>
+<li><strong>Per run.</strong> A nightly job that normally costs $0.30 and takes four minutes is now at $40 and 90 minutes. Nothing per-call tells you that; the run total does.</li>
+<li><strong>Per repetition.</strong> The same tool with byte-identical input, eight, fifty, a thousand times in one run. No single call is wrong. The sequence is.</li>
+</ul>
+<p>The provider's billing page is the wrong place to catch either. In the $6,000 case the dashboard was days behind. In #37686 the runs were billed to an account the user was not watching. You need the cap on the machine that runs the job, enforced while the job is running, not a report afterwards.</p>
+<p>The trading bot taught me the same lesson with money instead of tokens. A retry loop on an order endpoint is not "one failed order". It is the same order attempted 400 times with the same payload, and the exchange's per-request logs looked fine.</p>
+
+<h2>Cap the run at $2, cap the day, and detect the retry storm</h2>
+<p>This is what I run now. Register the agent once, with a cadence, a per-run cost cap and an evidence requirement:</p>
+<pre>rv agent nightly-review --cadence 24h --cap-run-cost 2 --evidence</pre>
+<p>Then wrap the actual command. RunVouch opens the run, streams the heartbeat, and closes it with the exit code and whatever evidence file you point it at:</p>
+<pre>rv run nightly-review --evidence-file out.html -- \
+  claude -p "Review yesterday's PRs and write the summary to out.html" \
+    --output-format json</pre>
+<p>For Claude Code specifically there is a plugin that does this through hooks (SessionStart, PostToolUse, Stop). It reads tokens and cost from the transcript, so the cost cap is measured on actual usage, not on an estimate. Every tool call is a heartbeat, which is also how the loop detector gets its data.</p>
+<p>What fires, and when:</p>
+<ul>
+<li><strong>BUDGET_RUN</strong>: this run passed its cap ($2 above). You get a message within seconds, and your alert webhook can pause the agent so the next scheduled run does not start. In the #37686 case that is one bad run instead of two bad days.</li>
+<li><strong>BUDGET_DAY</strong>: the sum across all runs today passed the daily cap. This catches the version where a cron fires far more often than you thought, or where a rescheduling bug launches ten copies.</li>
+<li><strong>RETRY_STORM</strong>: the same tool with identical input at least 8 times in one run. Both the OpenClaw and the Magicrails loops would have tripped this within the first minute, not the first hour.</li>
+<li><strong>DRIFT</strong>: duration or output size is far outside the last seven runs, measured with median absolute deviation so one previous outlier does not poison the baseline. This is the quiet cousin of the loop, where cost is fine but the job is doing something new.</li>
+</ul>
+<p>Alerts go to Telegram, Slack or a webhook. I use Telegram because it is what I actually look at at 07:00.</p>
+
+<h2>The part that matters: what happens when the watchdog is down</h2>
+<p>A cost cap that can also take your job down is a second failure mode, not a fix. <code>rv run</code> fails open: if RunVouch is unreachable, your command still runs exactly as before. You lose the alert, not the job. I would rather miss one notification than have my scheduler depend on someone else's uptime.</p>
+<p>The other thing I stopped doing is relying on <code>max_turns</code> or a token quota as the only brake. Those are fine, and you should set them. But a turn limit does not know about dollars, and a quota that stops a job "cold", as in the $437 case, also throws away the work. A per-run cost cap with an alert, plus a pause action on the agent, gives you the choice.</p>
+
+<h2>Setup that would have prevented each incident</h2>
+<ul>
+<li>#37686: <code>--cap-run-cost 2</code> plus a daily cap of $10. Day one ends at $10 with four Telegram messages, not at $858 with none.</li>
+<li>$6,000 loop: a per-run cap catches the moment context growth makes a single 30-minute cycle cost more than it should. DRIFT catches the growth trend before that.</li>
+<li>OpenClaw #16808: RETRY_STORM at call 8 of 1,535.</li>
+<li>Magicrails $437: RETRY_STORM at call 8 of 14,000.</li>
+</ul>
+<p>Free for three agents, $9 Solo, $29 Team, self-host under MIT, EU hosting. Details at <a href="https://runvouch.com">runvouch.com</a>.</p>
+
+<h2>FAQ</h2>
+<p><strong>Does the cost cap work with a Max subscription, or only with API keys?</strong><br>The plugin reads token counts from the transcript, so it works either way. The cap is expressed in dollars using list prices; on a subscription it is a proxy for usage, on an API key it is the actual bill. The #37686 incident is the reason to set it in both cases: you may not be billing where you think you are.</p>
+<p><strong>What counts as a retry storm? Will normal loops trigger it?</strong><br>Same tool, byte-identical input, at least eight times in one run. A loop that reads different files or polls with a changing cursor does not match. Polling the same endpoint with the same arguments does, which is the point.</p>
+<p><strong>What if RunVouch itself is unreachable at 03:00?</strong><br><code>rv run</code> fails open. The wrapped command executes normally; you get no heartbeat and no cap for that run, and a MISSED alert once the service is back if the run was never recorded.</p>
+
+<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
+<circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
+<path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>RunVouch</div>
+<p class="small" style="margin-top:.6rem">Proof your unattended AI agents actually did the job — and stayed under budget. A dead man's switch, cost cap and outcome check for scheduled agents.</p>
+<p style="margin:.8rem 0"><a class="ph-badge" href="https://www.producthunt.com/products/runvouch?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-runvouch" target="_blank" rel="noopener noreferrer"><img alt="RunVouch - Dead man's switch + cost cap for unattended AI agents | Product Hunt" width="250" height="54" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1232338&amp;theme=dark&amp;t=1787690858298"></a></p>
+<p class="small muted">© 2026 RunVouch · Netherlands · <a href="/contact">contact</a></p></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Docs</h4><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
+<div><h4>Compare</h4><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<script>
+const API="https://api.runvouch.com";
+async function signup(e){e.preventDefault();const k=document.getElementById('keybox');k.classList.add('show');k.innerHTML='<pre>…</pre>';
+try{const r=await fetch(API+'/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('em').value})});
+const j=await r.json();if(!r.ok){k.innerHTML='<div class="alertbox">'+(j.detail||('Error '+r.status))+'</div>';return}
+k.innerHTML='<pre><span class="d"># Your key — shown once. Store it now.</span>\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\nexport RUNVOUCH_URL='+API+'\n\n<span class="d"># Install the client, register an agent, wrap your job</span>\ncurl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\'s report"</pre><p class="small muted">Free plan: 3 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
+catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}return false}
+
+(function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
+document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
+function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
+function add(rand){const y=lanes[Math.floor(Math.random()*lanes.length)];P.push({x:rand?Math.random()*W:-30*D,y,y0:y,v:(0.35+Math.random()*0.5)*D,life:0,fail:Math.random()<0.14,failAt:600+Math.random()*900,vy:0,trail:[]})}
+R();addEventListener('resize',R);
+function draw(){x.clearRect(0,0,W,H);x.lineWidth=1*D;x.strokeStyle='rgba(169,180,214,.11)';for(const y of lanes){x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}
+if(t%95===0)add(false);
+for(const p of P){p.life++;const dropping=p.fail&&p.life>p.failAt;
+if(dropping){p.vy+=0.045*D;p.y+=p.vy;p.x+=p.v*0.6}else{p.x+=p.v;p.y=p.y0+Math.sin(t*0.02+p.x*0.002)*1.2*D}
+p.trail.push([p.x,p.y]);if(p.trail.length>46)p.trail.shift();
+const col=dropping?'255,99,99':'62,207,142';
+for(let i=1;i<p.trail.length;i++){const a=(i/p.trail.length)*(dropping?.7:.5);x.strokeStyle=`rgba(${col},${a})`;x.lineWidth=(dropping?2.6:2.2)*D;x.beginPath();x.moveTo(...p.trail[i-1]);x.lineTo(...p.trail[i]);x.stroke()}
+const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,18*D);g.addColorStop(0,`rgba(${col},.95)`);g.addColorStop(.3,`rgba(${col},.4)`);g.addColorStop(1,`rgba(${col},0)`);x.fillStyle=g;x.beginPath();x.arc(p.x,p.y,18*D,0,7);x.fill();
+x.fillStyle=dropping?'#FFC8C8':'#EAFFF4';x.beginPath();x.arc(p.x,p.y,3*D,0,7);x.fill();
+if(dropping&&p.vy>0.3*D&&p.vy<0.36*D){x.strokeStyle='rgba(255,99,99,.5)';x.lineWidth=1.2*D;x.beginPath();x.arc(p.x,p.y,14*D,0,7);x.stroke()}}
+P=P.filter(p=>p.x<W+40*D&&p.y<H+40*D);t++;requestAnimationFrame(draw)}draw()})();
+document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?checkout[email]='+encodeURIComponent(e)}));
+</script></body></html>

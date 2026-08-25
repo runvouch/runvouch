@@ -1,0 +1,4 @@
+Contact: https://runvouch.com/contact?topic=security
+Expires: 2027-12-31T00:00:00.000Z
+Preferred-Languages: en, nl
+Canonical: https://runvouch.com/.well-known/security.txt

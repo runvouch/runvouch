@@ -1,0 +1,835 @@
+"""
+RunVouch — reliability + cost watchdog for autonomous / scheduled AI agents.
+
+Single-file FastAPI service. SQLite storage. No external deps beyond fastapi/uvicorn.
+
+Core model
+----------
+account  : API key holder (multi-tenant via X-API-Key)
+agent    : a named scheduled job ("nightly-report"), with expected cadence + budgets
+run      : one execution: start -> (tool events) -> end{status, evidence, cost}
+alert    : something the human must see (missed, failed, no-evidence, budget, storm, drift)
+
+Detectors (the part Healthchecks/Cronitor don't have)
+-----------------------------------------------------
+MISSED       expected run did not start within cadence + grace
+FAILED       run ended with status != ok
+NO_EVIDENCE  run said "ok" but required evidence assertions were not satisfied ("green != done")
+BUDGET_RUN   cost/tokens of one run exceeded the per-run cap
+BUDGET_DAY   cumulative cost today exceeded the daily cap
+RETRY_STORM  same tool+input hash repeated >= N times within one run
+DRIFT        output size / duration deviates > k*MAD from trailing 7-run baseline
+STALLED      run started but no end/heartbeat for > max_runtime
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import sqlite3
+import threading
+import time
+import urllib.parse
+import urllib.request
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Optional
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from pydantic import BaseModel, Field
+
+DB_PATH = Path(os.getenv("RUNVOUCH_DB", Path(__file__).resolve().parent.parent / "data" / "runvouch.db"))
+ADMIN_TOKEN = os.getenv("RUNVOUCH_ADMIN_TOKEN", "")
+PUBLIC_URL = os.getenv("RUNVOUCH_PUBLIC_URL", "http://localhost:8787")
+STORM_THRESHOLD = int(os.getenv("RUNVOUCH_STORM_THRESHOLD", "8"))
+DRIFT_K = float(os.getenv("RUNVOUCH_DRIFT_K", "4.0"))
+SWEEP_SECONDS = int(os.getenv("RUNVOUCH_SWEEP_SECONDS", "30"))
+LS_WEBHOOK_SECRET = os.getenv("LS_WEBHOOK_SECRET", "")
+LS_VARIANT_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("LS_VARIANT_PLANS", "").split(",") if ":" in x)}  # "123:solo,456:team"
+RATE_PER_MIN = int(os.getenv("RUNVOUCH_RATE_PER_MIN", "600"))
+SIGNUP_PER_IP_PER_DAY = int(os.getenv("RUNVOUCH_SIGNUPS_PER_IP", "5"))
+CORS_ORIGINS = [o for o in os.getenv("RUNVOUCH_CORS", "").split(",") if o]
+
+app = FastAPI(title="RunVouch", version="0.2.0")
+if CORS_ORIGINS:
+    app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
+
+
+def key_hash(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+# ── simple in-memory sliding-window rate limiter (per api-key-hash or ip) ──
+_rl: dict[str, list[float]] = {}
+
+
+def rate_check(bucket: str, limit: int, window: float = 60.0) -> None:
+    now = time.time()
+    with _lock:
+        hits = [t for t in _rl.get(bucket, []) if now - t < window]
+        if len(hits) >= limit:
+            raise HTTPException(429, "rate limit")
+        hits.append(now)
+        _rl[bucket] = hits
+
+# ───────────────────────────── storage ─────────────────────────────
+_lock = threading.RLock()
+
+
+def _connect() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL")
+    return c
+
+
+_db = _connect()
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS accounts(
+  id INTEGER PRIMARY KEY, name TEXT, api_key TEXT UNIQUE, created REAL, email TEXT UNIQUE, ls_customer_id TEXT, ls_subscription_id TEXT,
+  telegram_token TEXT, telegram_chat TEXT, webhook_url TEXT, plan TEXT DEFAULT 'free');
+CREATE TABLE IF NOT EXISTS agents(
+  id INTEGER PRIMARY KEY, account_id INTEGER, name TEXT, created REAL,
+  cadence_s INTEGER, grace_s INTEGER DEFAULT 900, max_runtime_s INTEGER DEFAULT 3600,
+  cap_run_cost REAL, cap_day_cost REAL, cap_run_tokens INTEGER,
+  evidence_required INTEGER DEFAULT 0, paused INTEGER DEFAULT 0,
+  UNIQUE(account_id, name));
+CREATE TABLE IF NOT EXISTS runs(
+  id TEXT PRIMARY KEY, agent_id INTEGER, started REAL, ended REAL, last_seen REAL,
+  status TEXT, cost REAL DEFAULT 0, tokens INTEGER DEFAULT 0, tool_calls INTEGER DEFAULT 0,
+  output_bytes INTEGER, evidence_ok INTEGER, evidence_json TEXT, meta_json TEXT, source TEXT);
+CREATE TABLE IF NOT EXISTS tool_events(
+  id INTEGER PRIMARY KEY, run_id TEXT, ts REAL, tool TEXT, input_hash TEXT, ok INTEGER, cost REAL DEFAULT 0, tokens INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS alerts(
+  id INTEGER PRIMARY KEY, account_id INTEGER, agent_id INTEGER, run_id TEXT, ts REAL,
+  kind TEXT, message TEXT, acked INTEGER DEFAULT 0, delivered INTEGER DEFAULT 0);
+CREATE INDEX IF NOT EXISTS ix_runs_agent ON runs(agent_id, started);
+CREATE INDEX IF NOT EXISTS ix_tool_run ON tool_events(run_id, input_hash);
+CREATE INDEX IF NOT EXISTS ix_alerts_acc ON alerts(account_id, ts);
+CREATE TABLE IF NOT EXISTS signups(id INTEGER PRIMARY KEY, ip TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS ls_events(id TEXT PRIMARY KEY, ts REAL, name TEXT, payload TEXT);
+CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY KEY(account_id, week));
+"""
+with _lock:
+    _db.executescript(SCHEMA)
+    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT"):
+        try:
+            _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+    for r in _db.execute("SELECT id, api_key FROM accounts WHERE api_key LIKE 'rv_%'").fetchall():
+        _db.execute("UPDATE accounts SET api_key=? WHERE id=?", (hashlib.sha256(r["api_key"].encode()).hexdigest(), r["id"]))
+    _db.commit()
+
+
+@contextmanager
+def tx():
+    with _lock:
+        try:
+            yield _db
+            _db.commit()
+        except Exception:
+            _db.rollback()
+            raise
+
+
+def q1(sql: str, *args) -> Optional[sqlite3.Row]:
+    with _lock:
+        return _db.execute(sql, args).fetchone()
+
+
+def qa(sql: str, *args) -> list[sqlite3.Row]:
+    with _lock:
+        return _db.execute(sql, args).fetchall()
+
+
+# ───────────────────────────── auth ─────────────────────────────
+def account_from_key(x_api_key: str = Header(default="")) -> sqlite3.Row:
+    if not x_api_key:
+        raise HTTPException(401, "X-API-Key header required")
+    h = key_hash(x_api_key)
+    acc = q1("SELECT * FROM accounts WHERE api_key=?", h)
+    if not acc:
+        raise HTTPException(401, "invalid api key")
+    rate_check("k:" + h, RATE_PER_MIN)
+    return acc
+
+
+def require_admin(x_admin_token: str = Header(default="")):
+    if not ADMIN_TOKEN or not hmac.compare_digest(x_admin_token, ADMIN_TOKEN):
+        raise HTTPException(403, "admin token required")
+
+
+def create_account(name: str, plan: str = "free", email: Optional[str] = None) -> dict:
+    """Key is returned ONCE; only its sha256 is stored."""
+    key = "rv_" + secrets.token_urlsafe(24)
+    with tx() as db:
+        cur = db.execute("INSERT INTO accounts(name, api_key, created, plan, email) VALUES(?,?,?,?,?)",
+                         (name, key_hash(key), time.time(), plan, email))
+    return {"account_id": cur.lastrowid, "api_key": key, "name": name, "plan": plan, "email": email}
+
+
+def rotate_key(account_id: int) -> str:
+    key = "rv_" + secrets.token_urlsafe(24)
+    with tx() as db:
+        db.execute("UPDATE accounts SET api_key=? WHERE id=?", (key_hash(key), account_id))
+    return key
+
+
+PLAN_LIMITS = {"free": 3, "solo": 15, "team": 100}
+
+
+# ───────────────────────────── alerts ─────────────────────────────
+def _telegram(token: str, chat: str, text: str) -> bool:
+    try:
+        data = urllib.parse.urlencode({"chat_id": chat, "text": text}).encode()
+        urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", data, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
+def _webhook(url: str, payload: dict) -> bool:
+    try:
+        req = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
+def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str) -> None:
+    # dedupe: same kind for same agent+run (or same agent without run within 1h)
+    if run_id:
+        dup = q1("SELECT id FROM alerts WHERE agent_id=? AND run_id=? AND kind=?", agent_id, run_id, kind)
+    else:
+        dup = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - 3600)
+    if dup:
+        return
+    with tx() as db:
+        cur = db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message) VALUES(?,?,?,?,?,?)",
+                         (account_id, agent_id, run_id, time.time(), kind, message))
+        alert_id = cur.lastrowid
+    acc = q1("SELECT * FROM accounts WHERE id=?", account_id)
+    agent = q1("SELECT name FROM agents WHERE id=?", agent_id)
+    text = f"⚠️ RunVouch [{kind}] {agent['name'] if agent else agent_id}\n{message}"
+    delivered = False
+    if acc["telegram_token"] and acc["telegram_chat"]:
+        delivered |= _telegram(acc["telegram_token"], acc["telegram_chat"], text)
+    if acc["webhook_url"]:
+        delivered |= _webhook(acc["webhook_url"], {"kind": kind, "agent": agent["name"] if agent else None,
+                                                    "run_id": run_id, "message": message, "ts": time.time()})
+    if delivered:
+        with tx() as db:
+            db.execute("UPDATE alerts SET delivered=1 WHERE id=?", (alert_id,))
+
+
+# ───────────────────────────── detectors ─────────────────────────────
+def _median(xs: list[float]) -> float:
+    s = sorted(xs)
+    n = len(s)
+    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+
+
+def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
+    """Compare this run's duration / output size against trailing successful runs (robust MAD)."""
+    hist = qa("SELECT started, ended, output_bytes FROM runs WHERE agent_id=? AND status='ok' AND id!=? "
+              "AND ended IS NOT NULL ORDER BY started DESC LIMIT 7", agent["id"], run["id"])
+    if len(hist) < 4:
+        return
+    for label, cur, series in (
+        ("duration", (run["ended"] or 0) - run["started"], [h["ended"] - h["started"] for h in hist]),
+        ("output size", run["output_bytes"], [h["output_bytes"] for h in hist if h["output_bytes"] is not None]),
+    ):
+        if cur is None or len(series) < 4:
+            continue
+        med = _median(series)
+        mad = _median([abs(x - med) for x in series]) or max(med * 0.1, 1.0)
+        if abs(cur - med) > DRIFT_K * mad and abs(cur - med) > 0.25 * max(med, 1.0):
+            raise_alert(agent["account_id"], agent["id"], run["id"], "DRIFT",
+                        f"{label} {cur:.0f} vs trailing median {med:.0f} (MAD {mad:.0f}). Task may be silently doing something else.")
+
+
+def check_budget(agent: sqlite3.Row, run: sqlite3.Row) -> None:
+    if agent["cap_run_cost"] and run["cost"] > agent["cap_run_cost"]:
+        raise_alert(agent["account_id"], agent["id"], run["id"], "BUDGET_RUN",
+                    f"run cost {run['cost']:.2f} > cap {agent['cap_run_cost']:.2f}")
+    if agent["cap_run_tokens"] and run["tokens"] > agent["cap_run_tokens"]:
+        raise_alert(agent["account_id"], agent["id"], run["id"], "BUDGET_RUN",
+                    f"run tokens {run['tokens']} > cap {agent['cap_run_tokens']}")
+    if agent["cap_day_cost"]:
+        day0 = time.time() - 86400
+        tot = q1("SELECT COALESCE(SUM(cost),0) s FROM runs WHERE agent_id=? AND started>?", agent["id"], day0)["s"]
+        if tot > agent["cap_day_cost"]:
+            raise_alert(agent["account_id"], agent["id"], run["id"], "BUDGET_DAY",
+                        f"24h cost {tot:.2f} > daily cap {agent['cap_day_cost']:.2f}")
+
+
+def check_storm(agent: sqlite3.Row, run_id: str, input_hash: str, tool: str) -> None:
+    n = q1("SELECT COUNT(*) n FROM tool_events WHERE run_id=? AND input_hash=?", run_id, input_hash)["n"]
+    if n >= STORM_THRESHOLD:
+        raise_alert(agent["account_id"], agent["id"], run_id, "RETRY_STORM",
+                    f"tool '{tool}' called {n}x with identical input in one run. Each call looks fine; together it's a loop.")
+
+
+def evaluate_evidence(evidence: dict[str, Any]) -> tuple[bool, dict]:
+    """
+    Evidence is a dict of named assertions the CLIENT already evaluated (bool), or
+    simple server-checkable specs: {"name": {"type": "url", "url": "...", "expect": 200}}.
+    Server never touches client filesystems. Returns (all_ok, detail).
+    """
+    detail = {}
+    ok_all = True
+    for name, spec in (evidence or {}).items():
+        if isinstance(spec, bool):
+            ok = spec
+        elif isinstance(spec, dict) and spec.get("type") == "url":
+            try:
+                r = urllib.request.urlopen(urllib.request.Request(spec["url"], method="HEAD"), timeout=10)
+                ok = r.status == int(spec.get("expect", 200))
+            except Exception:
+                ok = False
+        elif isinstance(spec, dict) and "ok" in spec:
+            ok = bool(spec["ok"])
+        else:
+            ok = False
+        detail[name] = ok
+        ok_all &= ok
+    return ok_all, detail
+
+
+# ───────────────────────────── background sweep ─────────────────────────────
+def sweep_once(now: Optional[float] = None) -> None:
+    now = now or time.time()
+    for agent in qa("SELECT * FROM agents WHERE paused=0"):
+        last = q1("SELECT * FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT 1", agent["id"])
+        # MISSED
+        if agent["cadence_s"]:
+            ref = last["started"] if last else agent["created"]
+            if now - ref > agent["cadence_s"] + agent["grace_s"]:
+                raise_alert(agent["account_id"], agent["id"], None, "MISSED",
+                            f"no run started for {int((now-ref)/60)} min (cadence {agent['cadence_s']//60} min + grace). Scheduler dead, auth expired, or agent crashed before first ping.")
+        # STALLED
+        if last and last["ended"] is None and now - (last["last_seen"] or last["started"]) > agent["max_runtime_s"]:
+            raise_alert(agent["account_id"], agent["id"], last["id"], "STALLED",
+                        f"run started {int((now-last['started'])/60)} min ago, no end/heartbeat for > {agent['max_runtime_s']//60} min.")
+
+
+def weekly_report(now: Optional[float] = None) -> int:
+    """Per account: 7-day cost, runs, alerts by kind, top agents. Sent once per ISO week (Monday >= 07:00 UTC)."""
+    now = now or time.time()
+    lt = time.gmtime(now)
+    if not (lt.tm_wday == 0 and lt.tm_hour >= 7):
+        return 0
+    week = time.strftime("%G-W%V", lt)
+    sent = 0
+    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL"):
+        if q1("SELECT 1 FROM reports_sent WHERE account_id=? AND week=?", acc["id"], week):
+            continue
+        t0 = now - 7 * 86400
+        rows = qa("SELECT g.name, COUNT(r.id) n, COALESCE(SUM(r.cost),0) c, SUM(CASE WHEN r.status!='ok' THEN 1 ELSE 0 END) f "
+                  "FROM agents g LEFT JOIN runs r ON r.agent_id=g.id AND r.started>? WHERE g.account_id=? GROUP BY g.id ORDER BY c DESC", t0, acc["id"])
+        if not rows:
+            continue
+        alerts = qa("SELECT kind, COUNT(*) n FROM alerts WHERE account_id=? AND ts>? GROUP BY kind ORDER BY n DESC", acc["id"], t0)
+        total_cost = sum(r["c"] for r in rows); total_runs = sum(r["n"] for r in rows); fails = sum(r["f"] or 0 for r in rows)
+        top = ", ".join(f"{r['name']} ${r['c']:.2f}" for r in rows[:3] if r["c"] > 0) or "none"
+        al = ", ".join(f"{a['kind']} {a['n']}" for a in alerts) or "none"
+        text = (f"📊 RunVouch weekly — {week}\n{len(rows)} agents · {total_runs} runs · {fails} failed\n"
+                f"Cost 7d: ${total_cost:.2f} · top: {top}\nAlerts: {al}\nhttps://runvouch.com/app")
+        ok = False
+        if acc["telegram_token"] and acc["telegram_chat"]:
+            ok |= _telegram(acc["telegram_token"], acc["telegram_chat"], text)
+        if acc["webhook_url"]:
+            ok |= _webhook(acc["webhook_url"], {"kind": "WEEKLY_REPORT", "week": week, "cost_7d": round(total_cost, 4), "runs": total_runs, "failed": fails, "alerts": [dict(a) for a in alerts]})
+        with tx() as db:
+            db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(?,?)", (acc["id"], week))
+        sent += int(ok)
+    return sent
+
+
+def _sweeper():
+    n = 0
+    while True:
+        try:
+            sweep_once()
+            if n % 20 == 0:
+                weekly_report()
+        except Exception:
+            pass
+        n += 1
+        time.sleep(SWEEP_SECONDS)
+
+
+if os.getenv("RUNVOUCH_NO_SWEEP") != "1":
+    threading.Thread(target=_sweeper, daemon=True).start()
+
+
+# ───────────────────────────── API models ─────────────────────────────
+class AgentIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    cadence_s: Optional[int] = None
+    grace_s: int = 900
+    max_runtime_s: int = 3600
+    cap_run_cost: Optional[float] = None
+    cap_day_cost: Optional[float] = None
+    cap_run_tokens: Optional[int] = None
+    evidence_required: bool = False
+
+
+class StartIn(BaseModel):
+    agent: str
+    run_id: Optional[str] = None
+    source: Optional[str] = None  # claude-code | openclaw | cron | n8n | custom
+    meta: dict = {}
+
+
+class ToolIn(BaseModel):
+    run_id: str
+    tool: str
+    input: Any = None
+    input_hash: Optional[str] = None
+    ok: bool = True
+    cost: float = 0
+    tokens: int = 0
+
+
+class EndIn(BaseModel):
+    run_id: str
+    status: str = "ok"  # ok | fail
+    cost: float = 0
+    tokens: int = 0
+    output_bytes: Optional[int] = None
+    evidence: dict = {}
+    meta: dict = {}
+
+
+class SettingsIn(BaseModel):
+    telegram_token: Optional[str] = None
+    telegram_chat: Optional[str] = None
+    webhook_url: Optional[str] = None
+
+
+def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
+    a = q1("SELECT * FROM agents WHERE account_id=? AND name=?", acc["id"], name)
+    if not a:
+        raise HTTPException(404, f"agent '{name}' not found; create it first via POST /v1/agents")
+    return a
+
+
+# ───────────────────────────── routes ─────────────────────────────
+@app.get("/health", response_class=PlainTextResponse)
+def health():
+    return "ok"
+
+
+@app.post("/admin/accounts", dependencies=[Depends(require_admin)])
+def admin_create_account(name: str, plan: str = "free"):
+    return create_account(name, plan)
+
+
+class SignupIn(BaseModel):
+    email: str = Field(..., min_length=5, max_length=200, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@app.post("/signup")
+def signup(body: SignupIn, request: Request):
+    """Self-serve: email -> free account. Key shown once. Abuse-limited per IP."""
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0].strip()
+    rate_check("ip:" + ip, 20)
+    n = q1("SELECT COUNT(*) n FROM signups WHERE ip=? AND ts>?", ip, time.time() - 86400)["n"]
+    if n >= SIGNUP_PER_IP_PER_DAY:
+        raise HTTPException(429, "too many signups from this address today")
+    email = body.email.lower().strip()
+    if q1("SELECT id FROM accounts WHERE email=?", email):
+        raise HTTPException(409, "account exists — use key rotation from the dashboard or contact support")
+    acc = create_account(email.split("@")[0], "free", email)
+    with tx() as db:
+        db.execute("INSERT INTO signups(ip, ts) VALUES(?,?)", (ip, time.time()))
+    return {"api_key": acc["api_key"], "plan": "free", "agents_allowed": PLAN_LIMITS["free"],
+            "note": "Store this key now; it is not shown again."}
+
+
+class ContactIn(BaseModel):
+    email: str = Field(..., min_length=5, max_length=200)
+    message: str = Field(..., min_length=5, max_length=4000)
+    topic: str = "support"
+
+
+@app.post("/contact")
+def contact(body: ContactIn, request: Request):
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0].strip()
+    rate_check("contact:" + ip, 5, 3600)
+    with tx() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS contacts(id INTEGER PRIMARY KEY, ts REAL, email TEXT, topic TEXT, message TEXT, ip TEXT)")
+        db.execute("INSERT INTO contacts(ts,email,topic,message,ip) VALUES(?,?,?,?,?)", (time.time(), body.email, body.topic, body.message, ip))
+    owner = q1("SELECT telegram_token, telegram_chat FROM accounts WHERE telegram_token IS NOT NULL ORDER BY id LIMIT 1")
+    if owner:
+        _telegram(owner["telegram_token"], owner["telegram_chat"], f"📩 RunVouch contact [{body.topic}] from {body.email}:\n{body.message[:1500]}")
+    return {"ok": True}
+
+
+@app.get("/v1/me")
+def me(acc=Depends(account_from_key)):
+    return {"name": acc["name"], "email": acc["email"], "plan": acc["plan"], "agents_allowed": PLAN_LIMITS.get(acc["plan"], 3),
+            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"])}
+
+
+@app.post("/v1/me/rotate-key")
+def me_rotate(acc=Depends(account_from_key)):
+    return {"api_key": rotate_key(acc["id"]), "note": "old key is now invalid"}
+
+
+@app.post("/webhooks/lemonsqueezy")
+async def ls_webhook(request: Request):
+    """Lemon Squeezy → plan changes. Verified with HMAC-SHA256 over the raw body (X-Signature)."""
+    raw = await request.body()
+    if not LS_WEBHOOK_SECRET:
+        raise HTTPException(503, "LS_WEBHOOK_SECRET not configured")
+    sig = request.headers.get("x-signature", "")
+    if not hmac.compare_digest(hmac.new(LS_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest(), sig):
+        raise HTTPException(401, "bad signature")
+    ev = json.loads(raw or b"{}")
+    name = (ev.get("meta") or {}).get("event_name", "")
+    attrs = (ev.get("data") or {}).get("attributes") or {}
+    ev_id = str((ev.get("data") or {}).get("id", "")) + ":" + name + ":" + str(attrs.get("updated_at", ""))
+    if q1("SELECT id FROM ls_events WHERE id=?", ev_id):
+        return {"ok": True, "dup": True}
+    email = (attrs.get("user_email") or attrs.get("customer_email") or "").lower().strip()
+    variant = str(attrs.get("variant_id") or attrs.get("first_order_item", {}).get("variant_id") or "")
+    status = attrs.get("status", "")
+    plan = None
+    if name in ("subscription_created", "subscription_updated", "subscription_resumed", "subscription_unpaused", "order_created"):
+        if status in ("", "active", "on_trial", "paid", "past_due"):
+            plan = LS_VARIANT_PLANS.get(variant, "solo")
+    if name in ("subscription_cancelled", "subscription_expired", "subscription_paused", "order_refunded") or status in ("expired", "cancelled"):
+        plan = "free"
+    acc = q1("SELECT * FROM accounts WHERE email=?", email) if email else None
+    with tx() as db:
+        db.execute("INSERT INTO ls_events(id, ts, name, payload) VALUES(?,?,?,?)", (ev_id, time.time(), name, raw.decode(errors="ignore")[:20000]))
+        if plan and acc:
+            db.execute("UPDATE accounts SET plan=?, ls_customer_id=COALESCE(?,ls_customer_id), ls_subscription_id=COALESCE(?,ls_subscription_id) WHERE id=?",
+                       (plan, str(attrs.get("customer_id") or "") or None, str((ev.get("data") or {}).get("id") or "") or None, acc["id"]))
+        elif plan and email and not acc:
+            # paid before signing up: create the account; key delivered via dashboard rotate flow (email known)
+            key = "rv_" + secrets.token_urlsafe(24)
+            db.execute("INSERT INTO accounts(name, api_key, created, plan, email) VALUES(?,?,?,?,?)",
+                       (email.split("@")[0], key_hash(key), time.time(), plan, email))
+    return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
+
+
+@app.put("/v1/settings")
+def put_settings(s: SettingsIn, acc=Depends(account_from_key)):
+    with tx() as db:
+        db.execute("UPDATE accounts SET telegram_token=COALESCE(?,telegram_token), telegram_chat=COALESCE(?,telegram_chat), "
+                   "webhook_url=COALESCE(?,webhook_url) WHERE id=?", (s.telegram_token, s.telegram_chat, s.webhook_url, acc["id"]))
+    return {"ok": True}
+
+
+@app.post("/v1/settings/test-alert")
+def test_alert(acc=Depends(account_from_key)):
+    a = q1("SELECT * FROM agents WHERE account_id=? LIMIT 1", acc["id"])
+    if not a:
+        raise HTTPException(400, "create an agent first")
+    raise_alert(acc["id"], a["id"], None, "TEST", "RunVouch alert channel works.")
+    return {"ok": True}
+
+
+@app.post("/v1/agents")
+def upsert_agent(a: AgentIn, acc=Depends(account_from_key)):
+    n = q1("SELECT COUNT(*) n FROM agents WHERE account_id=?", acc["id"])["n"]
+    exists = q1("SELECT id FROM agents WHERE account_id=? AND name=?", acc["id"], a.name)
+    if not exists and n >= PLAN_LIMITS.get(acc["plan"], 3):
+        raise HTTPException(402, f"plan '{acc['plan']}' allows {PLAN_LIMITS.get(acc['plan'],3)} agents")
+    with tx() as db:
+        db.execute("""INSERT INTO agents(account_id,name,created,cadence_s,grace_s,max_runtime_s,cap_run_cost,cap_day_cost,cap_run_tokens,evidence_required)
+                      VALUES(?,?,?,?,?,?,?,?,?,?)
+                      ON CONFLICT(account_id,name) DO UPDATE SET cadence_s=excluded.cadence_s, grace_s=excluded.grace_s,
+                      max_runtime_s=excluded.max_runtime_s, cap_run_cost=excluded.cap_run_cost, cap_day_cost=excluded.cap_day_cost,
+                      cap_run_tokens=excluded.cap_run_tokens, evidence_required=excluded.evidence_required""",
+                   (acc["id"], a.name, time.time(), a.cadence_s, a.grace_s, a.max_runtime_s, a.cap_run_cost, a.cap_day_cost,
+                    a.cap_run_tokens, int(a.evidence_required)))
+    return {"ok": True, "agent": a.name}
+
+
+@app.get("/v1/agents")
+def list_agents(acc=Depends(account_from_key)):
+    out = []
+    for a in qa("SELECT * FROM agents WHERE account_id=? ORDER BY name", acc["id"]):
+        last = q1("SELECT * FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT 1", a["id"])
+        open_alerts = q1("SELECT COUNT(*) n FROM alerts WHERE agent_id=? AND acked=0", a["id"])["n"]
+        cost24 = q1("SELECT COALESCE(SUM(cost),0) s FROM runs WHERE agent_id=? AND started>?", a["id"], time.time() - 86400)["s"]
+        out.append({"name": a["name"], "cadence_s": a["cadence_s"], "paused": bool(a["paused"]),
+                    "last_run": dict(last) if last else None, "open_alerts": open_alerts, "cost_24h": round(cost24, 4),
+                    "state": _state(a, last, open_alerts)})
+    return out
+
+
+def _state(a, last, open_alerts) -> str:
+    if a["paused"]:
+        return "paused"
+    if open_alerts:
+        return "alert"
+    if not last:
+        return "waiting"
+    if last["ended"] is None:
+        return "running"
+    if last["status"] != "ok":
+        return "failed"
+    if a["evidence_required"] and not last["evidence_ok"]:
+        return "unproven"
+    return "ok"
+
+
+@app.post("/v1/runs/start")
+def run_start(s: StartIn, acc=Depends(account_from_key)):
+    a = _agent(acc, s.agent)
+    rid = s.run_id or secrets.token_hex(8)
+    now = time.time()
+    with tx() as db:
+        db.execute("INSERT OR REPLACE INTO runs(id,agent_id,started,last_seen,status,meta_json,source) VALUES(?,?,?,?,?,?,?)",
+                   (rid, a["id"], now, now, "running", json.dumps(s.meta), s.source))
+    return {"run_id": rid}
+
+
+@app.post("/v1/runs/tool")
+def run_tool(t: ToolIn, acc=Depends(account_from_key)):
+    run = q1("SELECT * FROM runs WHERE id=?", t.run_id)
+    if not run:
+        raise HTTPException(404, "run not found")
+    a = q1("SELECT * FROM agents WHERE id=?", run["agent_id"])
+    h = t.input_hash or hashlib.sha1(json.dumps(t.input, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    with tx() as db:
+        db.execute("INSERT INTO tool_events(run_id,ts,tool,input_hash,ok,cost,tokens) VALUES(?,?,?,?,?,?,?)",
+                   (t.run_id, time.time(), t.tool, h, int(t.ok), t.cost, t.tokens))
+        db.execute("UPDATE runs SET tool_calls=tool_calls+1, cost=cost+?, tokens=tokens+?, last_seen=? WHERE id=?",
+                   (t.cost, t.tokens, time.time(), t.run_id))
+    check_storm(a, t.run_id, h, t.tool)
+    run = q1("SELECT * FROM runs WHERE id=?", t.run_id)
+    check_budget(a, run)
+    return {"ok": True}
+
+
+@app.post("/v1/runs/heartbeat")
+def run_heartbeat(run_id: str, acc=Depends(account_from_key)):
+    with tx() as db:
+        db.execute("UPDATE runs SET last_seen=? WHERE id=?", (time.time(), run_id))
+    return {"ok": True}
+
+
+@app.post("/v1/runs/end")
+def run_end(e: EndIn, acc=Depends(account_from_key)):
+    run = q1("SELECT * FROM runs WHERE id=?", e.run_id)
+    if not run:
+        raise HTTPException(404, "run not found")
+    a = q1("SELECT * FROM agents WHERE id=?", run["agent_id"])
+    ev_ok, ev_detail = evaluate_evidence(e.evidence)
+    if a["evidence_required"] and not e.evidence:
+        ev_ok = False
+        ev_detail = {"_": "evidence required but none supplied"}
+    with tx() as db:
+        db.execute("UPDATE runs SET ended=?, last_seen=?, status=?, cost=cost+?, tokens=tokens+?, output_bytes=?, evidence_ok=?, "
+                   "evidence_json=?, meta_json=? WHERE id=?",
+                   (time.time(), time.time(), e.status, e.cost, e.tokens, e.output_bytes, int(ev_ok), json.dumps(ev_detail),
+                    json.dumps({**json.loads(run["meta_json"] or "{}"), **e.meta}), e.run_id))
+    run = q1("SELECT * FROM runs WHERE id=?", e.run_id)
+    if e.status != "ok":
+        raise_alert(a["account_id"], a["id"], e.run_id, "FAILED", f"run ended with status '{e.status}'. {e.meta.get('error','')}".strip())
+    elif (a["evidence_required"] or e.evidence) and not ev_ok:
+        failed = [k for k, v in ev_detail.items() if v is not True]
+        raise_alert(a["account_id"], a["id"], e.run_id, "NO_EVIDENCE",
+                    f"run reported ok but evidence failed: {failed}. Green run ≠ done task.")
+    check_budget(a, run)
+    if e.status == "ok":
+        check_drift(a, run)
+    return {"ok": True, "evidence_ok": ev_ok, "evidence": ev_detail}
+
+
+@app.get("/v1/alerts")
+def list_alerts(acked: bool = False, acc=Depends(account_from_key)):
+    return [dict(r) for r in qa("SELECT a.*, g.name agent FROM alerts a JOIN agents g ON g.id=a.agent_id WHERE a.account_id=? AND a.acked=? "
+                                "ORDER BY a.ts DESC LIMIT 200", acc["id"], int(acked))]
+
+
+@app.post("/v1/alerts/{alert_id}/ack")
+def ack_alert(alert_id: int, acc=Depends(account_from_key)):
+    with tx() as db:
+        db.execute("UPDATE alerts SET acked=1 WHERE id=? AND account_id=?", (alert_id, acc["id"]))
+    return {"ok": True}
+
+
+@app.post("/v1/agents/{name}/pause")
+def pause_agent(name: str, paused: bool = True, acc=Depends(account_from_key)):
+    a = _agent(acc, name)
+    with tx() as db:
+        db.execute("UPDATE agents SET paused=? WHERE id=?", (int(paused), a["id"]))
+    return {"ok": True}
+
+
+@app.delete("/v1/agents/{name}")
+def delete_agent(name: str, acc=Depends(account_from_key)):
+    a = _agent(acc, name)
+    with tx() as db:
+        db.execute("DELETE FROM tool_events WHERE run_id IN (SELECT id FROM runs WHERE agent_id=?)", (a["id"],))
+        db.execute("DELETE FROM runs WHERE agent_id=?", (a["id"],)); db.execute("DELETE FROM alerts WHERE agent_id=?", (a["id"],)); db.execute("DELETE FROM agents WHERE id=?", (a["id"],))
+    return {"ok": True, "deleted": name}
+
+
+@app.get("/v1/agents/{name}/runs")
+def agent_runs(name: str, limit: int = 30, acc=Depends(account_from_key)):
+    a = _agent(acc, name)
+    return [dict(r) for r in qa("SELECT * FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT ?", a["id"], limit)]
+
+
+# ───────────────────────────── remote MCP (Streamable HTTP, JSON-RPC 2.0) ─────────────────────────────
+MCP_TOOLS = [
+    {"name": "runvouch_status", "description": "Health of all watched agents: state (ok/alert/failed/unproven/running/waiting), last run, 24h cost, open alerts.", "inputSchema": {"type": "object", "properties": {}}, "annotations": {"readOnlyHint": True}},
+    {"name": "runvouch_alerts", "description": "Open (un-acknowledged) alerts: MISSED, FAILED, NO_EVIDENCE, BUDGET_RUN, BUDGET_DAY, RETRY_STORM, DRIFT, STALLED.", "inputSchema": {"type": "object", "properties": {}}, "annotations": {"readOnlyHint": True}},
+    {"name": "runvouch_ack", "description": "Acknowledge an alert by id.", "inputSchema": {"type": "object", "properties": {"alert_id": {"type": "integer"}}, "required": ["alert_id"]}},
+    {"name": "runvouch_runs", "description": "Recent runs of one agent.", "inputSchema": {"type": "object", "properties": {"agent": {"type": "string"}, "limit": {"type": "integer", "default": 20}}, "required": ["agent"]}, "annotations": {"readOnlyHint": True}},
+    {"name": "runvouch_run_start", "description": "Report that a run of `agent` started. Returns run_id.", "inputSchema": {"type": "object", "properties": {"agent": {"type": "string"}, "source": {"type": "string"}}, "required": ["agent"]}},
+    {"name": "runvouch_run_end", "description": "Report that a run ended, with status and evidence dict (name -> bool or {type:'url',url}). Green run without evidence alerts.", "inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}, "status": {"type": "string", "enum": ["ok", "fail"]}, "cost": {"type": "number"}, "tokens": {"type": "integer"}, "evidence": {"type": "object"}}, "required": ["run_id"]}},
+]
+
+
+def _mcp_call(acc, name: str, a: dict):
+    if name == "runvouch_status":
+        return list_agents(acc)
+    if name == "runvouch_alerts":
+        return list_alerts(False, acc)
+    if name == "runvouch_ack":
+        return ack_alert(int(a["alert_id"]), acc)
+    if name == "runvouch_runs":
+        return agent_runs(a["agent"], int(a.get("limit", 20)), acc)
+    if name == "runvouch_run_start":
+        return run_start(StartIn(agent=a["agent"], source=a.get("source", "mcp")), acc)
+    if name == "runvouch_run_end":
+        return run_end(EndIn(run_id=a["run_id"], status=a.get("status", "ok"), cost=a.get("cost", 0), tokens=a.get("tokens", 0), evidence=a.get("evidence", {})), acc)
+    raise ValueError(f"unknown tool {name}")
+
+
+@app.post("/mcp")
+async def mcp_http(request: Request):
+    """Remote MCP endpoint. Auth: X-API-Key or Authorization: Bearer <key>. One JSON-RPC message per request."""
+    key = request.headers.get("x-api-key") or request.headers.get("authorization", "").replace("Bearer ", "").strip()
+    try:
+        msg = await request.json()
+    except Exception:
+        return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}, status_code=400)
+    mid, m, p = msg.get("id"), msg.get("method"), msg.get("params") or {}
+    if m == "initialize":
+        return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": p.get("protocolVersion", "2025-06-18"), "capabilities": {"tools": {}}, "serverInfo": {"name": "runvouch", "version": "0.3.0"}}})
+    if m in ("notifications/initialized", "ping"):
+        return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {}}) if mid is not None else PlainTextResponse("", status_code=202)
+    if m == "tools/list":
+        return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"tools": MCP_TOOLS}})
+    if m == "tools/call":
+        try:
+            acc = account_from_key(key)
+            out = _mcp_call(acc, p["name"], p.get("arguments") or {})
+            return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(out, indent=1, default=str)}]}})
+        except HTTPException as e:
+            return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": f"error {e.status_code}: {e.detail}"}], "isError": True}})
+        except Exception as e:
+            return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": f"error: {e}"}], "isError": True}})
+    return JSONResponse({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"method not found: {m}"}})
+
+
+@app.get("/mcp")
+def mcp_info():
+    return {"name": "runvouch", "transport": "streamable-http", "endpoint": PUBLIC_URL + "/mcp", "auth": "X-API-Key or Bearer", "tools": [t["name"] for t in MCP_TOOLS], "docs": "https://runvouch.com/docs/mcp"}
+
+
+# ───────────────────────────── minimal dashboard ─────────────────────────────
+DASH = """<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>RunVouch dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>:root{--bg:#0B1020;--bg3:#141B33;--line:rgba(169,180,214,.14);--fg:#EEF2FF;--fg2:#A9B4D6;--fg3:#6F7A9E;--grad:#4C8DFF}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 Figtree,system-ui,sans-serif}a{color:#8FB6FF}
+.top{display:flex;align-items:center;gap:1rem;padding:0 1.5rem;height:64px;border-bottom:1px solid var(--line);background:rgba(7,7,11,.8);position:sticky;top:0}.top b{font-family:"Instrument Sans";font-size:1.15rem}.top a{margin-left:auto;color:var(--fg2)}
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem}h2{font-family:"Instrument Sans";font-size:1.3rem;margin:1.5rem 0 .6rem}
+input{padding:.7rem .9rem;width:26rem;max-width:100%;border:1px solid var(--line);border-radius:10px;background:#040308;color:var(--fg);font:inherit}button{background:var(--grad);border:0;color:#fff;font-weight:700;padding:.7rem 1rem;border-radius:10px;cursor:pointer;font:inherit}
+table{border-collapse:collapse;width:100%;background:var(--bg3);border:1px solid var(--line);border-radius:12px;overflow:hidden}td,th{padding:.6rem .8rem;border-bottom:1px solid var(--line);text-align:left;font-size:.92rem}th{font-family:"Geist Mono";font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2)}tr:last-child td{border:0}
+.pill{font-family:"Geist Mono";font-size:.7rem;font-weight:700;padding:.2rem .55rem;border-radius:6px;letter-spacing:.06em;text-transform:uppercase}.ok{background:rgba(62,207,142,.14);color:#3ECF8E}.alert,.failed,.unproven{background:rgba(255,77,77,.14);color:#FF7A7A}.running{background:rgba(76,141,255,.18);color:#8FB6FF}.waiting,.paused{background:rgba(255,255,255,.06);color:var(--fg3)}
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin:1rem 0}.kpi div{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem}.kpi b{display:block;font-family:"Instrument Sans";font-size:1.6rem}.kpi span{color:var(--fg2);font-size:.85rem}
+small{color:var(--fg3)}.err{color:#FF7A7A}@media(max-width:800px){.kpi{grid-template-columns:1fr 1fr}}</style></head><body>
+<div class=top><b>RunVouch</b> <small>dashboard</small><a href="https://runvouch.com/docs/">Docs</a></div><div class=wrap>
+<p><input id=k placeholder="paste your API key (rv_…)"> <button onclick="load()">Load</button> <small id=me></small></p>
+<div id=out></div></div><script>
+const API=location.hostname.startsWith('api.')||location.hostname==='localhost'||location.hostname==='127.0.0.1'?'':'https://api.runvouch.com';
+const qk=new URLSearchParams(location.search).get('key');if(qk){try{localStorage.setItem('rvk',qk)}catch(e){}history.replaceState({},'',location.pathname)}
+async function load(){const k=document.getElementById('k').value.trim();try{localStorage.setItem('rvk',k)}catch(e){}
+const h={'X-API-Key':k};let me,ag,al;try{me=await (await fetch(API+'/v1/me',{headers:h})).json();ag=await (await fetch(API+'/v1/agents',{headers:h})).json();al=await (await fetch(API+'/v1/alerts',{headers:h})).json()}catch(e){document.getElementById('out').innerHTML='<p class=err>Network error: '+e+'</p>';return}
+if(!Array.isArray(ag)){document.getElementById('out').innerHTML='<p class=err>'+(ag.detail||'error')+'</p>';return}
+document.getElementById('me').textContent=(me.email||me.name)+' · plan '+me.plan+' · '+ag.length+'/'+me.agents_allowed+' agents';
+const cost=ag.reduce((a,x)=>a+(x.cost_24h||0),0);const bad=ag.filter(a=>['alert','failed','unproven'].includes(a.state)).length;
+let s='<div class=kpi><div><b>'+ag.length+'</b><span>agents</span></div><div><b>'+ag.filter(a=>a.state==='ok').length+'</b><span>vouched</span></div><div><b>'+bad+'</b><span>need attention</span></div><div><b>$'+cost.toFixed(2)+'</b><span>cost 24h</span></div></div>';
+s+='<h2>Agents</h2><table><tr><th>agent</th><th>state</th><th>last run</th><th>status</th><th>evidence</th><th>cost 24h</th><th>alerts</th></tr>';
+for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${a.name}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td></tr>`}
+s+='</table><h2>Open alerts</h2>';if(!al.length)s+='<p><small>None. Quiet night.</small></p>';else{s+='<table><tr><th>when</th><th>agent</th><th>kind</th><th>message</th><th></th></tr>';for(const x of al){s+=`<tr><td><small>${new Date(x.ts*1000).toLocaleString()}</small></td><td>${x.agent}</td><td><span class="pill alert">${x.kind}</span></td><td>${x.message}</td><td><button onclick="ack(${x.id})">ack</button></td></tr>`}s+='</table>'}
+document.getElementById('out').innerHTML=s}
+async function ack(id){await fetch(API+'/v1/alerts/'+id+'/ack',{method:'POST',headers:{'X-API-Key':document.getElementById('k').value.trim()}});load()}
+try{const k=localStorage.getItem('rvk');if(k){document.getElementById('k').value=k;load()}}catch(e){}
+</script></body></html>"""
+
+
+SITE_DIR = Path(__file__).resolve().parent.parent / "site" / "public"
+MARKETING_HOSTS = {"runvouch.com", "www.runvouch.com"}
+MIME = {".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png",
+        ".xml": "application/xml", ".txt": "text/plain; charset=utf-8", "": "text/plain; charset=utf-8"}
+
+
+def _is_marketing(request: Request) -> bool:
+    host = request.headers.get("host", "").split(":")[0]
+    return host in MARKETING_HOSTS
+
+
+def _serve_site(path: str):
+    from fastapi.responses import FileResponse, RedirectResponse
+    p = path.strip("/")
+    cand = [SITE_DIR / p / "index.html", SITE_DIR / (p + ".html"), SITE_DIR / p] if p else [SITE_DIR / "index.html"]
+    for f in cand:
+        try:
+            f.resolve().relative_to(SITE_DIR.resolve())
+        except ValueError:
+            break
+        if f.is_file():
+            ext = f.suffix.lower()
+            headers = {"Cache-Control": "public, max-age=31536000, immutable" if ext in (".css", ".png", ".svg") else "public, max-age=300"}
+            if f.name == "rv":
+                headers["Content-Disposition"] = "inline; filename=rv"
+            return FileResponse(f, media_type=MIME.get(ext, "application/octet-stream"), headers=headers)
+    return HTMLResponse('<!doctype html><meta charset=utf-8><title>Not found — RunVouch</title><body style="font:16px system-ui;margin:4rem auto;max-width:40rem"><h1>404</h1><p>Nothing here. Try the <a href="/">home page</a>, <a href="/docs/">docs</a> or <a href="/app">dashboard</a>.</p>', status_code=404)
+
+
+@app.get("/", response_class=HTMLResponse)
+def root(request: Request):
+    """runvouch.com → landing site; api.runvouch.com / localhost → dashboard."""
+    if _is_marketing(request):
+        if request.headers.get("host", "").startswith("www."):
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(PUBLIC_URL.replace("api.", "") + "/", status_code=301)
+        return _serve_site("")
+    return DASH
+
+
+@app.get("/app", response_class=HTMLResponse)
+def dashboard():
+    return DASH
+
+
+@app.get("/openapi-lite")
+def openapi_lite():
+    return JSONResponse({"base": PUBLIC_URL, "auth": "X-API-Key", "endpoints": [r.path for r in app.routes if r.path.startswith("/v1")]})
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def site_catchall(path: str, request: Request):
+    if _is_marketing(request):
+        return _serve_site(path)
+    raise HTTPException(404, "not found")

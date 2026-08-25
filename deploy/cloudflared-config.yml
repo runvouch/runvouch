@@ -1,0 +1,10 @@
+tunnel: runvouch
+credentials-file: /home/krtradingpro/.cloudflared/runvouch.json
+ingress:
+  - hostname: api.runvouch.com
+    service: http://127.0.0.1:8787
+  - hostname: runvouch.com
+    service: http://127.0.0.1:8787
+  - hostname: www.runvouch.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404
