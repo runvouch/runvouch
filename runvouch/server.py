@@ -231,7 +231,7 @@ def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - 3600)
     if dup:
         return
-    recent = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - ALERT_COOLDOWN)
+    recent = None if kind == "TEST" else q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - ALERT_COOLDOWN)
     with tx() as db:
         cur = db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message, delivered) VALUES(?,?,?,?,?,?,?)",
                          (account_id, agent_id, run_id, time.time(), kind, message, -1 if recent else 0))
