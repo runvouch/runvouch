@@ -31,3 +31,5 @@ packaging/npm/node_modules/
 deploy/npm-recovery-codes.txt
 packaging/github-action/.git/
 packaging/github-action/LICENSE
+docs/BILLING.md
+docs/STRIPE.md
