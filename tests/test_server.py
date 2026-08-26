@@ -220,3 +220,32 @@ def test_polar_webhook():
     assert server.q1("SELECT plan FROM accounts WHERE email='polar.first@example.com'")["plan"] == "solo"
     send("order.refunded", {"id": "o3", "status": "refunded", "total_amount": 900, "refunded_amount": 900, "product_id": "prod-solo", "customer": {"id": "c2", "email": "polar.first@example.com"}})
     assert server.q1("SELECT plan FROM accounts WHERE email='polar.first@example.com'")["plan"] == "free"
+
+
+def test_polar_billing_mails(monkeypatch):
+    sent = []
+    monkeypatch.setattr(server, "_send_billing", lambda kind, to, plan, ends_at=None, api_key=None: sent.append((kind, to, plan, ends_at, bool(api_key))))
+    import hmac, hashlib, base64
+    server.POLAR_WEBHOOK_SECRET = "polar-test-secret"; server.POLAR_PRODUCT_PLANS = {"prod-solo": "solo", "prod-team": "team"}
+    n = [100]
+    def send(typ, obj):
+        n[0] += 1
+        body = json.dumps({"type": typ, "data": obj}).encode(); wid, ts = f"msg_{n[0]}", str(int(time.time()))
+        sig = base64.b64encode(hmac.new(b"polar-test-secret", f"{wid}.{ts}.".encode() + body, hashlib.sha256).digest()).decode()
+        return c.post("/webhooks/polar", content=body, headers={"webhook-id": wid, "webhook-timestamp": ts, "webhook-signature": "v1," + sig}).json()
+    cust = {"id": "c9", "email": "mail.test@example.com"}
+    assert send("order.paid", {"id": "m1", "paid": True, "billing_reason": "purchase", "product_id": "prod-solo", "subscription_id": "s9", "customer": cust})["mail"] == "welcome"
+    assert sent[-1][0] == "welcome" and sent[-1][4] is True          # paid before signup: key goes in the mail
+    assert send("order.paid", {"id": "m2", "paid": True, "billing_reason": "subscription_cycle", "product_id": "prod-solo", "customer": cust})["mail"] is None  # renewal: no mail
+    assert send("subscription.canceled", {"id": "s9", "status": "active", "cancel_at_period_end": True, "ends_at": "2026-09-26T07:54:23Z", "product_id": "prod-solo", "customer": cust})["mail"] == "canceled"
+    assert sent[-1][3] == "2026-09-26T07:54:23Z"
+    assert send("subscription.revoked", {"id": "s9", "status": "canceled", "product_id": "prod-solo", "customer": cust})["mail"] == "ended"
+    assert server.q1("SELECT plan FROM accounts WHERE email='mail.test@example.com'")["plan"] == "free"
+    subj, text = server.billing_email("canceled", "x@y.z", "solo", "2026-09-26T07:54:23Z")
+    assert "26 September 2026" in text and "Solo" in subj
+    assert all(ord(ch) < 128 for ch in text)  # plain ASCII mail body
+
+
+def test_health_json():
+    r = c.get("/health")
+    assert r.status_code == 200 and r.json()["status"] == "ok" and r.json()["checks"]["database"] == "ok"

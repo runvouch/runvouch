@@ -30,6 +30,7 @@ import os
 import secrets
 import sqlite3
 import threading
+from datetime import datetime
 import time
 import urllib.parse
 import urllib.request
@@ -201,11 +202,15 @@ def _telegram(token: str, chat: str, text: str) -> bool:
         return False
 
 
-def _email(to: str, subject: str, text: str) -> bool:
+BILLING_FROM = os.getenv("BILLING_FROM", "RunVouch <hello@runvouch.com>")
+PLAN_NAMES = {"free": "Free", "solo": "Solo", "team": "Team"}
+
+
+def _email(to: str, subject: str, text: str, sender: Optional[str] = None) -> bool:
     if not RESEND_API_KEY or not to:
         return False
     try:
-        req = urllib.request.Request("https://api.resend.com/emails", json.dumps({"from": ALERT_FROM, "to": [to], "subject": subject, "text": text}).encode(),
+        req = urllib.request.Request("https://api.resend.com/emails", json.dumps({"from": sender or ALERT_FROM, "to": [to], "subject": subject, "text": text, "reply_to": "support@runvouch.com"}).encode(),
                                      {"Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "User-Agent": "runvouch-server/0.3"})
         urllib.request.urlopen(req, timeout=10)
         return True
@@ -477,9 +482,18 @@ def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
 
 
 # ───────────────────────────── routes ─────────────────────────────
-@app.get("/health", response_class=PlainTextResponse)
+@app.get("/health")
 def health():
-    return "ok"
+    """Machine-readable status (UptimeRobot keyword: "ok"). DB is touched so a broken disk shows here."""
+    try:
+        q1("SELECT 1 AS one")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    body = {"status": "ok" if db_ok else "degraded", "service": "RunVouch API", "version": "0.3.3", "time": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "checks": {"database": "ok" if db_ok else "error", "detectors": "running" if not os.getenv("RUNVOUCH_NO_SWEEP") else "disabled"},
+            "docs": "https://runvouch.com/docs", "status_page": "https://runvouch.com/status"}
+    return JSONResponse(body, status_code=200 if db_ok else 503)
 
 
 @app.post("/admin/accounts", dependencies=[Depends(require_admin)])
@@ -633,6 +647,52 @@ async def stripe_webhook(request: Request):
     return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
 
 
+def _fmt_date(iso: Optional[str]) -> str:
+    """'2026-09-26T07:54:23Z' -> '26 September 2026' (UTC)."""
+    try:
+        return datetime.strptime((iso or "")[:10], "%Y-%m-%d").strftime("%-d %B %Y")
+    except Exception:
+        return "the end of your current billing period"
+
+
+def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, api_key: Optional[str] = None) -> tuple[str, str]:
+    """Customer-facing billing mails: welcome / canceled / ended / refunded. Returns (subject, text)."""
+    name, limit = PLAN_NAMES.get(plan, plan.title()), PLAN_LIMITS.get(plan, 3)
+    sig = "\n\nKeith\nRunVouch - the watchdog for unattended AI agents\nhttps://runvouch.com  |  support@runvouch.com"
+    if kind == "welcome":
+        key_block = (f"\n\nYour API key (shown only here - store it now):\n\n    {api_key}\n\nSet it as RUNVOUCH_KEY wherever your agents run." if api_key
+                     else "\n\nYour existing API key keeps working; the new limit is already active.")
+        return (f"Welcome to RunVouch {name}",
+                f"Hi,\n\nThank you for subscribing to RunVouch {name}. Your account now covers up to {limit} agents, with all eight detectors, "
+                f"{'90-day' if plan == 'solo' else '90-day'} history and the weekly cost report.{key_block}\n\n"
+                f"Getting started:\n  - Dashboard: https://runvouch.com/app\n  - Docs: https://runvouch.com/docs\n  - Wrap a job: rv run NAME --evidence-file OUT -- your-command\n\n"
+                f"Your receipt comes separately from Polar, our merchant of record. Manage or cancel any time from the link in that receipt.\n\n"
+                f"If anything is unclear, reply to this mail - it reaches a person." + sig)
+    if kind == "canceled":
+        return (f"Your RunVouch {name} subscription is canceled",
+                f"Hi,\n\nWe have received your cancellation. Your RunVouch {name} plan stays fully active until {_fmt_date(ends_at)}; "
+                f"after that your account moves to the Free plan (3 agents, all detectors) - nothing is deleted and your key keeps working.\n\n"
+                f"Changed your mind? You can resume from the link in your Polar receipt before that date and nothing changes.\n\n"
+                f"Thank you for using RunVouch. If something made you leave, we would honestly like to know - just reply to this mail. We hope to see you again." + sig)
+    if kind == "ended":
+        return (f"Your RunVouch {name} plan has ended",
+                f"Hi,\n\nYour RunVouch {name} subscription ended today. Your account is now on the Free plan: 3 agents, all eight detectors, 7-day history. "
+                f"Your API key and agents are untouched; if you have more than 3 agents, the oldest 3 stay monitored.\n\n"
+                f"Thank you for the time you spent with us. Whenever your agents outgrow the free plan again, upgrading takes one click: https://runvouch.com/pricing\n\n"
+                f"We hope to see you again." + sig)
+    if kind == "refunded":
+        return ("Your RunVouch refund is on its way",
+                f"Hi,\n\nWe have refunded your RunVouch {name} payment in full. Polar processes the refund; it usually shows on your card within 5-10 business days.\n\n"
+                f"Your account is on the Free plan and keeps working. Sorry it did not fit - if you tell us why, we will use it." + sig)
+    return ("RunVouch", "")
+
+
+def _send_billing(kind: str, to: str, plan: str, ends_at: Optional[str] = None, api_key: Optional[str] = None) -> None:
+    subject, text = billing_email(kind, to, plan, ends_at, api_key)
+    if text:
+        threading.Thread(target=_email, args=(to, subject, text, BILLING_FROM), daemon=True).start()
+
+
 def _polar_sig_ok(raw: bytes, headers) -> bool:
     """Standard Webhooks (Polar): webhook-id / webhook-timestamp / webhook-signature "v1,<base64>",
     HMAC-SHA256 over "<id>.<timestamp>.<raw>" with the base64 secret (whsec_ prefix stripped)."""
@@ -690,16 +750,31 @@ async def polar_webhook(request: Request):
         plan = "free"  # full refund: access ends now, whatever the subscription says
     acc = (q1("SELECT * FROM accounts WHERE email=?", email) if email else None) or \
           (q1("SELECT * FROM accounts WHERE polar_customer_id=?", customer) if customer else None)
+    new_key, mail = None, None
     with tx() as db:
         db.execute("INSERT INTO ls_events(id, ts, name, payload) VALUES(?,?,?,?)", (ev_id, time.time(), name, raw.decode(errors="ignore")[:20000]))
         if plan and acc:
             db.execute("UPDATE accounts SET plan=?, polar_customer_id=COALESCE(?,polar_customer_id), polar_subscription_id=COALESCE(?,polar_subscription_id) WHERE id=?",
                        (plan, customer or None, sub_id, acc["id"]))
         elif plan and plan != "free" and email and not acc:
-            key = "rv_" + secrets.token_urlsafe(24)
+            new_key = "rv_" + secrets.token_urlsafe(24)
             db.execute("INSERT INTO accounts(name, api_key, created, plan, email, polar_customer_id, polar_subscription_id) VALUES(?,?,?,?,?,?,?)",
-                       (email.split("@")[0], key_hash(key), time.time(), plan, email, customer or None, sub_id))
-    return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
+                       (email.split("@")[0], key_hash(new_key), time.time(), plan, email, customer or None, sub_id))
+    # customer mails: one per lifecycle moment, never on renewals or on no-op updates
+    to = email or (acc["email"] if acc else None)
+    old_plan = acc["plan"] if acc else "free"
+    if to:
+        if name == "order.paid" and plan and plan != "free" and (new_key or plan != old_plan):
+            mail = ("welcome", plan, None, new_key)
+        elif name == "subscription.canceled" and obj.get("cancel_at_period_end"):
+            mail = ("canceled", POLAR_PRODUCT_PLANS.get(product, old_plan), obj.get("ends_at") or obj.get("current_period_end"), None)
+        elif name == "subscription.revoked":
+            mail = ("ended", POLAR_PRODUCT_PLANS.get(product, old_plan), None, None)
+        elif name == "order.refunded" and plan == "free":
+            mail = ("refunded", POLAR_PRODUCT_PLANS.get(product, old_plan), None, None)
+    if mail:
+        _send_billing(mail[0], to, mail[1], mail[2], mail[3])
+    return {"ok": True, "event": name, "plan": plan, "matched": bool(acc), "mail": mail[0] if mail else None}
 
 
 @app.put("/v1/settings")
