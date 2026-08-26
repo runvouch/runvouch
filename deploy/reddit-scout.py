@@ -34,11 +34,11 @@ def fetch(url: str) -> bytes:
         try:
             with urllib.request.urlopen(req, timeout=20) as r:
                 data = r.read()
-            time.sleep(4)
+            time.sleep(10)
             return data
         except urllib.error.HTTPError as e:
             if e.code == 429 and attempt == 1:
-                time.sleep(20)
+                time.sleep(60)
                 continue
             raise
 
@@ -108,7 +108,7 @@ def main() -> int:
             print(f"{sub}: {e}", file=sys.stderr)
     fresh = [p for p in cands if p["url"] not in seen]
     fresh.sort(key=score, reverse=True)
-    top = [p for p in fresh if score(p) >= 5][:5]
+    top = [p for p in fresh if score(p) >= 6][:5]
     lines = [f"[{score(p)}] r/{p['sub']}: {p['title'][:110]}\n{p['url']}" for p in top]
     msg = "Reddit vandaag - threads waar een echte reactie past (zeg 'reddit' + nummer):\n\n" + "\n\n".join(f"{i+1}. {l}" for i, l in enumerate(lines)) if top else "Reddit vandaag: geen passende nieuwe threads."
     print(msg)
