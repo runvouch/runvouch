@@ -1,0 +1,5 @@
+# One company per line: the slug from the company's career board URL.
+# boards.greenhouse.io/stripe -> stripe, jobs.ashbyhq.com/Ramp -> Ramp, jobs.lever.co/<slug> -> <slug>.
+# The platform is detected automatically. Replace these with your competitors.
+stripe
+Ramp

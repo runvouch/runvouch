@@ -1,0 +1,6 @@
+# One 13F filer CIK per line. Comments and blank lines are ignored.
+# These three are the defaults of the DataSignals Smart Money 13F actor.
+# Find more with: python3 ds_mcp.py resolve_company '{"query":"fund name"}' (free) or on EDGAR.
+1067983   Berkshire Hathaway
+1649339   Scion Asset Management
+1336528   Pershing Square Capital Management

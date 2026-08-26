@@ -1,0 +1,5 @@
+# Nightly at 02:15. Set RUNVOUCH_KEY and APIFY_TOKEN in the crontab environment or ~/.profile.
+# Path-free version (Python, no Claude needed):
+15 2 * * * cd $HOME/templates/nightly-13f-consensus-digest && rv run nightly-13f-digest --evidence-file out/13f-digest.md --log out/run.log -- python3 digest.py --spend-cap 5
+# Claude Code version (headless, uses the MCP server registered with `claude mcp add`):
+# 15 2 * * * cd $HOME/templates/nightly-13f-consensus-digest && rv run nightly-13f-digest --evidence-file out/13f-digest.md --log out/run.log -- claude -p "$(cat prompt.md)" --dangerously-skip-permissions

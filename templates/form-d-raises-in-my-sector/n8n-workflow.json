@@ -1,0 +1,272 @@
+{
+ "name": "Form D raises in my sector (RunVouch)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "30 6 * * *"
+      }
+     ]
+    }
+   },
+   "id": "n1",
+   "name": "Every night",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.runvouch.com/v1/runs/start",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-API-Key",
+       "value": "={{ $env.RUNVOUCH_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "{\"agent\":\"form-d-raises\",\"source\":\"n8n\"}",
+    "options": {}
+   },
+   "id": "n2",
+   "name": "RunVouch start",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "url": "https://datasignalslab.com/v1/events",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "event_type",
+       "value": "private_raise"
+      },
+      {
+       "name": "limit",
+       "value": "100"
+      },
+      {
+       "name": "since",
+       "value": "={{ $getWorkflowStaticData('global').cursor || '' }}"
+      }
+     ]
+    },
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.DATASIGNALS_KEY }}"
+      }
+     ]
+    },
+    "options": {
+     "retry": {
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 15000
+     }
+    }
+   },
+   "id": "n3",
+   "name": "DataSignals private_raise",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    440,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const words = ['biotech','pharma','technology'];\nconst page = $input.first().json;\nconst s = $getWorkflowStaticData('global');\nif (page.cursor !== undefined) s.cursor = page.cursor;\nconst hits = (page.events || []).filter(ev => {\n  const hay = ((ev.data||{}).industry + ' ' + ((ev.company||{}).name||'')).toLowerCase();\n  return words.some(w => hay.includes(w));\n});\nconst lines = hits.slice(0,15).map(ev => `- ${ev.company.name} (${ev.data.industry}, ${ev.data.state}): $${ev.data.amount_sold_usd || ev.data.amount_offered_usd || 0}\\n  ${ev.source.url}`);\nreturn [{ json: { count: hits.length, total: (page.events||[]).length, text: hits.length ? `Form D: ${hits.length} new raise(s) in your sector\\n` + lines.join('\\n') : '', hits } }];"
+   },
+   "id": "n4",
+   "name": "Filter by keywords",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.count }}",
+       "rightValue": 0,
+       "operator": {
+        "type": "number",
+        "operation": "gt"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "id": "n5",
+   "name": "Any match?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    880,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+    "text": "={{ $json.text }}",
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "id": "n6",
+   "name": "Telegram",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1100,
+    -120
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "Telegram bot"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.runvouch.com/v1/runs/end",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-API-Key",
+       "value": "={{ $env.RUNVOUCH_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ run_id: $('RunVouch start').first().json.run_id, status: 'ok', evidence: { events_fetched: $('Filter by keywords').first().json.total >= 0, cursor_saved: true } }) }}",
+    "options": {}
+   },
+   "id": "n7",
+   "name": "RunVouch end",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1320,
+    0
+   ]
+  }
+ ],
+ "connections": {
+  "Every night": {
+   "main": [
+    [
+     {
+      "node": "RunVouch start",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "RunVouch start": {
+   "main": [
+    [
+     {
+      "node": "DataSignals private_raise",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "DataSignals private_raise": {
+   "main": [
+    [
+     {
+      "node": "Filter by keywords",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Filter by keywords": {
+   "main": [
+    [
+     {
+      "node": "Any match?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Any match?": {
+   "main": [
+    [
+     {
+      "node": "Telegram",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "RunVouch end",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Telegram": {
+   "main": [
+    [
+     {
+      "node": "RunVouch end",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "active": false
+}

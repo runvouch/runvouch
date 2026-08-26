@@ -1,0 +1,3 @@
+# Mondays at 07:00. Set APIFY_TOKEN and RUNVOUCH_KEY (and optionally TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID) in the cron environment.
+# The evidence file is this week's hiring-YYYY-WW.md (ISO week; the \% is how cron wants a percent sign). hiring-latest.md is a copy.
+0 7 * * 1 cd $HOME/templates/competitor-hiring-watch && rv run competitor-hiring --evidence-file "out/hiring-$(date +\%G-\%V).md" --log out/run.log -- python3 hiring.py --spend-cap 10

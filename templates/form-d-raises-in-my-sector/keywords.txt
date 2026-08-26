@@ -1,0 +1,7 @@
+# Lowercase substrings matched against the Form D industry group and the issuer name.
+# Industry groups are the SEC's own list, for example: biotechnology, pharmaceuticals,
+# health insurance, other health care, computers, telecommunications, other technology,
+# business services, commercial banking, real estate, oil and gas, energy conservation.
+biotech
+pharma
+technology
