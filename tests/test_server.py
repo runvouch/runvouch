@@ -249,3 +249,8 @@ def test_polar_billing_mails(monkeypatch):
 def test_health_json():
     r = c.get("/health")
     assert r.status_code == 200 and r.json()["status"] == "ok" and r.json()["checks"]["database"] == "ok"
+
+
+def test_email_html_wrapper():
+    h = server._email_html("x", "Hi <you>,\nline two")
+    assert "logo-400.png" in h and "&lt;you&gt;" in h and "Hi &lt;you&gt;,<br>line two" in h

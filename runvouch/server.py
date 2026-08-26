@@ -206,11 +206,29 @@ BILLING_FROM = os.getenv("BILLING_FROM", "RunVouch <hello@runvouch.com>")
 PLAN_NAMES = {"free": "Free", "solo": "Solo", "team": "Team"}
 
 
+def _email_html(subject: str, text: str) -> str:
+    """Plain text -> branded HTML: logo header, monospace-safe body (lines kept), quiet footer. Inline CSS only (mail clients)."""
+    import html as _h
+    body = _h.escape(text).replace("\n", "<br>")
+    return (f'<!doctype html><html><body style="margin:0;padding:0;background:#f4f6fb;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1b2140">'
+            f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6fb;padding:24px 0"><tr><td align="center">'
+            f'<table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e3e7f3;border-radius:12px">'
+            f'<tr><td style="padding:22px 28px 6px 28px"><a href="https://runvouch.com" style="text-decoration:none;color:#1b2140">'
+            f'<img src="https://runvouch.com/logo-400.png" width="28" height="28" alt="RunVouch" style="vertical-align:middle;border:0;margin-right:8px">'
+            f'<span style="font-size:17px;font-weight:700;vertical-align:middle">RunVouch</span></a></td></tr>'
+            f'<tr><td style="padding:8px 28px 4px 28px;font-size:15px;line-height:1.55;color:#1b2140">{body}</td></tr>'
+            f'<tr><td style="padding:16px 28px 22px 28px;font-size:12px;line-height:1.5;color:#6b7390;border-top:1px solid #eef1f8">'
+            f'RunVouch - the watchdog for unattended AI agents. <a href="https://runvouch.com/app" style="color:#4c8dff">Dashboard</a> &middot; '
+            f'<a href="https://runvouch.com/docs" style="color:#4c8dff">Docs</a> &middot; <a href="mailto:support@runvouch.com" style="color:#4c8dff">support@runvouch.com</a></td></tr>'
+            f'</table></td></tr></table></body></html>')
+
+
 def _email(to: str, subject: str, text: str, sender: Optional[str] = None) -> bool:
     if not RESEND_API_KEY or not to:
         return False
     try:
-        req = urllib.request.Request("https://api.resend.com/emails", json.dumps({"from": sender or ALERT_FROM, "to": [to], "subject": subject, "text": text, "reply_to": "support@runvouch.com"}).encode(),
+        req = urllib.request.Request("https://api.resend.com/emails", json.dumps({"from": sender or ALERT_FROM, "to": [to], "subject": subject, "text": text,
+                                                                               "html": _email_html(subject, text), "reply_to": "support@runvouch.com"}).encode(),
                                      {"Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "User-Agent": "runvouch-server/0.3"})
         urllib.request.urlopen(req, timeout=10)
         return True
