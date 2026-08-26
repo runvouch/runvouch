@@ -1,0 +1,13 @@
+{
+  "name": "runvouch",
+  "version": "0.3.3",
+  "description": "The watchdog for unattended AI agents: dead man's switch, cost cap and outcome check for cron'd LLM scripts, Claude Code routines, OpenClaw and n8n.",
+  "license": "MIT",
+  "homepage": "https://runvouch.com",
+  "repository": { "type": "git", "url": "https://github.com/runvouch/runvouch" },
+  "keywords": ["ai-agents", "monitoring", "watchdog", "cron", "llm", "claude-code", "openclaw", "observability"],
+  "main": "index.js",
+  "bin": { "rv": "bin/rv.js", "runvouch": "bin/rv.js" },
+  "files": ["index.js", "bin/rv.js", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" }
+}

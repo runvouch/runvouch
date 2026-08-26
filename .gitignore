@@ -23,3 +23,8 @@ packaging/pypi/dist/
 packaging/pypi/build/
 packaging/pypi/*.egg-info/
 packaging/pypi/LICENSE
+packaging/npm/index.js
+packing/npm/LICENSE
+packaging/npm/LICENSE
+packaging/npm/*.tgz
+packaging/npm/node_modules/
