@@ -500,6 +500,17 @@ def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
 
 
 # ───────────────────────────── routes ─────────────────────────────
+def _alert_delivery_status() -> str:
+    """'ok' when the newest alert of the last 7 days was delivered, 'idle' when nothing was due, 'failing' otherwise."""
+    try:
+        row = q1("SELECT delivered FROM alerts WHERE ts>? ORDER BY id DESC LIMIT 1", time.time() - 7 * 86400)
+    except Exception:
+        return "unknown"
+    if row is None:
+        return "idle"
+    return "ok" if row["delivered"] else "failing"
+
+
 @app.get("/health")
 def health():
     """Machine-readable status (UptimeRobot keyword: "ok"). DB is touched so a broken disk shows here."""
@@ -509,7 +520,7 @@ def health():
     except Exception:
         db_ok = False
     body = {"status": "ok" if db_ok else "degraded", "service": "RunVouch API", "version": "0.3.3", "time": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "checks": {"database": "ok" if db_ok else "error", "detectors": "running" if not os.getenv("RUNVOUCH_NO_SWEEP") else "disabled"},
+            "checks": {"database": "ok" if db_ok else "error", "detectors": "running" if not os.getenv("RUNVOUCH_NO_SWEEP") else "disabled", "alert_delivery": _alert_delivery_status()},
             "docs": "https://runvouch.com/docs", "status_page": "https://runvouch.com/status"}
     return JSONResponse(body, status_code=200 if db_ok else 503)
 
@@ -1017,7 +1028,7 @@ def mcp_info():
 
 
 # ───────────────────────────── minimal dashboard ─────────────────────────────
-DASH = """<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>RunVouch dashboard</title>
+DASH = """<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>RunVouch dashboard</title><meta name="robots" content="noindex"><meta name="description" content="RunVouch dashboard: your agents, their last runs, evidence and open alerts. Sign in with your API key.">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>:root{--bg:#0B1020;--bg3:#141B33;--line:rgba(169,180,214,.14);--fg:#EEF2FF;--fg2:#A9B4D6;--fg3:#6F7A9E;--grad:#4C8DFF}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 Figtree,system-ui,sans-serif}a{color:#8FB6FF}
@@ -1076,6 +1087,9 @@ def _serve_site(path: str):
             if f.name == "rv":
                 headers["Content-Disposition"] = "inline; filename=rv"
             return FileResponse(f, media_type=MIME.get(ext, "application/octet-stream"), headers=headers)
+    nf = SITE_DIR / "404.html"
+    if nf.exists():
+        return HTMLResponse(nf.read_text(encoding="utf-8"), status_code=404, headers={"X-Robots-Tag": "noindex"})
     return HTMLResponse('<!doctype html><meta charset=utf-8><title>Not found — RunVouch</title><body style="font:16px system-ui;margin:4rem auto;max-width:40rem"><h1>404</h1><p>Nothing here. Try the <a href="/">home page</a>, <a href="/docs/">docs</a> or <a href="/app">dashboard</a>.</p>', status_code=404)
 
 

@@ -14,6 +14,13 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [Python & Node](https://runvouch.com/docs/python-node): LangGraph, OpenAI Agents SDK, CrewAI callbacks
 - [GitHub Actions](https://runvouch.com/docs/github-actions) · [OpenClaw](https://runvouch.com/docs/openclaw) · [n8n](https://runvouch.com/docs/n8n) · [MCP server](https://runvouch.com/docs/mcp) · [HTTP API](https://runvouch.com/docs/api)
 
+## Field notes (blog)
+- [My Claude Code cron ran up $1,800 in two nights — the watchdog that stops it at $2](https://runvouch.com/blog/claude-code-cron-unexpected-api-bill-runaway-cost-overnight): Four documented runaway agent bills ($1,818, $6,000, $437, $150), why per-call metrics hide the loop, and per-run/per-day caps with rv.
+- [Claude Code Routine failed silently? How to know your scheduled agent actually ran](https://runvouch.com/blog/claude-code-routine-failed-silently-scheduled-task-didnt-run): Green does not mean done. The 4 ways a scheduled Claude Code run fails with no error, and heartbeat plus evidence checks that catch each one.
+- [The dead man's switch for AI agents (and why a ping isn't enough)](https://runvouch.com/blog/dead-mans-switch-for-ai-agents): A ping monitor knows a job ran. For an agent that is the least interesting fact. What a dead man's switch has to check when the job is an LLM.
+- [OpenClaw stuck in a polling loop: $150, a crash, and no alert — detect it in 60 seconds](https://runvouch.com/blog/openclaw-stuck-in-polling-loop-150-no-alert): An OpenClaw agent called the same tool 1,535 times in two hours. Every call looked fine. How a retry-storm rule and a daily cap catch this before the bill.
+- [7 ways unattended AI agents fail silently — and one check for each](https://runvouch.com/blog/7-ways-unattended-ai-agents-fail-silently): Seven ways a scheduled AI agent fails without an error — from a run that never starts to a run that does nothing — and the one detector that catches each.
+
 ## Compare
 - [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)
 

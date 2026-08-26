@@ -99,7 +99,8 @@ td.y{color:var(--good);font-weight:600}td.n{color:var(--fg3)}
 footer{border-top:1px solid var(--line);padding:3rem 0;color:var(--fg2);font-size:.9rem;background:var(--bg2)}footer .cols{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:2rem}footer h4{margin:0 0 .6rem;font-size:.74rem;color:var(--fg3);font-family:"Geist Mono";letter-spacing:.12em;text-transform:uppercase}footer a{color:var(--fg2);display:block;margin:.3rem 0}footer p a{display:inline;margin:0;color:var(--fg)}footer .avail{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0 .6rem;padding:0;list-style:none}footer .avail li a{display:inline-block;margin:0;padding:.25rem .6rem;border:1px solid var(--line2);border-radius:999px;font-size:.78rem;color:var(--fg2);text-decoration:none}footer .avail li a:hover{color:var(--fg);border-color:var(--accent)}
 .doc{max-width:780px;padding-top:3rem;padding-bottom:3rem}.doc h2{margin-top:2.4rem}.doc .toc{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:1rem 1.25rem;margin:1.5rem 0}.doc .toc a{color:var(--fg2)}
 .logos{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center;color:var(--fg2);font-weight:500;font-size:.88rem}.logos span{border:1px solid var(--line2);background:rgba(169,180,214,.04);padding:.5rem .9rem;border-radius:999px}
-@media(max-width:900px){.hero-inner{grid-template-columns:1fr;gap:2rem}.hero{padding-top:3rem}.g3,.g4,.g2,.price{grid-template-columns:1fr}footer .cols{grid-template-columns:1fr 1fr}.nav nav{display:none}.nav .btn{margin-left:auto}}
+html,body{overflow-x:hidden;max-width:100%}.doc table{display:block;overflow-x:auto;max-width:100%}footer .cols>div{min-width:0}.ticker{display:flex;align-items:center;max-width:100vw}.tk-label{flex:none;margin:0 1rem 0 var(--pad,1.25rem);padding:.15rem .55rem;border:1px solid var(--line2);border-radius:999px;font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}.tk-wrap{flex:1;overflow:hidden;white-space:nowrap}
+@media(max-width:900px){.hero-inner{grid-template-columns:1fr;gap:2rem}.hero{padding-top:3rem}.g3,.g4,.g2,.price{grid-template-columns:1fr}footer .cols{grid-template-columns:1fr 1fr;gap:1.5rem}footer .cols>div:first-child{grid-column:1/-1}.nav nav{display:none}.nav .btn{margin-left:auto}.tk-label{display:none}}
 @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}.tk-track,.eyebrow i{animation:none}}
 '''
 
@@ -112,7 +113,7 @@ k.innerHTML='<pre><span class="d"># Your key — shown once. Store it now.</span
 catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}return false}
 
 (function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
-document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});setTimeout(()=>document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in')),1800);document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
 function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
 function add(rand){const y=lanes[Math.floor(Math.random()*lanes.length)];P.push({x:rand?Math.random()*W:-30*D,y,y0:y,v:(0.35+Math.random()*0.5)*D,life:0,fail:Math.random()<0.14,failAt:600+Math.random()*900,vy:0,trail:[]})}
@@ -139,17 +140,18 @@ def head(title, desc, path, jsonld=None, article=False):
 <meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:url" content="{BASE}{path}"><meta property="og:image" content="{BASE}/og.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/logo.svg?v={CSS_HASH}" type="image/svg+xml"><link rel="icon" href="/favicon.png?v={CSS_HASH}" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v={CSS_HASH}"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.{CSS_HASH}.css">{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}</head><body>
+<link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}</head><body>
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig"></canvas></div>
-<header class="top"><div class="wrap nav"><a class="brand" href="/">{LOGO_SVG}RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header>'''
+<header class="top"><div class="wrap nav"><a class="brand" href="/">{LOGO_SVG}RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header>'''
 
 
+PH_BADGE = '<p style="margin:.8rem 0"><a class="ph-badge" href="https://www.producthunt.com/products/runvouch?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-runvouch" target="_blank" rel="noopener noreferrer"><img alt="RunVouch - Dead man\'s switch + cost cap for unattended AI agents | Product Hunt" width="250" height="54" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1232338&amp;theme=dark&amp;t=1787690858298"></a></p>' if datetime.date.today() >= datetime.date(2026, 9, 1) else ''
 FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)">{LOGO_SVG.replace('width="64" height="64"','width="24" height="24"')}RunVouch</div>
 <p class="small" style="margin-top:.6rem">The watchdog for unattended AI agents: proof they did the job, and an alert the moment they don't — or start spending. (For the ops crowd: a dead man's switch, cost cap and outcome check.)</p>
-<p style="margin:.8rem 0"><a class="ph-badge" href="https://www.producthunt.com/products/runvouch?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-runvouch" target="_blank" rel="noopener noreferrer"><img alt="RunVouch - Dead man's switch + cost cap for unattended AI agents | Product Hunt" width="250" height="54" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1232338&amp;theme=dark&amp;t=1787690858298"></a></p>
+{PH_BADGE}
 <ul class="avail" aria-label="Available on"><li><a href="https://pypi.org/project/runvouch/">PyPI</a></li><li><a href="https://www.npmjs.com/package/runvouch">npm</a></li><li><a href="https://github.com/runvouch/vouch-action">GitHub Action</a></li><li><a href="https://github.com/runvouch/claude-plugin">Claude Code plugin</a></li><li><a href="https://registry.modelcontextprotocol.io/?search=runvouch">MCP Registry</a></li><li><a href="https://smithery.ai/servers/runvouch/runvouch">Smithery</a></li><li><a href="https://glama.ai/mcp/servers/runvouch/runvouch">Glama</a></li></ul>
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
-<div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
 <div><h4>Compare</h4><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
@@ -184,10 +186,10 @@ HOME = f'''
 <span class="eyebrow reveal"><i></i>watching agents that run while you sleep</span>
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
 <p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right.</p>
-<div class="cta reveal"><a class="btn" href="#start">Watch 3 agents free</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
+<div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
 <div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span></div>
 </div>
-<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;runvouch.com/app · last night · 5 agents</div>
+<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · what the dashboard shows</div>
 <ul class="runs">
 <li><span class="t">02:00 nightly-report</span><span class="m"><b>Missed.</b> Expected 02:00, nothing by 02:15</span><span class="pill bad">missed</span></li>
 <li><span class="t">03:00 inbox-triage</span><span class="m">Exit 0, but <b>no evidence</b>: <code>digest.html</code> unchanged</span><span class="pill warn">unproven</span></li>
@@ -195,9 +197,9 @@ HOME = f'''
 <li><span class="t">04:00 price-scraper</span><span class="m">$0.41 · 12 tool calls · output 118 KB</span><span class="pill ok">vouched</span></li>
 <li><span class="t">05:00 lead-enricher</span><span class="m">$7.90 this run · <b>daily cap $5 hit</b></span><span class="pill bad">budget</span></li>
 </ul>
-<div class="alertbox">🔔 <span><b>Telegram, 03:34</b> — repo-janitor: same tool + same input 41×. Each call looks fine; together it's a loop. <a href="#">Pause agent</a></span></div></div>
+<div class="alertbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:.15rem"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> <span><b>Telegram, 03:34 (example)</b> — repo-janitor: same tool + same input 41×. Each call looks fine; together it's a loop. <a href="#">Pause agent</a></span></div></div>
 </div></section>
-<a class="ticker" href="#how" aria-label="Sample alerts"><div class="tk-track"><span><b>02:16</b> MISSED nightly-report — no run started for 16 min</span><span><b>03:04</b> NO_EVIDENCE inbox-triage — digest.html unchanged, <em>green ≠ done</em></span><span><b>03:34</b> RETRY_STORM repo-janitor — 41× identical tool call</span><span><b>05:02</b> BUDGET_DAY lead-enricher — <em>$7.90 &gt; cap $5.00</em></span><span><b>06:00</b> VOUCHED price-scraper — $0.41, evidence ok</span><span><b>02:16</b> MISSED nightly-report — no run started for 16 min</span><span><b>03:04</b> NO_EVIDENCE inbox-triage — digest.html unchanged, <em>green ≠ done</em></span><span><b>03:34</b> RETRY_STORM repo-janitor — 41× identical tool call</span><span><b>05:02</b> BUDGET_DAY lead-enricher — <em>$7.90 &gt; cap $5.00</em></span><span><b>06:00</b> VOUCHED price-scraper — $0.41, evidence ok</span></div></a>
+<a class="ticker" href="#how" aria-label="Example alerts"><span class="tk-label">examples</span><div class="tk-wrap"><div class="tk-track"><span><b>MISSED</b> nightly-report — no run started for 16 min</span><span><b>NO_EVIDENCE</b> inbox-triage — digest.html unchanged, <em>green ≠ done</em></span><span><b>RETRY_STORM</b> repo-janitor — 41× identical tool call</span><span><b>BUDGET_DAY</b> lead-enricher — <em>$7.90 &gt; cap $5.00</em></span><span><b>VOUCHED</b> price-scraper — $0.41, evidence ok</span><span><b>MISSED</b> nightly-report — no run started for 16 min</span><span><b>NO_EVIDENCE</b> inbox-triage — digest.html unchanged, <em>green ≠ done</em></span><span><b>RETRY_STORM</b> repo-janitor — 41× identical tool call</span><span><b>BUDGET_DAY</b> lead-enricher — <em>$7.90 &gt; cap $5.00</em></span><span><b>VOUCHED</b> price-scraper — $0.41, evidence ok</span></div></div></a>
 
 <section class="alt"><div class="wrap">
 <span class="kicker">the problem</span><h2>"It ran" is the <span class="grad">wrong question</span></h2>
@@ -206,7 +208,7 @@ HOME = f'''
 <div class="card"><div class="big grad">$437</div><h3>for 14,000 identical calls</h3><p>An agent got stuck on a missing file. Every single call looked normal in the logs; the pattern only exists across calls. That's a retry storm — RunVouch counts them and alerts at 8.</p></div>
 <div class="card"><div class="big grad">0 bytes</div><h3>green run, empty report</h3><p>The routine "succeeded". The report it was supposed to publish never changed. Ping monitors can't see that. Evidence checks can.</p></div>
 </div>
-<p class="small muted" style="margin-top:1rem">Sources: Claude Code issue #37686, community incident reports 2026. <a href="/blog/">Read the write-ups →</a></p>
+<p class="small muted" style="margin-top:1rem">Sources: <a href="https://github.com/anthropics/claude-code/issues/37686" rel="noopener">Claude Code issue #37686</a> ($1,800+ in two days) · <a href="https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7" rel="noopener">"I let my AI agent run overnight, it cost $437"</a>. <a href="/blog/">Read the write-ups →</a></p>
 </div></section>
 
 <section id="how"><div class="wrap">
@@ -280,7 +282,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>Slack &amp; PagerDuty</li><li>Shared dashboard</li><li>API export</li></ul>{TEAM_BTN}</div>
 </div>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by {PROCESSOR}; upgrade with the same email you sign up with.</p>
-<form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free API key</button></form>
+<form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
 <div id="keybox" class="keybox"></div></div>
 </div></section>
 
@@ -296,9 +298,13 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 
 page("/", "RunVouch — the watchdog for unattended AI agents", "Proof your scheduled AI agents did the job, and an alert the moment they don't — or start spending. Claude Code Routines, headless claude -p, OpenClaw, n8n, cron.", HOME, [APP_LD, ORG_LD])
 
+PRICING_LD = {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "applicationCategory": "DeveloperApplication", "operatingSystem": "Any", "url": BASE + "/pricing",
+              "offers": [{"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "3 agents, all 8 detectors, 7-day history"},
+                         {"@type": "Offer", "name": "Solo", "price": "9", "priceCurrency": "USD", "description": "15 agents, 90-day history, weekly cost report", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "9", "priceCurrency": "USD", "billingDuration": "P1M"}},
+                         {"@type": "Offer", "name": "Team", "price": "29", "priceCurrency": "USD", "description": "100 agents, Slack and PagerDuty, shared dashboard", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "29", "priceCurrency": "USD", "billingDuration": "P1M"}}]}
 # ───────────────────────── PRICING ─────────────────────────
 page("/pricing", "RunVouch pricing — free for 3 agents, $9 Solo, $29 Team", "Simple pricing for agent monitoring: free for 3 agents with all detectors; Solo $9/month for 15 agents; Team $29/month for 100 agents, Slack and PagerDuty.",
-     HOME[HOME.index('<section id="start">'):HOME.index('<section class="alt faq">')].replace('<section id="start">', '<main><section id="start">') + '</main>')
+     HOME[HOME.index('<section id="start">'):HOME.index('<section class="alt faq">')].replace('<section id="start">', '<main><section id="start">').replace('<h2>', '<h1>', 1).replace('</h2>', '</h1>', 1) + '</main>', [ORG_LD, PRICING_LD])
 
 
 # ───────────────────────── DOCS ─────────────────────────
@@ -307,7 +313,7 @@ def doc(path, title, desc, h1, intro, sections, howto_steps=None):
     body = f'<main><div class="wrap doc"><p class="small muted"><a href="/docs/">Docs</a> › {h1}</p><h1>{h1}</h1><p class="lead muted">{intro}</p><div class="toc"><b>On this page</b><ol>{toc}</ol></div>'
     for h, html in sections:
         body += f'<h2 id="{re.sub(r"[^a-z0-9]+","-",h.lower())}">{h}</h2>{html}'
-    body += '<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Need a key? <a href="/#signup">Get one free</a> · Stuck? <a href="/contact">contact</a></p></div></main>'
+    body += '<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Need a key? <a href="/#signup">Get a free key</a> · Stuck? <a href="/contact">contact</a></p></div></main>'
     ld = [ORG_LD]
     if howto_steps:
         ld.append({"@context": "https://schema.org", "@type": "HowTo", "name": h1, "step": [{"@type": "HowToStep", "name": s, "text": t} for s, t in howto_steps]})
@@ -431,7 +437,7 @@ page("/docs/", "RunVouch documentation", "Guides for monitoring Claude Code, cro
 def vs(slug, name, tagline, rows, verdict):
     body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/vs/">Compare</a> › {name}</p><h1>RunVouch vs {name}</h1><p class="lead muted">{tagline}</p>
 <table><tr><th></th><th>{name}</th><th>RunVouch</th></tr>{"".join(f"<tr><td>{a}</td><td>{b}</td><td>{c}</td></tr>" for a,b,c in rows)}</table>
-<h2>When to use which</h2>{verdict}<p><a class="btn" href="/#signup">Try RunVouch free</a></p></div></main>'''
+<h2>When to use which</h2>{verdict}<p><a class="btn" href="/#signup">Get a free key</a></p></div></main>'''
     page(f"/vs/{slug}", f"RunVouch vs {name} — for AI agents, cron and scheduled jobs", f"Honest comparison of RunVouch and {name} for monitoring scheduled AI agents: missed runs, evidence, retry storms, cost caps, pricing.", body, [ORG_LD], article=True)
 
 
@@ -456,26 +462,41 @@ page("/contact", "Contact — RunVouch", "Questions, bugs, security reports or p
 async function sendContact(e){e.preventDefault();const s=document.getElementById('cs');s.textContent='Sending…';
 try{const r=await fetch(API+'/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('ce').value,message:document.getElementById('cm').value,topic:document.getElementById('ct').value})});
 s.textContent=r.ok?'Sent — we reply by email within one working day.':'Could not send ('+r.status+'). Try again later.';if(r.ok)document.getElementById('cf').reset()}catch(err){s.textContent='Network error.'}return false}</script></div></main>''', [ORG_LD])
-page("/status", "Status — RunVouch", "Live status of the RunVouch API and alert delivery.", '''<main><div class="wrap doc"><h1>Status</h1><p class="lead muted">Checked live from your browser against the API.</p><table><tr><th>Component</th><th>Status</th></tr><tr><td>API (api.runvouch.com)</td><td id="s-api">checking…</td></tr><tr><td>Dashboard</td><td id="s-app">checking…</td></tr><tr><td>Alert delivery (Telegram / webhook)</td><td>operational</td></tr></table><p class="small muted" style="margin-top:1rem">Incidents are posted here and in the <a href="/changelog">changelog</a>.</p>
-<script>fetch(API+'/health').then(r=>{document.getElementById('s-api').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'}).catch(()=>{document.getElementById('s-api').innerHTML='<span class="pill bad">unreachable</span>'});fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'})</script></div></main>''', [ORG_LD])
+page("/status", "Status — RunVouch", "Live status of the RunVouch API, dashboard and alert delivery, checked from your browser against the production API.", '''<main><div class="wrap doc"><h1>Status</h1><p class="lead muted">Checked live from your browser against the API.</p><table><tr><th>Component</th><th>Status</th></tr><tr><td>API (api.runvouch.com)</td><td id="s-api">checking…</td></tr><tr><td>Dashboard</td><td id="s-app">checking…</td></tr><tr><td>Alert delivery (Telegram / e-mail / webhook)</td><td id="s-alerts">checking…</td></tr></table><p class="small muted" style="margin-top:1rem">Incidents are posted here and in the <a href="/changelog">changelog</a>.</p>
+<script>fetch(API+'/health').then(async r=>{document.getElementById('s-api').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>';try{const j=await r.json();const a=(j.checks||{}).alert_delivery;document.getElementById('s-alerts').innerHTML=a==='ok'?'<span class="pill ok">operational</span>':a==='idle'?'<span class="pill ok">idle (no alerts due)</span>':'<span class="pill bad">'+(a||'unknown')+'</span>'}catch(e){document.getElementById('s-alerts').textContent='unknown'}}).catch(()=>{document.getElementById('s-api').innerHTML='<span class="pill bad">unreachable</span>'});fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'})</script></div></main>''', [ORG_LD])
 page("/security", "Security — RunVouch", "What RunVouch stores, how keys are handled, and how to report a vulnerability.", '''<main><div class="wrap doc"><h1>Security</h1>
 <ul><li>API keys are stored as SHA-256 hashes; the plaintext key is shown once.</li><li>Tool inputs are hashed on the client or server for loop detection; prompts and outputs are never stored.</li><li>Evidence file checks run on your machine; only a boolean is transmitted.</li><li>All traffic is TLS via Cloudflare; infrastructure in the EU (Netherlands).</li><li>Per-key rate limits; alert credentials (Telegram token, webhook URL) are stored per account and used only to deliver your alerts.</li><li>Report vulnerabilities via the <a href="/contact?topic=security">contact form</a> (topic: security) — see <a href="/.well-known/security.txt">security.txt</a>.</li></ul></div></main>''', [ORG_LD])
-page("/privacy", "Privacy — RunVouch", "RunVouch privacy policy: what we collect and why.", f'''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by {PROCESSOR}; card details never touch our servers. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
-page("/terms", "Terms — RunVouch", "RunVouch terms of service.", '''<main><div class="wrap doc"><h1>Terms of service</h1><p>RunVouch is provided as-is during early access. Free plans may be rate-limited. Paid plans renew monthly and can be cancelled any time; the current period is not refunded. Don't use RunVouch to monitor anything illegal, and don't attack the service. We may change these terms with notice on this page. Governing law: the Netherlands.</p></div></main>''', [ORG_LD])
-page("/changelog", "Changelog — RunVouch", "What's new in RunVouch.", f'''<main><div class="wrap doc"><h1>Changelog</h1><h3>{TODAY} — 0.2 (early access)</h3><ul><li>Public launch on runvouch.com and api.runvouch.com.</li><li>Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.</li><li>Claude Code plugin with transcript-based cost; MCP server; zero-dependency <code>rv</code> CLI with fail-open.</li><li>Hashed keys, rate limits, self-serve signup, subscriptions via {PROCESSOR}.</li></ul></div></main>''', [ORG_LD])
+page("/privacy", "Privacy — RunVouch", "RunVouch privacy policy: the run metadata and account data we process, what we never store (prompts, outputs), retention, and how to delete your data.", f'''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by {PROCESSOR}; card details never touch our servers. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
+page("/terms", "Terms — RunVouch", "RunVouch terms of service: early-access status, monthly plans that cancel any time, acceptable use, and liability limits in plain language.", '''<main><div class="wrap doc"><h1>Terms of service</h1><p>RunVouch is provided as-is during early access. Free plans may be rate-limited. Paid plans renew monthly and can be cancelled any time; the current period is not refunded. Don't use RunVouch to monitor anything illegal, and don't attack the service. We may change these terms with notice on this page. Governing law: the Netherlands.</p></div></main>''', [ORG_LD])
+page("/changelog", "Changelog — RunVouch", "What's new in RunVouch: releases of the API, CLI, Claude Code plugin, MCP server and detectors, with dates.", f'''<main><div class="wrap doc"><h1>Changelog</h1><h3>{TODAY} — 0.2 (early access)</h3><ul><li>Public launch on runvouch.com and api.runvouch.com.</li><li>Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.</li><li>Claude Code plugin with transcript-based cost; MCP server; zero-dependency <code>rv</code> CLI with fail-open.</li><li>Hashed keys, rate limits, self-serve signup, subscriptions via {PROCESSOR}.</li></ul></div></main>''', [ORG_LD])
 # ───────────────────────── BLOG ─────────────────────────
 ARTICLES = json.loads((ROOT / "articles.json").read_text(encoding="utf-8"))["articles"] if (ROOT / "articles.json").exists() else []
 BLOG_DATE = "2026-08-25"
+# verified sources per article (only URLs that resolve); anything we cannot link, we do not claim
+SOURCES = {
+    "claude-code-cron-unexpected-api-bill-runaway-cost-overnight": [("Claude Code issue #37686 — $1,800+ in two days", "https://github.com/anthropics/claude-code/issues/37686"), ("dev.to — \"I let my AI agent run overnight, it cost $437\"", "https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7")],
+    "claude-code-routine-failed-silently-scheduled-task-didnt-run": [("Claude Code docs — scheduled tasks, limitations", "https://code.claude.com/docs/en/scheduled-tasks#limitations"), ("Claude Code docs — routines", "https://code.claude.com/docs/en/routines")],
+    "dead-mans-switch-for-ai-agents": [("Healthchecks.io docs", "https://healthchecks.io/docs/"), ("Claude Code issue #37686", "https://github.com/anthropics/claude-code/issues/37686")],
+    "openclaw-stuck-in-polling-loop-150-no-alert": [("OpenClaw issue #16808", "https://github.com/openclaw/openclaw/issues/16808")],
+    "7-ways-unattended-ai-agents-fail-silently": [("Claude Code issue #37686", "https://github.com/anthropics/claude-code/issues/37686"), ("OpenClaw issue #16808", "https://github.com/openclaw/openclaw/issues/16808"), ("dev.to — $437 overnight", "https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7")],
+}
+def _sources_html(art):
+    src = SOURCES.get(art["slug"]) or []
+    return ('<h2>Sources</h2><ul class="muted">' + "".join(f'<li><a href="{u}" rel="noopener">{t}</a></li>' for t, u in src) + '</ul>') if src else ""
+def _related_html(art):
+    others = [a for a in ARTICLES if a["slug"] != art["slug"]][:3]
+    return '<h2>Related field notes</h2><ul>' + "".join(f'<li><a href="/blog/{a["slug"]}">{a["title"]}</a></li>' for a in others) + '</ul>'
 for art in ARTICLES:
     body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · {BLOG_DATE} · RunVouch</p><h1>{art["title"]}</h1><p class="lead muted">{art["description"]}</p>{art["html"]}
-<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main>'''
+{_sources_html(art)}{_related_html(art)}<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main>'''
     ld = [ORG_LD, {"@context": "https://schema.org", "@type": "Article", "headline": art["title"], "description": art["description"], "datePublished": BLOG_DATE, "dateModified": BLOG_DATE,
                    "author": {"@type": "Organization", "name": "RunVouch", "url": BASE}, "publisher": {"@type": "Organization", "name": "RunVouch", "logo": {"@type": "ImageObject", "url": BASE + "/logo.svg"}},
                    "mainEntityOfPage": f"{BASE}/blog/{art['slug']}", "image": BASE + "/og.png"}]
-    page(f"/blog/{art['slug']}", art["title"][:60] + " — RunVouch", art["description"], body, ld, article=True)
+    t = art["title"] if len(art["title"]) <= 62 else art["title"][:59].rsplit(" ", 1)[0] + "…"
+    page(f"/blog/{art['slug']}", t, art["description"], body, ld, article=True)
 idx = "".join(f'<a class="card" href="/blog/{a["slug"]}"><h3>{a["title"]}</h3><p>{a["description"]}</p><p class="small muted" style="margin-top:.5rem">{BLOG_DATE}</p></a>' for a in ARTICLES)
 page("/blog/", "RunVouch field notes — unattended agents in practice", "Incident write-ups and guides on scheduled AI agents that fail silently or run up bills, and the checks that catch them.", f'''<main><div class="wrap doc"><h1>Field notes</h1><p class="lead muted">How unattended agents fail in practice, with sources — and the check that catches each one.</p><div class="grid g2">{idx}</div>
-<h2 style="margin-top:2.5rem">Coming up</h2><ul class="muted"><li>The dead man's switch for AI agents (and why a ping isn't enough)</li><li>OpenClaw stuck in a polling loop: $150 and no alert</li><li>7 ways unattended AI agents fail silently — and one check for each</li><li>Monitoring a headless claude -p job: hooks, exit codes, cost, alerts</li></ul></div></main>''', [ORG_LD])
+<h2 style="margin-top:2.5rem">Coming up</h2><ul class="muted"><li>Monitoring a headless claude -p job: hooks, exit codes, cost, alerts</li></ul></div></main>''', [ORG_LD])
 
 # ───────────────────────── static assets & SEO files ─────────────────────────
 (OUT / "assets").mkdir(parents=True, exist_ok=True)
@@ -516,6 +537,8 @@ API base: {API} (header X-API-Key).
 - [Python & Node]({BASE}/docs/python-node): LangGraph, OpenAI Agents SDK, CrewAI callbacks
 - [GitHub Actions]({BASE}/docs/github-actions) · [OpenClaw]({BASE}/docs/openclaw) · [n8n]({BASE}/docs/n8n) · [MCP server]({BASE}/docs/mcp) · [HTTP API]({BASE}/docs/api)
 
+## Field notes (blog)
+""" + "".join(f"- [{a['title']}]({BASE}/blog/{a['slug']}): {a['description']}\n" for a in ARTICLES) + f"""
 ## Compare
 - [vs Healthchecks.io]({BASE}/vs/healthchecks) · [vs Cronitor]({BASE}/vs/cronitor) · [vs Langfuse]({BASE}/vs/langfuse)
 
@@ -536,3 +559,6 @@ shutil.copy(ROOT.parent / "integrations" / "node" / "runvouch.js", OUT / "runvou
 (OUT / "openclaw" / "runvouch").mkdir(parents=True, exist_ok=True)
 shutil.copy(ROOT.parent / "integrations" / "openclaw" / "runvouch" / "SKILL.md", OUT / "openclaw" / "runvouch" / "SKILL.md")
 print(f"built {len(PAGES)} pages → {OUT}")
+
+# ───────────────────────── 404 (served by the API for unknown paths; not in the sitemap) ─────────────────────────
+(OUT / "404.html").write_text(head("Page not found — RunVouch", "That page does not exist. Try the docs, the dashboard or the home page.", "/404") + '''<main><div class="wrap doc" style="text-align:center;padding-top:5rem"><p class="small muted" style="font-family:'Geist Mono';letter-spacing:.12em">404</p><h1>Nothing runs here.</h1><p class="lead muted">The address does not exist — or it did and moved. These do:</p><p class="cta" style="justify-content:center"><a class="btn" href="/">Home</a><a class="btn ghost" href="/docs/">Docs</a><a class="btn ghost" href="/app">Dashboard</a><a class="btn ghost" href="/blog/">Blog</a></p></div></main>''' + FOOTER, encoding="utf-8")
