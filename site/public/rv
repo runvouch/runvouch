@@ -86,7 +86,7 @@ def main(argv=None):
         cmd = tail
         if not cmd:
             sys.exit("rv run NAME -- CMD ...")
-        before = {f: (os.path.getmtime(f) if os.path.exists(f) else None) for f in args.evidence_file}
+        args.evidence_file = [os.path.abspath(f) for f in args.evidence_file]
         r0 = api("POST", "/v1/runs/start", {"agent": args.name, "source": args.source, "meta": {"cmd": " ".join(cmd)}}, soft=True)
         rid = r0.get("run_id") if r0 else None
         t0 = time.time()

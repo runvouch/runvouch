@@ -95,7 +95,7 @@ const API="__API__";
 async function signup(e){e.preventDefault();const k=document.getElementById('keybox');k.classList.add('show');k.innerHTML='<pre>…</pre>';
 try{const r=await fetch(API+'/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('em').value})});
 const j=await r.json();if(!r.ok){k.innerHTML='<div class="alertbox">'+(j.detail||('Error '+r.status))+'</div>';return}
-k.innerHTML='<pre><span class="d"># Your key — shown once. Store it now.</span>\\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\\nexport RUNVOUCH_URL='+API+'\\n\\n<span class="d"># Install the client, register an agent, wrap your job</span>\\ncurl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv\\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\\'s report"</pre><p class="small muted">Free plan: 3 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
+k.innerHTML='<pre><span class="d"># Your key — shown once. Store it now.</span>\\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\\nexport RUNVOUCH_URL='+API+'\\n\\n<span class="d"># Install the client, register an agent, wrap your job</span>\\npip install runvouch   <span class="d"># or: curl -fsSL https://runvouch.com/rv -o ~/bin/rv</span>\\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\\'s report"</pre><p class="small muted">Free plan: 3 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
 catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}return false}
 
 (function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
@@ -324,7 +324,7 @@ doc("/docs/cron", "Monitor cron jobs, scripts and LLM batch jobs — RunVouch do
     "Wrap any cron job or script with rv run to get missed-run, failure, evidence, drift and cost alerts. Zero dependencies, fails open.",
     "Cron, systemd, GitHub Actions and plain scripts",
     "The <code>rv</code> client is a single Python file with no dependencies. It wraps a command, captures exit code, duration and output size, checks evidence files, and reports — and if RunVouch is unreachable your job still runs.",
-    [("Install", '<pre>curl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv\nexport RUNVOUCH_KEY=rv_…   <span class="d"># put in ~/.profile or the cron env</span></pre>'),
+    [("Install", '<pre>pip install runvouch   <span class="d"># or: curl -fsSL https://runvouch.com/rv -o ~/bin/rv</span>\nexport RUNVOUCH_KEY=rv_…   <span class="d"># put in ~/.profile or the cron env</span></pre>'),
      ("Wrap a job", '''<pre><span class="d"># crontab -e</span>
 0 2 * * * rv run nightly-etl --log /var/log/etl.log --evidence-file /data/out/today.parquet -- python3 etl.py</pre><p><code>--log</code> appends the job's stdout/stderr to a file (and counts as evidence if it grew). <code>--evidence-file</code> requires the file to exist, be non-empty and be modified during the run.</p>'''),
      ("Hourly, weekly, monthly", '<pre>rv agent hourly-sync --cadence 1h --grace 10m\nrv agent weekly-digest --cadence 7d --grace 2h --max-runtime 30m</pre><p>MISSED fires when cadence + grace passes without a start; STALLED when a run exceeds max runtime without ending.</p>'),
@@ -483,7 +483,7 @@ except Exception as e:
 
 > RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via Telegram, Slack or webhook. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
 
-Install: `curl -fsSL {BASE}/rv -o ~/bin/rv && chmod +x ~/bin/rv` then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
+Install: `pip install runvouch` (or `curl -fsSL {BASE}/rv -o ~/bin/rv && chmod +x ~/bin/rv`) then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.
 Claude Desktop bundle: https://runvouch.com/runvouch.mcpb
 Remote MCP (official registry, com.runvouch/runvouch): `claude mcp add --transport http runvouch https://api.runvouch.com/mcp --header "X-API-Key: rv_…"`.
