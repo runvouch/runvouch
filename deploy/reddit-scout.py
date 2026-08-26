@@ -9,7 +9,7 @@ threads worth a genuine comment: scheduled/unattended agents, cron, cost, silent
 Scoring is a keyword match on title + summary; nothing is posted anywhere. Seen threads are remembered
 in data/reddit-seen.json so each one is suggested once.
 """
-import html, json, os, re, sqlite3, sys, time, urllib.parse, urllib.request
+import html, json, os, re, sqlite3, subprocess, sys, time, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -80,6 +80,30 @@ def thread(url: str) -> str:
     return "\n\n".join(parts)
 
 
+CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")  # same CLI the blog engine uses
+RULES = """You draft ONE Reddit comment for the account u/nightly_runs, a developer who runs about 50 unattended jobs
+(Claude Code routines, headless claude -p, cron'd Python) for a data product, and who built RunVouch, a watchdog for
+unattended AI agents. Rules, all hard:
+- Answer the poster's actual question or add one concrete, useful thing. Never sell. Do NOT mention RunVouch, any product,
+  any link. Do not say "I built". Speak from experience with unattended jobs only where it fits.
+- Plain ASCII, English, 60-140 words, no headings, no emoji, no bullet lists longer than 3 items, no em dashes.
+- Be specific (flags, commands, file names, numbers you can defend). If you cannot add anything real, output exactly: SKIP
+- Never invent facts about the poster or about tools; if unsure, say what worked for you instead.
+Output only the comment text."""
+
+
+def draft(thread_text: str) -> str:
+    """Ask the local Claude Code CLI (same as the blog engine) for a comment draft; returns '' when it declines."""
+    try:
+        r = subprocess.run([CLAUDE, "-p", RULES + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
+                           capture_output=True, text=True, timeout=240)
+        out = json.loads(r.stdout or "{}").get("result", "").strip()
+        return "" if (not out or out.upper().startswith("SKIP")) else out
+    except Exception as e:
+        print("draft:", e, file=sys.stderr)
+        return ""
+
+
 def telegram(text: str) -> bool:
     try:
         env = {l.split("=", 1)[0]: l.split("=", 1)[1].strip() for l in open(os.path.join(ROOT, ".env")) if "=" in l and not l.startswith("#")}
@@ -108,12 +132,25 @@ def main() -> int:
             print(f"{sub}: {e}", file=sys.stderr)
     fresh = [p for p in cands if p["url"] not in seen]
     fresh.sort(key=score, reverse=True)
-    top = [p for p in fresh if score(p) >= 6][:5]
-    lines = [f"[{score(p)}] r/{p['sub']}: {p['title'][:110]}\n{p['url']}" for p in top]
-    msg = "Reddit vandaag - threads waar een echte reactie past (zeg 'reddit' + nummer):\n\n" + "\n\n".join(f"{i+1}. {l}" for i, l in enumerate(lines)) if top else "Reddit vandaag: geen passende nieuwe threads."
+    top = [p for p in fresh if score(p) >= 6][:4]
+    blocks, drafted = [], 0
+    for p in top:
+        text = ""
+        if drafted < 2 and "--no-draft" not in sys.argv:
+            try:
+                text = draft(thread(p["url"]))
+            except Exception as e:
+                print("thread:", e, file=sys.stderr)
+        if text:
+            drafted += 1
+            blocks.append(f"r/{p['sub']}: {p['title'][:100]}\n{p['url']}\n\nKANT-EN-KLAAR (kopieer, plak onder de post, 'Comment'):\n{text}")
+        else:
+            blocks.append(f"r/{p['sub']}: {p['title'][:100]}\n{p['url']}\n(geen concept: zeg 'reddit' + link als je hier wilt reageren)")
+    msg = ("Reddit vandaag - " + str(drafted) + " reactie(s) klaar om te plakken:\n\n" + "\n\n----\n\n".join(blocks)) if top else "Reddit vandaag: geen passende nieuwe threads."
     print(msg)
     if "--dry" not in sys.argv:
-        telegram(msg)
+        for chunk in [msg[i:i + 3800] for i in range(0, len(msg), 3800)]:
+            telegram(chunk)
         seen |= {p["url"] for p in top}
         os.makedirs(os.path.dirname(STATE), exist_ok=True)
         json.dump(sorted(seen)[-2000:], open(STATE, "w"))
