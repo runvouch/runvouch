@@ -1,0 +1,17 @@
+# Example: copy to .github/workflows/ in your repo
+name: nightly-report
+on:
+  schedule: [{ cron: "0 3 * * *" }]
+  workflow_dispatch:
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: runvouch/vouch-action@v1
+        with:
+          agent: nightly-report
+          key: ${{ secrets.RUNVOUCH_KEY }}
+          cadence: 24h
+          evidence-file: out/report.html
+          run: python report.py --out out/report.html

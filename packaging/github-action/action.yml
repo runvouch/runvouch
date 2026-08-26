@@ -1,0 +1,65 @@
+name: "RunVouch — vouch for a scheduled job"
+description: "Wrap a workflow step in RunVouch: alerts when a scheduled agent is MISSED, FAILED, has NO_EVIDENCE, loops, or overspends."
+author: "RunVouch"
+branding:
+  icon: "shield"
+  color: "blue"
+inputs:
+  agent:
+    description: "Agent name as registered in RunVouch (created on first use)"
+    required: true
+  key:
+    description: "RunVouch API key (store as a repository secret)"
+    required: true
+  run:
+    description: "Shell command to run and vouch for"
+    required: true
+  evidence-file:
+    description: "Path that must exist, be non-empty and be modified by the command (proof the job did its work)"
+    required: false
+    default: ""
+  evidence-url:
+    description: "URL that must return 200 after the run"
+    required: false
+    default: ""
+  cadence:
+    description: "Expected cadence, e.g. 24h (registers/updates the agent with a MISSED deadline)"
+    required: false
+    default: ""
+  cap-run-cost:
+    description: "Hard cost cap per run in USD (BUDGET_RUN alert)"
+    required: false
+    default: ""
+  url:
+    description: "RunVouch API base URL (self-hosters)"
+    required: false
+    default: "https://api.runvouch.com"
+runs:
+  using: "composite"
+  steps:
+    - name: Install runvouch
+      shell: bash
+      run: python3 -m pip install --quiet --disable-pip-version-check runvouch
+    - name: Register agent
+      if: inputs.cadence != '' || inputs['cap-run-cost'] != ''
+      shell: bash
+      env:
+        RUNVOUCH_KEY: ${{ inputs.key }}
+        RUNVOUCH_URL: ${{ inputs.url }}
+      run: |
+        args=()
+        [ -n "${{ inputs.cadence }}" ] && args+=(--cadence "${{ inputs.cadence }}")
+        [ -n "${{ inputs['cap-run-cost'] }}" ] && args+=(--cap-run-cost "${{ inputs['cap-run-cost'] }}")
+        [ -n "${{ inputs['evidence-file'] }}${{ inputs['evidence-url'] }}" ] && args+=(--evidence)
+        rv agent "${{ inputs.agent }}" "${args[@]}" || echo "::warning::RunVouch agent registration failed (job continues unmonitored)"
+    - name: Run and vouch
+      shell: bash
+      env:
+        RUNVOUCH_KEY: ${{ inputs.key }}
+        RUNVOUCH_URL: ${{ inputs.url }}
+        RV_CMD: ${{ inputs.run }}
+      run: |
+        args=(--source github-actions)
+        [ -n "${{ inputs['evidence-file'] }}" ] && args+=(--evidence-file "${{ inputs['evidence-file'] }}")
+        [ -n "${{ inputs['evidence-url'] }}" ] && args+=(--evidence-url "${{ inputs['evidence-url'] }}")
+        rv run "${{ inputs.agent }}" "${args[@]}" -- bash -eo pipefail -c "$RV_CMD"
