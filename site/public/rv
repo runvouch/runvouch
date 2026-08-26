@@ -9,10 +9,11 @@ rv — RunVouch client CLI. Zero dependencies (stdlib only) so it runs in any cr
   rv end    RUN_ID [--status ok|fail] [--cost X] [--tokens N] [--evidence JSON]
   rv status                 -> table of agents
   rv alerts [--ack ID]
+  rv proof  RUN_ID [--verify]  -> tamper-evident proof of a finished run; --verify recomputes it against the public day file
 
 Env: RUNVOUCH_URL (default http://localhost:8787), RUNVOUCH_KEY
 """
-import argparse, json, os, subprocess, sys, time, urllib.request
+import argparse, hashlib, json, os, subprocess, sys, time, urllib.request
 
 URL = os.getenv("RUNVOUCH_URL", "http://localhost:8787").rstrip("/")
 KEY = os.getenv("RUNVOUCH_KEY", "")
@@ -62,6 +63,7 @@ def main(argv=None):
     e.add_argument("--tokens", type=int, default=0); e.add_argument("--evidence"); e.add_argument("--output-bytes", type=int)
     sub.add_parser("status")
     al = sub.add_parser("alerts"); al.add_argument("--ack", type=int)
+    pr = sub.add_parser("proof"); pr.add_argument("run_id"); pr.add_argument("--verify", action="store_true")
     argv = list(sys.argv[1:] if argv is None else argv)
     tail = []
     if argv and argv[0] == "run" and "--" in argv:
@@ -118,6 +120,41 @@ def main(argv=None):
         else:
             for x in api("GET", "/v1/alerts"):
                 print(f"#{x['id']} {time.strftime('%m-%d %H:%M', time.localtime(x['ts']))} {x['agent']} [{x['kind']}] {x['message']}")
+    elif args.cmd == "proof":
+        pf = api("GET", f"/v1/runs/{args.run_id}/proof")
+        print(json.dumps(pf, indent=1))
+        if args.verify:
+            sys.exit(0 if verify_proof(pf) else 1)
+
+
+def verify_proof(pf):
+    """Same rules as templates/verify_proof.py: recompute leaf and path locally, then compare with the public day file."""
+    sha = lambda x: hashlib.sha256(x.encode()).hexdigest()
+    leaf = sha(json.dumps(pf["record"], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    h = leaf
+    for sib, side in pf["merkle_path"]:
+        h = sha(sib + h) if side == "left" else sha(h + sib)
+    ok = leaf == pf["leaf_hash"] and h == pf["root"]
+    print("leaf", "ok" if leaf == pf["leaf_hash"] else "MISMATCH", "| path to root", "ok" if h == pf["root"] else "MISMATCH")
+    if not pf.get("sealed"):
+        print("day not sealed yet: the root above is live and may still change; run again after the UTC day ends")
+        return False
+    try:
+        day = json.loads(urllib.request.urlopen(pf["verify_url"], timeout=20).read())
+    except Exception as e:
+        print("could not fetch day file:", e); return False
+    lv = [x["leaf"] for x in day["leaves"]]
+    level = list(lv) or [sha("")]
+    while len(level) > 1:
+        if len(level) % 2: level.append(level[-1])
+        level = [sha(level[i] + level[i + 1]) for i in range(0, len(level), 2)]
+    in_day = any(x["run_id"] == pf["run_id"] and x["leaf"] == leaf for x in day["leaves"])
+    root_ok = level[0] == day["root"] == pf["root"]
+    chain_ok = sha(f"{day['prev']}:{day['date']}:{day['root']}") == day["chain_hash"] == pf["chain_hash"]
+    print("day file", "lists this leaf" if in_day else "DOES NOT list this leaf", "| day root", "ok" if root_ok else "MISMATCH", "| chain", "ok" if chain_ok else "MISMATCH", "| ots", pf.get("ots_status"))
+    ok = ok and in_day and root_ok and chain_ok
+    print("VERIFIED" if ok else "NOT VERIFIED")
+    return ok
 
 
 if __name__ == "__main__":
