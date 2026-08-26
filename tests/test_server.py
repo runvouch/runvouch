@@ -218,3 +218,5 @@ def test_polar_webhook():
     assert server.q1("SELECT plan FROM accounts WHERE email='polar.user@example.com'")["plan"] == "free"
     send("order.paid", {"id": "o3", "status": "paid", "paid": True, "product_id": "prod-solo", "customer": {"id": "c2", "email": "polar.first@example.com"}})
     assert server.q1("SELECT plan FROM accounts WHERE email='polar.first@example.com'")["plan"] == "solo"
+    send("order.refunded", {"id": "o3", "status": "refunded", "total_amount": 900, "refunded_amount": 900, "product_id": "prod-solo", "customer": {"id": "c2", "email": "polar.first@example.com"}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='polar.first@example.com'")["plan"] == "free"

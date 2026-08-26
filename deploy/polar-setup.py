@@ -58,7 +58,7 @@ if hooks:
     print(f"webhook exists: {hooks[0]['id']} (secret shown at creation only; keep POLAR_WEBHOOK_SECRET from .env)")
 else:
     hook = call("POST", "/v1/webhooks/endpoints", {"url": WEBHOOK_URL, "format": "raw", "events": [
-        "order.paid", "subscription.active", "subscription.updated", "subscription.canceled", "subscription.revoked"]})
+        "order.paid", "order.refunded", "subscription.active", "subscription.updated", "subscription.canceled", "subscription.revoked"]})
     env["POLAR_WEBHOOK_SECRET"] = hook["secret"]
     print(f"webhook created: {hook['id']}")
 

@@ -686,6 +686,8 @@ async def polar_webhook(request: Request):
             plan = "free"
     elif name in ("subscription.revoked",) or (name == "subscription.canceled" and obj.get("status") == "canceled" and not obj.get("current_period_end")):
         plan = "free"
+    elif name == "order.refunded" and (obj.get("refunded_amount") or 0) >= (obj.get("total_amount") or obj.get("amount") or 1):
+        plan = "free"  # full refund: access ends now, whatever the subscription says
     acc = (q1("SELECT * FROM accounts WHERE email=?", email) if email else None) or \
           (q1("SELECT * FROM accounts WHERE polar_customer_id=?", customer) if customer else None)
     with tx() as db:
