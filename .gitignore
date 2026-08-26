@@ -28,3 +28,4 @@ packing/npm/LICENSE
 packaging/npm/LICENSE
 packaging/npm/*.tgz
 packaging/npm/node_modules/
+deploy/npm-recovery-codes.txt
