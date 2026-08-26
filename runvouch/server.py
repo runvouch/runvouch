@@ -429,11 +429,31 @@ def weekly_report(now: Optional[float] = None) -> int:
     return sent
 
 
+def owner_digest(now: Optional[float] = None) -> bool:
+    """Once a day (first sweep after 07:00 UTC): one Telegram line to the owner with signups and plan counts."""
+    now = now or time.time()
+    day = datetime.utcfromtimestamp(now).strftime("%Y-%m-%d")
+    if datetime.utcfromtimestamp(now).hour < 7 or q1("SELECT 1 FROM reports_sent WHERE account_id=0 AND week=?", day):
+        return False
+    owner = q1("SELECT telegram_token, telegram_chat FROM accounts WHERE telegram_token IS NOT NULL ORDER BY id LIMIT 1")
+    if not owner:
+        return False
+    new = q1("SELECT COUNT(*) n FROM accounts WHERE created>?", now - 86400)["n"]
+    total = q1("SELECT COUNT(*) n FROM accounts WHERE email IS NOT NULL")["n"]
+    paid = q1("SELECT COUNT(*) n FROM accounts WHERE plan!='free' AND email IS NOT NULL")["n"]
+    active = q1("SELECT COUNT(DISTINCT agent_id) n FROM runs WHERE started>?", now - 86400)["n"]
+    with tx() as db:
+        db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(0, ?)", (day,))
+    return _telegram(owner["telegram_token"], owner["telegram_chat"],
+                     f"RunVouch dagstand {day}: {new} nieuwe accounts in 24u, {total} accounts totaal, {paid} betalend, {active} agents actief in 24u.")
+
+
 def _sweeper():
     n = 0
     while True:
         try:
             sweep_once()
+            owner_digest()
             if n % 20 == 0:
                 weekly_report()
         except Exception:
@@ -543,14 +563,22 @@ def signup(body: SignupIn, request: Request):
     if n >= SIGNUP_PER_IP_PER_DAY:
         raise HTTPException(429, "too many signups from this address today")
     email = body.email.lower().strip()
-    if q1("SELECT id FROM accounts WHERE email=?", email):
-        raise HTTPException(409, "account exists — use key rotation from the dashboard or contact support")
+    existing = q1("SELECT id, plan FROM accounts WHERE email=?", email)
+    if existing:
+        # Lost key or second signup: rotate and mail the fresh key to the address on file. Only the mailbox
+        # owner can read it, so this is safe, and it keeps the founder out of the loop.
+        key = rotate_key(existing["id"])
+        with tx() as db:
+            db.execute("INSERT INTO signups(ip, ts) VALUES(?,?)", (ip, time.time()))
+        _send_billing("key", email, existing["plan"], None, key)
+        return {"sent": True, "plan": existing["plan"], "note": "This address already has an account. A fresh key is on its way to your inbox; the old key stopped working."}
     acc = create_account(email.split("@")[0], "free", email)
     with tx() as db:
         db.execute("INSERT INTO signups(ip, ts) VALUES(?,?)", (ip, time.time()))
         db.execute("UPDATE accounts SET alert_email=? WHERE id=?", (email, acc["account_id"]))
+    _send_billing("signup", email, "free", None, acc["api_key"])
     return {"api_key": acc["api_key"], "plan": "free", "agents_allowed": PLAN_LIMITS["free"],
-            "note": "Store this key now; it is not shown again."}
+            "note": "Store this key now; it is not shown again (a copy is in your inbox)."}
 
 
 class ContactIn(BaseModel):
@@ -697,6 +725,18 @@ def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, 
                 f"Getting started:\n  - Dashboard: https://runvouch.com/app\n  - Docs: https://runvouch.com/docs\n  - Wrap a job: rv run NAME --evidence-file OUT -- your-command\n\n"
                 f"Your receipt comes separately from Polar, our merchant of record. Manage or cancel any time from the link in that receipt.\n\n"
                 f"If anything is unclear, reply to this mail - it reaches a person." + sig)
+    if kind == "signup":
+        return ("Your RunVouch key and a 2-minute start",
+                f"Hi,\n\nWelcome to RunVouch. Your account is on the Free plan: 3 agents, all eight detectors, alerts via Telegram, Slack, e-mail or webhook.\n\n"
+                f"Your API key (keep it private):\n\n    {api_key}\n\n"
+                f"Start in two minutes:\n  1. pip install runvouch   (or: npm install -g runvouch)\n  2. export RUNVOUCH_KEY={api_key}\n"
+                f"  3. rv run nightly-report --evidence-file out/report.html -- your-command\n\n"
+                f"Then set where alerts go: https://runvouch.com/app (paste the key). Docs per runtime: https://runvouch.com/docs\n\n"
+                f"Lost the key later? Enter the same e-mail on runvouch.com again and a fresh one is mailed to you. Questions: reply to this mail." + sig)
+    if kind == "key":
+        return ("Your new RunVouch key",
+                f"Hi,\n\nYou asked for a key with an address that already has a RunVouch account ({name} plan). Here is a fresh one; the previous key no longer works:\n\n    {api_key}\n\n"
+                f"Set it as RUNVOUCH_KEY wherever your agents run, and paste it in https://runvouch.com/app. If you did not request this, reply to this mail." + sig)
     if kind == "canceled":
         return (f"Your RunVouch {name} subscription is canceled",
                 f"Hi,\n\nWe have received your cancellation. Your RunVouch {name} plan stays fully active until {_fmt_date(ends_at)}; "

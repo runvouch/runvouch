@@ -254,3 +254,25 @@ def test_health_json():
 def test_email_html_wrapper():
     h = server._email_html("x", "Hi <you>,\nline two")
     assert "logo-400.png" in h and "&lt;you&gt;" in h and "Hi &lt;you&gt;,<br>line two" in h
+
+
+def test_signup_mails_key_and_reissues(monkeypatch):
+    sent = []
+    monkeypatch.setattr(server, "_send_billing", lambda kind, to, plan, ends_at=None, api_key=None: sent.append((kind, to, api_key)))
+    r = c.post("/signup", json={"email": "Fresh.User@example.com"}).json()
+    assert r["api_key"].startswith("rv_") and sent[-1][0] == "signup" and sent[-1][2] == r["api_key"]
+    assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 200
+    r2 = c.post("/signup", json={"email": "fresh.user@example.com"})
+    assert r2.status_code == 200 and r2.json()["sent"] is True and sent[-1][0] == "key"
+    assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 401      # old key revoked
+    assert c.get("/v1/agents", headers={"X-API-Key": sent[-1][2]}).status_code == 200        # mailed key works
+
+
+def test_owner_digest_once_per_day(monkeypatch):
+    msgs = []
+    monkeypatch.setattr(server, "_telegram", lambda tok, chat, text: msgs.append(text) or True)
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET telegram_token='t', telegram_chat='c' WHERE id=(SELECT MIN(id) FROM accounts)")
+    noon = time.time() - (time.time() % 86400) + 12 * 3600
+    assert server.owner_digest(noon) is True and "dagstand" in msgs[-1]
+    assert server.owner_digest(noon + 60) is False
