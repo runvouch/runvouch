@@ -191,3 +191,31 @@ def test_stripe_webhook():
     send("checkout.session.completed", {"customer": "cus_2", "payment_status": "paid", "customer_details": {"email": "first.pay@example.com"},
                                         "line_items": {"data": [{"price": {"id": "price_solo"}}]}})
     assert server.q1("SELECT plan FROM accounts WHERE email='first.pay@example.com'")["plan"] == "solo"
+
+
+def test_polar_webhook():
+    import hmac, hashlib, base64
+    secret = base64.b64encode(b"polar-test-secret").decode()
+    server.POLAR_WEBHOOK_SECRET = "whsec_" + secret
+    server.POLAR_PRODUCT_PLANS = {"prod-solo": "solo", "prod-team": "team"}
+    n = [0]
+    def send(typ, obj):
+        n[0] += 1
+        body = json.dumps({"type": typ, "data": obj}).encode()
+        wid, ts = f"msg_{n[0]}", str(int(time.time()))
+        sig = base64.b64encode(hmac.new(b"polar-test-secret", f"{wid}.{ts}.".encode() + body, hashlib.sha256).digest()).decode()
+        return c.post("/webhooks/polar", content=body, headers={"webhook-id": wid, "webhook-timestamp": ts, "webhook-signature": "v1," + sig, "Content-Type": "application/json"})
+    assert c.post("/webhooks/polar", content=b"{}", headers={"webhook-id": "x", "webhook-timestamp": str(int(time.time())), "webhook-signature": "v1,bad"}).status_code == 401
+    c.post("/signup", json={"email": "polar.user@example.com"})
+    r = send("order.paid", {"id": "o1", "status": "paid", "paid": True, "billing_reason": "purchase", "product_id": "prod-team", "subscription_id": "s1",
+                            "customer": {"id": "c1", "email": "Polar.User@example.com"}})
+    assert r.status_code == 200 and r.json()["plan"] == "team" and r.json()["matched"]
+    assert server.q1("SELECT polar_customer_id FROM accounts WHERE email='polar.user@example.com'")["polar_customer_id"] == "c1"
+    send("subscription.updated", {"id": "s1", "status": "active", "product_id": "prod-solo", "customer": {"id": "c1"}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='polar.user@example.com'")["plan"] == "solo"
+    send("order.paid", {"id": "o2", "status": "paid", "paid": True, "billing_reason": "subscription_cycle", "product_id": "prod-solo", "customer": {"id": "c1"}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='polar.user@example.com'")["plan"] == "solo"
+    send("subscription.revoked", {"id": "s1", "status": "canceled", "product_id": "prod-solo", "customer": {"id": "c1"}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='polar.user@example.com'")["plan"] == "free"
+    send("order.paid", {"id": "o3", "status": "paid", "paid": True, "product_id": "prod-solo", "customer": {"id": "c2", "email": "polar.first@example.com"}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='polar.first@example.com'")["plan"] == "solo"

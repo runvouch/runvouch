@@ -51,6 +51,8 @@ SWEEP_SECONDS = int(os.getenv("RUNVOUCH_SWEEP_SECONDS", "30"))
 LS_WEBHOOK_SECRET = os.getenv("LS_WEBHOOK_SECRET", "")
 LS_VARIANT_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("LS_VARIANT_PLANS", "").split(",") if ":" in x)}  # "123:solo,456:team"
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET", "")
+POLAR_PRODUCT_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("POLAR_PRODUCT_PLANS", "").split(",") if ":" in x)}  # "product-uuid:solo,..."
 STRIPE_PRICE_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("STRIPE_PRICE_PLANS", "").split(",") if ":" in x)}  # "price_x:solo,price_y:team"
 RATE_PER_MIN = int(os.getenv("RUNVOUCH_RATE_PER_MIN", "1500"))
 SIGNUP_PER_IP_PER_DAY = int(os.getenv("RUNVOUCH_SIGNUPS_PER_IP", "5"))
@@ -122,7 +124,7 @@ CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY K
 """
 with _lock:
     _db.executescript(SCHEMA)
-    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT"):
+    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT", "polar_customer_id TEXT", "polar_subscription_id TEXT"):
         try:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -627,6 +629,65 @@ async def stripe_webhook(request: Request):
         elif plan and plan != "free" and email and not acc:
             key = "rv_" + secrets.token_urlsafe(24)
             db.execute("INSERT INTO accounts(name, api_key, created, plan, email, stripe_customer_id, stripe_subscription_id) VALUES(?,?,?,?,?,?,?)",
+                       (email.split("@")[0], key_hash(key), time.time(), plan, email, customer or None, sub_id))
+    return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
+
+
+def _polar_sig_ok(raw: bytes, headers) -> bool:
+    """Standard Webhooks (Polar): webhook-id / webhook-timestamp / webhook-signature "v1,<base64>",
+    HMAC-SHA256 over "<id>.<timestamp>.<raw>" with the base64 secret (whsec_ prefix stripped)."""
+    import base64
+    wid, ts, sigs = headers.get("webhook-id", ""), headers.get("webhook-timestamp", ""), headers.get("webhook-signature", "")
+    if not wid or not ts or not sigs or abs(time.time() - float(ts)) > 300:
+        return False
+    secret = POLAR_WEBHOOK_SECRET[6:] if POLAR_WEBHOOK_SECRET.startswith("whsec_") else POLAR_WEBHOOK_SECRET
+    try:
+        key = base64.b64decode(secret + "=" * (-len(secret) % 4))
+    except Exception:
+        key = secret.encode()
+    expected = base64.b64encode(hmac.new(key, f"{wid}.{ts}.".encode() + raw, hashlib.sha256).digest()).decode()
+    return any(hmac.compare_digest(expected, s.split(",", 1)[1]) for s in sigs.split() if s.startswith("v1,"))
+
+
+@app.post("/webhooks/polar")
+async def polar_webhook(request: Request):
+    """Polar.sh (merchant of record) → plan changes. Product ids map to plans via POLAR_PRODUCT_PLANS."""
+    raw = await request.body()
+    if not POLAR_WEBHOOK_SECRET:
+        raise HTTPException(503, "POLAR_WEBHOOK_SECRET not configured")
+    if not _polar_sig_ok(raw, request.headers):
+        raise HTTPException(401, "bad signature")
+    ev = json.loads(raw or b"{}")
+    name, ev_id = ev.get("type", ""), "polar:" + request.headers.get("webhook-id", "")
+    if q1("SELECT id FROM ls_events WHERE id=?", ev_id):
+        return {"ok": True, "dup": True}
+    obj = ev.get("data") or {}
+    cust = obj.get("customer") or {}
+    customer = str(cust.get("id") or obj.get("customer_id") or "")
+    email = (cust.get("email") or obj.get("customer_email") or obj.get("user", {}).get("email") or "").lower().strip()
+    product = str(obj.get("product_id") or (obj.get("product") or {}).get("id") or "")
+    sub_id = str(obj.get("subscription_id") or (obj.get("id") if name.startswith("subscription.") else "") or "") or None
+    plan = None
+    if name in ("order.paid", "order.created") and obj.get("status", "paid") in ("paid", "") and obj.get("billing_reason", "purchase") != "subscription_cycle":
+        plan = POLAR_PRODUCT_PLANS.get(product, "solo") if obj.get("paid", True) else None
+    elif name in ("subscription.active", "subscription.created", "subscription.updated", "subscription.uncanceled"):
+        st = obj.get("status", "active")
+        if st in ("active", "trialing", "past_due"):
+            plan = POLAR_PRODUCT_PLANS.get(product)
+        elif st in ("canceled", "unpaid", "incomplete_expired") and not obj.get("ends_at"):
+            plan = "free"
+    elif name in ("subscription.revoked",) or (name == "subscription.canceled" and obj.get("status") == "canceled" and not obj.get("current_period_end")):
+        plan = "free"
+    acc = (q1("SELECT * FROM accounts WHERE email=?", email) if email else None) or \
+          (q1("SELECT * FROM accounts WHERE polar_customer_id=?", customer) if customer else None)
+    with tx() as db:
+        db.execute("INSERT INTO ls_events(id, ts, name, payload) VALUES(?,?,?,?)", (ev_id, time.time(), name, raw.decode(errors="ignore")[:20000]))
+        if plan and acc:
+            db.execute("UPDATE accounts SET plan=?, polar_customer_id=COALESCE(?,polar_customer_id), polar_subscription_id=COALESCE(?,polar_subscription_id) WHERE id=?",
+                       (plan, customer or None, sub_id, acc["id"]))
+        elif plan and plan != "free" and email and not acc:
+            key = "rv_" + secrets.token_urlsafe(24)
+            db.execute("INSERT INTO accounts(name, api_key, created, plan, email, polar_customer_id, polar_subscription_id) VALUES(?,?,?,?,?,?,?)",
                        (email.split("@")[0], key_hash(key), time.time(), plan, email, customer or None, sub_id))
     return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
 

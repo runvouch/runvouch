@@ -17,11 +17,15 @@ TODAY = datetime.date.today().isoformat()
 _ENV = {l.split("=",1)[0]: l.split("=",1)[1].strip() for l in open(ROOT.parent / ".env") if "=" in l and not l.startswith("#")} if (ROOT.parent / ".env").exists() else {}
 LS_LIVE = _ENV.get("LS_LIVE") == "1"
 STRIPE_LIVE = _ENV.get("STRIPE_LIVE") == "1" and _ENV.get("STRIPE_SOLO_URL") and _ENV.get("STRIPE_TEAM_URL")
-BILLING_LIVE = STRIPE_LIVE or LS_LIVE
-SOLO_URL = _ENV.get("STRIPE_SOLO_URL") if STRIPE_LIVE else "https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22"
-TEAM_URL = _ENV.get("STRIPE_TEAM_URL") if STRIPE_LIVE else "https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9"
-EMAIL_PARAM = "prefilled_email" if STRIPE_LIVE else "checkout[email]"
-PROCESSOR = "Lemon Squeezy" if (LS_LIVE and not STRIPE_LIVE) else "Stripe"
+POLAR_LIVE = _ENV.get("POLAR_LIVE") == "1" and _ENV.get("POLAR_SOLO_URL") and _ENV.get("POLAR_TEAM_URL")
+# billing provider: Polar (merchant of record, no KvK needed) > Stripe > Lemon Squeezy (rejected 26 Aug 2026)
+if POLAR_LIVE:
+    PROCESSOR, SOLO_URL, TEAM_URL, EMAIL_PARAM = "Polar", _ENV["POLAR_SOLO_URL"], _ENV["POLAR_TEAM_URL"], "customer_email"
+elif STRIPE_LIVE:
+    PROCESSOR, SOLO_URL, TEAM_URL, EMAIL_PARAM = "Stripe", _ENV["STRIPE_SOLO_URL"], _ENV["STRIPE_TEAM_URL"], "prefilled_email"
+else:
+    PROCESSOR, SOLO_URL, TEAM_URL, EMAIL_PARAM = ("Lemon Squeezy" if LS_LIVE else "Polar"), "https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22", "https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9", "checkout[email]"
+BILLING_LIVE = POLAR_LIVE or STRIPE_LIVE or LS_LIVE
 SOLO_BTN = f'<a class="btn" href="{SOLO_URL}" data-ls="{EMAIL_PARAM}">Upgrade to Solo — $9/mo</a>' if BILLING_LIVE else '<a class="btn" href="/contact?topic=billing">Start free — paid plans open Sept 2026</a>'
 TEAM_BTN = f'<a class="btn ghost" href="{TEAM_URL}" data-ls="{EMAIL_PARAM}">Upgrade to Team — $29/mo</a>' if BILLING_LIVE else '<a class="btn ghost" href="/contact?topic=billing">Request Team plan</a>'
 import hashlib
