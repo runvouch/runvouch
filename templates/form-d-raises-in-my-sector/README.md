@@ -6,7 +6,7 @@ Form D is the filing a company makes when it raises private money. It is public 
 
 ## What you need
 
-- A DataSignals Events API key. There is a permanent free plan: one stream, 250 events a month, 24 hours behind. No card, no Apify account. Ask for a key with the stream `private_raise`: [mail support@datasignalslab.com](mailto:support@datasignalslab.com?subject=Events%20API%20free%20key&body=Stream%3A%20private_raise) and put it in `DATASIGNALS_KEY`. Paid plans (from $29 a month) give all twelve streams, more volume and webhooks: https://datasignalslab.com/events-api.html
+- A DataSignals Events API key. There is a permanent free plan: one stream, 250 events a month, 24 hours behind. No card, no Apify account. Request a key for the stream `private_raise` at https://datasignalslab.com/events-api.html#free-key (it arrives by e-mail; or `curl -X POST https://datasignalslab.com/v1/keys/free -H "content-type: application/json" -d '{"email":"you@company.com","stream":"private_raise"}'`) and put it in `DATASIGNALS_KEY`. Paid plans (from $29 a month) give all twelve streams, more volume and webhooks: https://datasignalslab.com/events-api.html
   Two endpoints need no key at all, so you can look before you ask: `curl https://datasignalslab.com/v1/event-types` and `curl https://datasignalslab.com/v1/health`.
 - A RunVouch key (free for 3 agents): `RUNVOUCH_KEY`.
 - Optional: a Telegram bot token and chat id (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Without them the script prints the message.
@@ -46,4 +46,4 @@ Every event is the same envelope: `event_id`, `event_type`, `occurred_at`, `comp
 
 ## Tested
 
-The two keyless endpoints live (`/v1/health`, `/v1/event-types`), the 401 path without a key, the filter and jsonl logic with a saved response in the documented envelope, and the `rv` lines against a RunVouch instance. `GET /v1/events` itself needs a key (free plan, by mail) and was not called from here.
+The two keyless endpoints live (`/v1/health`, `/v1/event-types`), the 401 path without a key, the filter and jsonl logic with a saved response in the documented envelope, and the `rv` lines against a RunVouch instance. `GET /v1/events` itself needs a key (free plan, requested at https://datasignalslab.com/events-api.html#free-key) and was not called from here.
