@@ -97,10 +97,11 @@ td.y{color:var(--good);font-weight:600}td.n{color:var(--fg3)}
 .keybox{display:none;margin-top:.75rem}.keybox.show{display:block}
 .quote{border-left:3px solid var(--acc);padding:.4rem 1.1rem;color:var(--fg2);font-size:1.05rem}.quote a{color:var(--fg2);text-decoration:underline}
 footer{border-top:1px solid var(--line);padding:3rem 0;color:var(--fg2);font-size:.9rem;background:var(--bg2)}footer .cols{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:2rem}footer h4{margin:0 0 .6rem;font-size:.74rem;color:var(--fg3);font-family:"Geist Mono";letter-spacing:.12em;text-transform:uppercase}footer a{color:var(--fg2);display:block;margin:.3rem 0}footer p a{display:inline;margin:0;color:var(--fg)}footer .avail{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0 .6rem;padding:0;list-style:none}footer .avail li a{display:inline-block;margin:0;padding:.25rem .6rem;border:1px solid var(--line2);border-radius:999px;font-size:.78rem;color:var(--fg2);text-decoration:none}footer .avail li a:hover{color:var(--fg);border-color:var(--accent)}
-.doc{max-width:780px;padding-top:3rem;padding-bottom:3rem}.doc h2{margin-top:2.4rem}.doc .toc{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:1rem 1.25rem;margin:1.5rem 0}.doc .toc a{color:var(--fg2)}
+.doc{max-width:780px;padding-top:5.6rem;padding-bottom:3rem}.doc h2{margin-top:2.4rem}.doc .toc{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:1rem 1.25rem;margin:1.5rem 0}.doc .toc a{color:var(--fg2)}
 .logos{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center;color:var(--fg2);font-weight:500;font-size:.88rem}.logos span{border:1px solid var(--line2);background:rgba(169,180,214,.04);padding:.5rem .9rem;border-radius:999px}
 html,body{overflow-x:hidden;max-width:100%}.doc table{display:block;overflow-x:auto;max-width:100%}footer .cols>div{min-width:0}.ticker{display:flex;align-items:center;max-width:100vw}.tk-label{flex:none;margin:0 1rem 0 var(--pad,1.25rem);padding:.15rem .55rem;border:1px solid var(--line2);border-radius:999px;font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}.tk-wrap{flex:1;overflow:hidden;white-space:nowrap}
 @media(max-width:900px){.hero-inner{grid-template-columns:1fr;gap:2rem}.hero{padding-top:3rem}.g3,.g4,.g2,.price{grid-template-columns:1fr}footer .cols{grid-template-columns:1fr 1fr;gap:1.5rem}footer .cols>div:first-child{grid-column:1/-1}.nav nav{display:none}.nav .btn{margin-left:auto}.tk-label{display:none}}
+.roster-pad main>section:first-child{padding-top:5.6rem}
 @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}.tk-track,.eyebrow i{animation:none}}
 '''
 
@@ -116,16 +117,19 @@ catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}retu
 (function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
 document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});setTimeout(()=>document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in')),1800);document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
-if(c.dataset.mode==='roster'){/* night roster: rows of scheduled runs filling left to right; green vouched, amber unproven or missed, red failed */
-let S=[],cols=0,rows=3,pw=0,ph=0,gx=0,gy=0,x0=0,y0=0,tick=0;
-const COL={ok:'#3DDC84',warn:'#F5B547',fail:'#FF6B6B'};
-function RR(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;rows=c.offsetWidth<700?2:3;pw=26*D;ph=7*D;gx=10*D;gy=24*D;cols=Math.max(8,Math.floor((W-120*D)/(pw+gx)));x0=88*D;y0=76*D;S=[];
-for(let r=0;r<rows;r++)for(let i=0;i<cols;i++){const u=Math.random();S.push({r,i,kind:u<0.83?'ok':u<0.95?'warn':'fail',at:(i*rows+r)*7+r*3})}tick=0}
+if(c.dataset.mode==='roster'){/* day roster: rows are agents, columns are the 24 hours of one day; fills like a clock, holds, then a new day. green vouched, amber missed or unproven, red failed */
+let S=[],cols=24,rows=3,pw=0,ph=0,gx=0,gy=0,x0=0,y0=0,tick=0,maxAt=0;
+const COL={ok:'#3DDC84',warn:'#F5B547',fail:'#FF6B6B'},NAMES=['nightly-report','inbox-triage','price-scraper'];
+function RR(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const narrow=c.offsetWidth<700;rows=narrow?2:3;x0=(narrow?12:110)*D;const avail=W-x0-16*D;gx=Math.max(3*D,avail*0.012);pw=(avail-gx*(cols-1))/cols;ph=7*D;gy=20*D;y0=(narrow?84:92)*D;S=[];maxAt=0;
+for(let r=0;r<rows;r++)for(let i=0;i<cols;i++){const u=Math.random();const at=i*9+r*2;maxAt=Math.max(maxAt,at);S.push({r,i,kind:u<0.86?'ok':u<0.95?'warn':'fail',at})}tick=0}
 RR();addEventListener('resize',RR);
-function drawR(){tick++;x.clearRect(0,0,W,H);x.font=`${10*D}px Geist Mono, monospace`;x.fillStyle='rgba(169,180,214,.45)';['02:00','03:00','04:00'].slice(0,rows).forEach((l,r)=>x.fillText(l,x0-46*D,y0+r*gy+ph));
+function drawR(){tick++;x.clearRect(0,0,W,H);x.font=`${10*D}px Geist Mono, monospace`;x.textAlign='left';
+if(c.offsetWidth>=700){x.fillStyle='rgba(169,180,214,.5)';NAMES.slice(0,rows).forEach((l,r)=>x.fillText(l,x0-100*D,y0+r*gy+ph))}
+x.fillStyle='rgba(169,180,214,.38)';[0,6,12,18,24].forEach(h=>{const px=x0+Math.min(h,cols-1)*(pw+gx)+(h===24?pw:0);x.textAlign=h===24?'right':'left';x.fillText((h<10?'0'+h:h)+':00',px,y0-9*D)});
 for(const s of S){const px=x0+s.i*(pw+gx),py=y0+s.r*gy;x.fillStyle='rgba(169,180,214,.09)';x.fillRect(px,py,pw,ph);
-if(tick>s.at){const k=Math.min(1,(tick-s.at)/10);x.globalAlpha=0.6*k;x.shadowColor=COL[s.kind];x.shadowBlur=(s.kind==='ok'?0:10)*D;x.fillStyle=COL[s.kind];x.fillRect(px,py,pw*k,ph);x.shadowBlur=0;x.globalAlpha=1}}
-if(tick>S.length*7/rows+260){RR()}requestAnimationFrame(drawR)}
+if(tick>s.at){const k=Math.min(1,(tick-s.at)/10);x.globalAlpha=0.62*k;x.shadowColor=COL[s.kind];x.shadowBlur=(s.kind==='ok'?0:10)*D;x.fillStyle=COL[s.kind];x.fillRect(px,py,pw*k,ph);x.shadowBlur=0;x.globalAlpha=1}}
+const sweep=Math.min(tick,maxAt)/9;const sx=x0+Math.min(sweep,cols)*(pw+gx);if(tick<=maxAt+10){x.fillStyle='rgba(238,242,255,.35)';x.fillRect(sx,y0-4*D,1*D,rows*gy)}
+if(tick>maxAt+10+300){RR()}requestAnimationFrame(drawR)}
 drawR();return}
 function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
 function add(rand){const y=lanes[Math.floor(Math.random()*lanes.length)];P.push({x:rand?Math.random()*W:-30*D,y,y0:y,v:(0.35+Math.random()*0.5)*D,life:0,fail:Math.random()<0.14,failAt:600+Math.random()*900,vy:0,trail:[]})}
@@ -152,8 +156,8 @@ def head(title, desc, path, jsonld=None, article=False):
 <meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:url" content="{BASE}{path}"><meta property="og:image" content="{BASE}/og.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/logo.svg?v={CSS_HASH}" type="image/svg+xml"><link rel="icon" href="/favicon.png?v={CSS_HASH}" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v={CSS_HASH}"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}</head><body>
-<div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig"{(' data-mode="roster"' if path == "/" else "")}></canvas></div>
+<link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}</head><body{(' class="roster-pad"' if path != '/' else '')}>
+<div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig" data-mode="roster"></canvas></div>
 <header class="top"><div class="wrap nav"><a class="brand" href="/">{LOGO_SVG}RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header>'''
 
 
