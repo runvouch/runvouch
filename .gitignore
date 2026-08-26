@@ -33,3 +33,4 @@ packaging/github-action/.git/
 packaging/github-action/LICENSE
 docs/BILLING.md
 docs/STRIPE.md
+docs/DIRECTORIES.md
