@@ -40,13 +40,13 @@ def items(path):
 
 env, product_plans = {}, []
 for plan, name, cents, desc in PLANS:
-    found = [p for p in items("/v1/products?is_archived=false") if p["name"] == name]
-    product = found[0] if found else call("POST", "/v1/products", {
+    found = [p for p in items("/v1/products/?is_archived=false") if p["name"] == name]
+    product = found[0] if found else call("POST", "/v1/products/", {
         "name": name, "description": desc, "recurring_interval": "month",
         "prices": [{"amount_type": "fixed", "price_amount": cents, "price_currency": "usd"}],
         "metadata": {"plan": plan}})
-    links = [l for l in items("/v1/checkout-links") if (l.get("metadata") or {}).get("plan") == plan]
-    link = links[0] if links else call("POST", "/v1/checkout-links", {
+    links = [l for l in items("/v1/checkout-links/") if (l.get("metadata") or {}).get("plan") == plan]
+    link = links[0] if links else call("POST", "/v1/checkout-links/", {
         "payment_processor": "stripe", "products": [product["id"]], "allow_discount_codes": True,
         "success_url": "https://runvouch.com/app?upgraded=" + plan, "metadata": {"plan": plan}})
     product_plans.append(f"{product['id']}:{plan}")
