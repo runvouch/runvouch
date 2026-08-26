@@ -495,7 +495,8 @@ def ots_stamp(path: Path) -> str:
         return "ots missing"
     try:
         r = subprocess.run([OTS_BIN, "stamp", str(path)], capture_output=True, text=True, timeout=120)
-        return "pending" if r.returncode == 0 and path.with_suffix(".json.ots").exists() else "stamp failed: " + (r.stderr or r.stdout)[:120].strip()
+        # ots exits non-zero when one of the calendars refuses; the stamp is valid as long as the .ots file was written
+        return "pending" if path.with_suffix(".json.ots").exists() else "stamp failed: " + (r.stderr or r.stdout)[:120].strip()
     except Exception as e:
         return f"stamp failed: {e}"
 

@@ -140,7 +140,7 @@ def verify_proof(pf):
         print("day not sealed yet: the root above is live and may still change; run again after the UTC day ends")
         return False
     try:
-        day = json.loads(urllib.request.urlopen(pf["verify_url"], timeout=20).read())
+        day = json.loads(urllib.request.urlopen(urllib.request.Request(pf["verify_url"], headers={"User-Agent": "runvouch-cli/0.3"}), timeout=20).read())
     except Exception as e:
         print("could not fetch day file:", e); return False
     lv = [x["leaf"] for x in day["leaves"]]

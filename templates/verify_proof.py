@@ -52,7 +52,7 @@ def main(argv):
         day = json.load(open(argv[2]))
     else:
         print("fetching", proof["verify_url"])
-        day = json.loads(urllib.request.urlopen(proof["verify_url"], timeout=20).read())
+        day = json.loads(urllib.request.urlopen(urllib.request.Request(proof["verify_url"], headers={"User-Agent": "runvouch-verify/0.1"}), timeout=20).read())
     ok = True
 
     def check(name, cond, detail=""):
