@@ -210,7 +210,7 @@ HOME = f'''
 <div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
 <div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email, Telegram, Slack or webhook</span><span>self-host (MIT)</span></div>
 </div>
-<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · tonight an alert, next year a record you can verify</div>
+<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · tonight an alert, next year a record</div>
 <ul class="runs">
 <li><span class="t">02:00 nightly-report</span><span class="m"><b>Missed.</b> Expected 02:00, nothing by 02:15</span><span class="pill bad">missed</span></li>
 <li><span class="t">03:00 inbox-triage</span><span class="m">Exit 0, but <b>no evidence</b>: <code>digest.html</code> unchanged</span><span class="pill warn">unproven</span></li>
@@ -218,7 +218,7 @@ HOME = f'''
 <li><span class="t">04:00 price-scraper</span><span class="m">$0.41 · 12 tool calls · output 118 KB</span><span class="pill ok">vouched</span></li>
 <li><span class="t">05:00 lead-enricher</span><span class="m">$7.90 this run · <b>daily cap $5 hit</b></span><span class="pill bad">budget</span></li>
 </ul>
-<div class="alertbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:.15rem"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> <span><b>Telegram, 03:34 (example)</b> — repo-janitor: same tool + same input 41×. Each call looks fine; together it's a loop. <a href="#">Pause agent</a></span></div></div>
+<div class="alertbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:.15rem"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> <span><b>Telegram, 03:34 (example)</b> — repo-janitor: same tool + same input 41×. Each call looks fine; together it's a loop. <a href="/docs/api">Pause agent</a></span></div></div>
 </div></section>
 <a class="ticker" href="#how" aria-label="Example alerts"><span class="tk-label">examples</span><div class="tk-wrap"><div class="tk-track"><span><b>MISSED</b> nightly-report — no run started for 16 min</span><span><b>NO_EVIDENCE</b> inbox-triage — digest.html unchanged, <em>green ≠ done</em></span><span><b>RETRY_STORM</b> repo-janitor — 41× identical tool call</span><span><b>BUDGET_DAY</b> lead-enricher — <em>$7.90 &gt; cap $5.00</em></span><span><b>VOUCHED</b> price-scraper — $0.41, evidence ok</span><span><b>MISSED</b> nightly-report — no run started for 16 min</span><span><b>NO_EVIDENCE</b> inbox-triage — digest.html unchanged, <em>green ≠ done</em></span><span><b>RETRY_STORM</b> repo-janitor — 41× identical tool call</span><span><b>BUDGET_DAY</b> lead-enricher — <em>$7.90 &gt; cap $5.00</em></span><span><b>VOUCHED</b> price-scraper — $0.41, evidence ok</span></div></div></a>
 
