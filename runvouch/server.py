@@ -293,7 +293,10 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
         if cur is None or len(series) < 4:
             continue
         med = _median(series)
-        mad = _median([abs(x - med) for x in series]) or max(med * 0.1, 1.0)
+        # robust MAD with an absolute floor: 5 s / 512 bytes, or 10% of the median — a 1-second job
+        # that takes 2 seconds, or a log line that is 60 bytes longer, is noise, not drift
+        floor = 5.0 if label == "duration" else 512.0
+        mad = max(_median([abs(x - med) for x in series]), med * 0.1, floor)
         if abs(cur - med) > DRIFT_K * mad and abs(cur - med) > 0.25 * max(med, 1.0):
             raise_alert(agent["account_id"], agent["id"], run["id"], "DRIFT",
                         f"{label} {cur:.0f} vs trailing median {med:.0f} (MAD {mad:.0f}). Task may be silently doing something else.")

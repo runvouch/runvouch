@@ -23,7 +23,7 @@ done = 0
 for a in alerts[:3]:
     args = jobs[a["agent"]].replace("--source cron", "--source remediator")
     print(f"retrying {a['agent']} (alert #{a['id']} {a['kind']})"); t0 = time.time()
-    r = subprocess.run("/home/krtradingpro/bin/rv run " + args, shell=True, capture_output=True, text=True, timeout=3600)
+    r = subprocess.run("/home/krtradingpro/bin/rv run " + a["agent"] + " " + args, shell=True, capture_output=True, text=True, timeout=3600)
     api("POST", f"/v1/alerts/{a['id']}/ack"); seen.add(a["id"]); done += 1
     print(f"  exit {r.returncode} in {int(time.time()-t0)}s")
 json.dump(sorted(seen)[-500:], open(STATE, "w"))

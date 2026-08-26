@@ -1,2 +1,14 @@
 #!/usr/bin/env bash
-cd /home/krtradingpro/runvouch && .venv/bin/python -c "import sqlite3,time;c=sqlite3.connect('data/runvouch.db');c.execute('VACUUM INTO ?',(f'data/backups/runvouch-{time.strftime(\"%Y%m%d\")}.db',))" && ls -t data/backups/*.db | tail -n +31 | xargs -r rm -f && cp data/backups/runvouch-$(date +%Y%m%d).db /home/krtradingpro/apify/landing-live/maintenance/runvouch-latest.db.bak 2>/dev/null; echo "backup ok $(date)"
+# Daily RunVouch DB backup. Writes to a temp file and moves it into place, so a re-run on the
+# same day refreshes the backup instead of failing on "output file already exists".
+set -euo pipefail
+cd /home/krtradingpro/runvouch
+DAY=$(date +%Y%m%d)
+OUT="data/backups/runvouch-$DAY.db"
+TMP="$OUT.tmp"
+rm -f "$TMP"
+.venv/bin/python -c "import sqlite3,sys;c=sqlite3.connect('data/runvouch.db');c.execute('VACUUM INTO ?',(sys.argv[1],))" "$TMP"
+mv -f "$TMP" "$OUT"
+ls -t data/backups/runvouch-*.db | tail -n +31 | xargs -r rm -f
+cp "$OUT" /home/krtradingpro/apify/landing-live/maintenance/runvouch-latest.db.bak 2>/dev/null || true
+echo "backup ok $OUT $(stat -c %s "$OUT") bytes $(date)"
