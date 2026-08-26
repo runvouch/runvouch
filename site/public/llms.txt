@@ -12,7 +12,7 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [Claude Code](https://runvouch.com/docs/claude-code): Routines, headless runs, hooks plugin, transcript cost
 - [Cron & scripts](https://runvouch.com/docs/cron): rv run for any job; GitHub Actions
 - [Python & Node](https://runvouch.com/docs/python-node): LangGraph, OpenAI Agents SDK, CrewAI callbacks
-- [OpenClaw](https://runvouch.com/docs/openclaw) · [n8n](https://runvouch.com/docs/n8n) · [MCP server](https://runvouch.com/docs/mcp) · [HTTP API](https://runvouch.com/docs/api)
+- [GitHub Actions](https://runvouch.com/docs/github-actions) · [OpenClaw](https://runvouch.com/docs/openclaw) · [n8n](https://runvouch.com/docs/n8n) · [MCP server](https://runvouch.com/docs/mcp) · [HTTP API](https://runvouch.com/docs/api)
 
 ## Compare
 - [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)
