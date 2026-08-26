@@ -110,7 +110,10 @@ def test_keys_hashed_and_signup():
     assert r.status_code == 200 and r.json()["api_key"].startswith("rv_")
     k = r.json()["api_key"]
     assert c.get("/v1/me", headers={"X-API-Key": k}).json()["email"] == "new.user@example.com"
-    assert c.post("/signup", json={"email": "new.user@example.com"}).status_code == 409
+    r2 = c.post("/signup", json={"email": "new.user@example.com"})
+    assert r2.status_code == 200 and r2.json()["sent"] is True          # re-signup mails a fresh key, old key dies
+    assert c.get("/v1/me", headers={"X-API-Key": k}).status_code == 401
+    k = c.post("/admin/accounts", params={"name": "t2", "plan": "free"}, headers={"X-Admin-Token": "adm"}).json()["api_key"]
     assert c.post("/signup", json={"email": "not-an-email"}).status_code == 422
     nk = c.post("/v1/me/rotate-key", headers={"X-API-Key": k}).json()["api_key"]
     assert c.get("/v1/me", headers={"X-API-Key": k}).status_code == 401
@@ -258,6 +261,7 @@ def test_email_html_wrapper():
 
 def test_signup_mails_key_and_reissues(monkeypatch):
     sent = []
+    monkeypatch.setattr(server, "SIGNUP_PER_IP_PER_DAY", 1000)
     monkeypatch.setattr(server, "_send_billing", lambda kind, to, plan, ends_at=None, api_key=None: sent.append((kind, to, api_key)))
     r = c.post("/signup", json={"email": "Fresh.User@example.com"}).json()
     assert r["api_key"].startswith("rv_") and sent[-1][0] == "signup" and sent[-1][2] == r["api_key"]
