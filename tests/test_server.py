@@ -151,7 +151,7 @@ def test_remote_mcp():
     r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).json()
     assert r["result"]["serverInfo"]["name"] == "runvouch"
     r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).json()
-    assert len(r["result"]["tools"]) == 6
+    assert len(r["result"]["tools"]) == 7
     r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "runvouch_status", "arguments": {}}}, headers=H).json()
     assert "nightly" in r["result"]["content"][0]["text"]
     r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "runvouch_status", "arguments": {}}}, headers={"Authorization": "Bearer nope"}).json()
@@ -280,3 +280,97 @@ def test_owner_digest_once_per_day(monkeypatch):
     noon = time.time() - (time.time() % 86400) + 12 * 3600
     assert server.owner_digest(noon) is True and "dagstand" in msgs[-1]
     assert server.owner_digest(noon + 60) is False
+
+
+# ───────────────────────────── verifiable runs ─────────────────────────────
+from runvouch import proof as pf
+
+
+def test_leaf_determinism():
+    rec = {"run_id": "r1", "agent": "a", "cost": 0.5, "evidence": {"x": True}, "started": 1.0, "ended": 2.0}
+    assert pf.leaf_hash(rec) == pf.leaf_hash(dict(reversed(list(rec.items()))))
+    assert pf.leaf_hash(rec) != pf.leaf_hash({**rec, "cost": 0.51})
+    assert pf.tool_events_hash([("cat", "abc", 1, 1.5)]) == pf.tool_events_hash([("cat", "abc", True, 1.5)])
+    assert pf.tool_events_hash([]) != pf.tool_events_hash([("cat", "abc", 1, 1.5)])
+
+
+def test_merkle_root_and_path():
+    s = pf.sha256
+    assert pf.merkle_root([]) == s("")
+    assert pf.merkle_root(["a"]) == "a" and pf.merkle_path(["a"], 0) == []
+    assert pf.merkle_root(["a", "b"]) == s("ab")
+    assert pf.merkle_root(["a", "b", "c"]) == s(s("ab") + s("cc"))
+    five = [s(str(i)) for i in range(5)]
+    root5 = s(s(s(five[0] + five[1]) + s(five[2] + five[3])) + s(s(five[4] + five[4]) + s(five[4] + five[4])))
+    assert pf.merkle_root(five) == root5
+    for n in (1, 2, 3, 5):
+        leaves = [s(str(i)) for i in range(n)]
+        for i in range(n):
+            assert pf.apply_path(leaves[i], pf.merkle_path(leaves, i)) == pf.merkle_root(leaves)
+    assert pf.apply_path("zz", pf.merkle_path(five, 2)) != root5
+
+
+def _run(agent, ended_at, **end):
+    rid = c.post("/v1/runs/start", json={"agent": agent}, headers=H).json()["run_id"]
+    c.post("/v1/runs/tool", json={"run_id": rid, "tool": "llm", "input": {"q": rid}, "cost": 0.1}, headers=H)
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "evidence": {"file": True}, "meta": {"exit": 0}, **end}, headers=H)
+    with server.tx() as db:  # move the run into the wanted UTC day (the API always stamps "now")
+        db.execute("UPDATE runs SET started=?, ended=? WHERE id=?", (ended_at - 5, ended_at, rid))
+    return rid
+
+
+def test_chain_two_days_and_proof_endpoint(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "PROOF_DIR", tmp_path)
+    monkeypatch.setattr(server, "OTS_BIN", str(tmp_path / "no-ots"))
+    c.post("/v1/agents", json={"name": "prover"}, headers=H)
+    d1 = server._day_ts("2026-01-10"); d2 = d1 + 86400
+    a = _run("prover", d1 + 100); b = _run("prover", d1 + 200); x = _run("prover", d2 + 50)
+    with server.tx() as db:  # started/ended are part of the record, so recompute the leaves after moving the runs
+
+        for rid in (a, b, x):
+            r = server.q1("SELECT * FROM runs WHERE id=?", rid); ag = server.q1("SELECT * FROM agents WHERE id=?", r["agent_id"])
+            db.execute("UPDATE runs SET leaf_hash=? WHERE id=?", (pf.leaf_hash(server.leaf_record(r, ag)), rid))
+    assert server.seal_days(now=d2 + 2 * 86400) == 2
+    assert server.seal_days(now=d2 + 2 * 86400) == 0  # idempotent
+    day1 = server.q1("SELECT * FROM proof_days WHERE date='2026-01-10'"); day2 = server.q1("SELECT * FROM proof_days WHERE date='2026-01-11'")
+    assert day1["prev"] == pf.GENESIS and day1["n_runs"] == 2 and day2["prev"] == day1["chain_hash"] and day2["n_runs"] == 1
+    assert day1["chain_hash"] == pf.chain_hash(pf.GENESIS, "2026-01-10", day1["root"])
+    assert day1["ots_status"] == "ots missing"
+    leaves = [server.q1("SELECT leaf_hash FROM runs WHERE id=?", i)["leaf_hash"] for i in sorted((a, b))]  # day leaves sorted by run_id
+    assert day1["root"] == pf.merkle_root(leaves)
+    # API proof for run a
+    p = c.get(f"/v1/runs/{a}/proof", headers=H).json()
+    assert p["sealed"] and p["leaf_hash"] == p["stored_leaf_hash"] and p["root"] == day1["root"] and p["chain_hash"] == day1["chain_hash"]
+    assert pf.apply_path(p["leaf_hash"], [tuple(s) for s in p["merkle_path"]]) == day1["root"]
+    assert set(p["record"]) == set(pf.LEAF_KEYS) and p["record"]["exit"] == 0 and p["record"]["evidence"] == {"file": True}
+    assert "meta" not in p["record"] and "prompt" not in json.dumps(p)
+    assert c.get(f"/v1/runs/{a}/proof").status_code == 401
+    # public day file and index, no auth
+    dj = c.get("/proof/days/2026-01-10.json").json()
+    assert dj["root"] == day1["root"] and dj["chain_hash"] == day1["chain_hash"] and {l["run_id"] for l in dj["leaves"]} == {a, b}
+    assert c.get("/proof/days/2026-01-10.ots").status_code == 404
+    assert c.get("/proof/days/2026-01-12.json").status_code == 404 and c.get("/proof/days/../x.json").status_code in (404, 422)
+    idx = c.get("/proof/").json()
+    assert [d["date"] for d in idx["days"]] == ["2026-01-11", "2026-01-10"] and idx["days"][1]["ots_status"] == "ots missing"
+    # unsealed run: live root, not sealed
+    y = _run("prover", time.time())
+    p2 = c.get(f"/v1/runs/{y}/proof", headers=H).json()
+    assert p2["sealed"] is False and p2["chain_hash"] is None and "note" in p2
+    # MCP tool
+    m = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "runvouch_run_proof", "arguments": {"run_id": a}}}, headers=H).json()
+    assert json.loads(m["result"]["content"][0]["text"])["leaf_hash"] == p["leaf_hash"]
+    # standalone verifier: passes on the sealed day, fails on one changed byte
+    import subprocess
+    script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates", "verify_proof.py")
+    pj = tmp_path / "proof.json"; pj.write_text(json.dumps(p))
+    dayf = tmp_path / "2026-01-10.json"
+    r = subprocess.run([sys.executable, script, str(pj), str(dayf)], capture_output=True, text=True)
+    assert r.returncode == 0 and "VERIFIED" in r.stdout, r.stdout
+    bad = dict(p); bad["record"] = {**p["record"], "cost": p["record"]["cost"] + 0.001}
+    pj.write_text(json.dumps(bad))
+    r = subprocess.run([sys.executable, script, str(pj), str(dayf)], capture_output=True, text=True)
+    assert r.returncode == 1 and "FAIL leaf" in r.stdout
+    # and the CLI verifier, against the public day file served by the app
+    from runvouch import cli
+    monkeypatch.setattr(cli.urllib.request, "urlopen", lambda url, timeout=20: __import__("io").BytesIO(dayf.read_bytes()))
+    assert cli.verify_proof(p) is True and cli.verify_proof(bad) is False

@@ -23,12 +23,15 @@ STALLED      run started but no end/heartbeat for > max_runtime
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
+import subprocess
 import threading
 from datetime import datetime
 import time
@@ -42,6 +45,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
+
+from runvouch import proof as _pf
 
 DB_PATH = Path(os.getenv("RUNVOUCH_DB", Path(__file__).resolve().parent.parent / "data" / "runvouch.db"))
 ADMIN_TOKEN = os.getenv("RUNVOUCH_ADMIN_TOKEN", "")
@@ -122,6 +127,7 @@ CREATE INDEX IF NOT EXISTS ix_alerts_acc ON alerts(account_id, ts);
 CREATE TABLE IF NOT EXISTS signups(id INTEGER PRIMARY KEY, ip TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS ls_events(id TEXT PRIMARY KEY, ts REAL, name TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY KEY(account_id, week));
+CREATE TABLE IF NOT EXISTS proof_days(date TEXT PRIMARY KEY, root TEXT, prev TEXT, chain_hash TEXT, n_runs INTEGER, sealed_at REAL, ots_status TEXT, ots_path TEXT);
 """
 with _lock:
     _db.executescript(SCHEMA)
@@ -130,6 +136,10 @@ with _lock:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
+    try:
+        _db.execute("ALTER TABLE runs ADD COLUMN leaf_hash TEXT")
+    except sqlite3.OperationalError:
+        pass
     for r in _db.execute("SELECT id, api_key FROM accounts WHERE api_key LIKE 'rv_%'").fetchall():
         _db.execute("UPDATE accounts SET api_key=? WHERE id=?", (hashlib.sha256(r["api_key"].encode()).hexdigest(), r["id"]))
     _db.commit()
@@ -448,12 +458,158 @@ def owner_digest(now: Optional[float] = None) -> bool:
                      f"RunVouch dagstand {day}: {new} nieuwe accounts in 24u, {total} accounts totaal, {paid} betalend, {active} agents actief in 24u.")
 
 
+# ───────────────────────────── verifiable runs (leaf per run, Merkle day, OpenTimestamps) ─────────────────────────────
+PROOF_DIR = Path(os.getenv("RUNVOUCH_PROOF_DIR", DB_PATH.parent / "proof" / "days"))
+OTS_BIN = os.path.expanduser(os.getenv("RUNVOUCH_OTS", "~/.local/bin/ots"))
+SEAL_DELAY = 300  # seconds after UTC midnight before a day is sealed: a run ending at 23:59:59 must have committed
+
+
+def leaf_record(run: sqlite3.Row, agent: sqlite3.Row) -> dict:
+    """The facts of one finished run. Hashes only for tool inputs; never prompts, outputs or evidence content."""
+    meta = json.loads(run["meta_json"] or "{}")
+    events = qa("SELECT tool, input_hash, ok, ts FROM tool_events WHERE run_id=? ORDER BY id", run["id"])
+    rec = {"run_id": run["id"], "agent": agent["name"], "account_id": agent["account_id"], "started": run["started"], "ended": run["ended"],
+           "status": run["status"], "cost": run["cost"], "tokens": run["tokens"], "tool_calls": run["tool_calls"], "output_bytes": run["output_bytes"],
+           "evidence": json.loads(run["evidence_json"] or "{}"), "evidence_ok": run["evidence_ok"], "source": run["source"],
+           "tool_events_hash": _pf.tool_events_hash([(x["tool"], x["input_hash"], x["ok"], x["ts"]) for x in events])}
+    if "exit" in meta:
+        rec["exit"] = meta["exit"]
+    return rec
+
+
+def _day_of(ts: float) -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime(ts))
+
+
+def _day_ts(date: str) -> int:
+    return calendar.timegm(time.strptime(date, "%Y-%m-%d"))  # UTC midnight
+
+
+def _day_leaves(date: str) -> list[sqlite3.Row]:
+    t0 = _day_ts(date)
+    return qa("SELECT id, leaf_hash FROM runs WHERE leaf_hash IS NOT NULL AND ended>=? AND ended<? ORDER BY id", t0, t0 + 86400)
+
+
+def ots_stamp(path: Path) -> str:
+    if not os.path.exists(OTS_BIN):
+        return "ots missing"
+    try:
+        r = subprocess.run([OTS_BIN, "stamp", str(path)], capture_output=True, text=True, timeout=120)
+        return "pending" if r.returncode == 0 and path.with_suffix(".json.ots").exists() else "stamp failed: " + (r.stderr or r.stdout)[:120].strip()
+    except Exception as e:
+        return f"stamp failed: {e}"
+
+
+def ots_upgrade(path: Path) -> Optional[str]:
+    """'bitcoin:<block>' once the calendar delivered the Bitcoin attestation, None while still pending."""
+    ots = path.with_suffix(".json.ots")
+    if not os.path.exists(OTS_BIN) or not ots.exists():
+        return None
+    try:
+        subprocess.run([OTS_BIN, "upgrade", str(ots)], capture_output=True, text=True, timeout=60)
+        info = subprocess.run([OTS_BIN, "info", str(ots)], capture_output=True, text=True, timeout=30).stdout
+    except Exception:
+        return None
+    m = re.search(r"BitcoinBlockHeaderAttestation\((\d+)\)", info)
+    return f"bitcoin:{m.group(1)}" if m else None
+
+
+def ots_upgrade_pending(days: int = 14) -> int:
+    n = 0
+    cutoff = _day_of(time.time() - days * 86400)
+    for d in qa("SELECT date, ots_path FROM proof_days WHERE ots_status='pending' AND date>=?", cutoff):
+        st = ots_upgrade(Path(d["ots_path"]))
+        if st:
+            with tx() as db:
+                db.execute("UPDATE proof_days SET ots_status=? WHERE date=?", (st, d["date"]))
+            n += 1
+    return n
+
+
+def seal_day(date: str) -> dict:
+    """Merkle root over the day's leaves, chained to the previous sealed day, written to a public file and stamped. Idempotent."""
+    have = q1("SELECT * FROM proof_days WHERE date=?", date)
+    if have:
+        return dict(have)
+    prev_row = q1("SELECT chain_hash FROM proof_days WHERE date<? ORDER BY date DESC LIMIT 1", date)
+    prev = prev_row["chain_hash"] if prev_row else _pf.GENESIS
+    rows = _day_leaves(date)
+    leaves = [r["leaf_hash"] for r in rows]
+    root = _pf.merkle_root(leaves)
+    ch = _pf.chain_hash(prev, date, root)
+    PROOF_DIR.mkdir(parents=True, exist_ok=True)
+    path = PROOF_DIR / f"{date}.json"
+    body = {"date": date, "root": root, "prev": prev, "chain_hash": ch, "n_runs": len(leaves),
+            "leaves": [{"run_id": r["id"], "leaf": r["leaf_hash"]} for r in rows],
+            "spec": "leaf=sha256(canonical_json(record)); root=merkle(sha256(left+right), odd: last paired with itself, empty: sha256('')); chain_hash=sha256(prev+':'+date+':'+root)"}
+    path.write_text(_pf.canonical(body) + "\n")
+    st = ots_stamp(path)
+    with tx() as db:
+        db.execute("INSERT OR IGNORE INTO proof_days(date, root, prev, chain_hash, n_runs, sealed_at, ots_status, ots_path) VALUES(?,?,?,?,?,?,?,?)",
+                   (date, root, prev, ch, len(leaves), time.time(), st, str(path)))
+    return dict(q1("SELECT * FROM proof_days WHERE date=?", date))
+
+
+def seal_days(now: Optional[float] = None) -> int:
+    """Seal every UTC day that is over (plus SEAL_DELAY) and not yet sealed, in order, so the chain has no gaps."""
+    now = now or time.time()
+    last = q1("SELECT date FROM proof_days ORDER BY date DESC LIMIT 1")
+    if last:
+        start = _day_of(_day_ts(last["date"]) + 86400)
+    else:
+        first = q1("SELECT MIN(ended) m FROM runs WHERE leaf_hash IS NOT NULL")
+        if not first or not first["m"]:
+            return 0  # the chain starts on the first day that has a leaf; earlier days are not sealed as if empty
+        start = _day_of(first["m"])
+    today = _day_of(now - SEAL_DELAY)
+    n = 0
+    d = start
+    while d < today:
+        seal_day(d)
+        n += 1
+        d = _day_of(_day_ts(d) + 86400)
+    return n
+
+
+_last_ots_day = ""
+
+
+def proof_maintenance(now: Optional[float] = None) -> None:
+    global _last_ots_day
+    now = now or time.time()
+    seal_days(now)
+    if _day_of(now) != _last_ots_day:
+        _last_ots_day = _day_of(now)
+        ots_upgrade_pending()
+
+
+def run_proof(run: sqlite3.Row, agent: sqlite3.Row) -> dict:
+    rec = leaf_record(run, agent)
+    leaf = _pf.leaf_hash(rec)
+    date = _day_of(run["ended"])
+    rows = _day_leaves(date)
+    leaves = [r["leaf_hash"] for r in rows]
+    idx = next((i for i, r in enumerate(rows) if r["id"] == run["id"]), None)
+    day = q1("SELECT * FROM proof_days WHERE date=?", date)
+    out = {"run_id": run["id"], "record": rec, "leaf_hash": leaf, "stored_leaf_hash": run["leaf_hash"], "date": date,
+           "merkle_path": _pf.merkle_path(leaves, idx) if idx is not None else [], "root": _pf.merkle_root(leaves),
+           "sealed": bool(day), "chain_hash": day["chain_hash"] if day else None, "prev": day["prev"] if day else None,
+           "ots_status": day["ots_status"] if day else "not sealed yet (a day is sealed after it ends, UTC)",
+           "verify_url": f"{PUBLIC_URL}/proof/days/{date}.json", "ots_url": f"{PUBLIC_URL}/proof/days/{date}.ots" if day and day["ots_status"] != "ots missing" and not str(day["ots_status"]).startswith("stamp failed") else None,
+           "docs": "https://runvouch.com/docs/proof"}
+    if not day:
+        out["note"] = "root and path are computed live from today's runs and may still change until the day is sealed"
+    return out
+
+
+
 def _sweeper():
     n = 0
     while True:
         try:
             sweep_once()
             owner_digest()
+            proof_maintenance()
             if n % 20 == 0:
                 weekly_report()
         except Exception:
@@ -960,6 +1116,8 @@ def run_end(e: EndIn, acc=Depends(account_from_key)):
                    (time.time(), time.time(), e.status, e.cost, e.tokens, e.output_bytes, int(ev_ok), json.dumps(ev_detail),
                     json.dumps({**json.loads(run["meta_json"] or "{}"), **e.meta}), e.run_id))
     run = q1("SELECT * FROM runs WHERE id=?", e.run_id)
+    with tx() as db:  # the leaf is fixed here and never rewritten; the day seal later includes it
+        db.execute("UPDATE runs SET leaf_hash=? WHERE id=?", (_pf.leaf_hash(leaf_record(run, a)), e.run_id))
     if e.status != "ok":
         raise_alert(a["account_id"], a["id"], e.run_id, "FAILED", f"run ended with status '{e.status}'. {e.meta.get('error','')}".strip())
     elif (a["evidence_required"] or e.evidence) and not ev_ok:
@@ -1008,6 +1166,44 @@ def agent_runs(name: str, limit: int = 30, acc=Depends(account_from_key)):
     return [dict(r) for r in qa("SELECT * FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT ?", a["id"], limit)]
 
 
+@app.get("/v1/runs/{run_id}/proof")
+def run_proof_api(run_id: str, acc=Depends(account_from_key)):
+    run = q1("SELECT r.* FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=? AND g.account_id=?", run_id, acc["id"])
+    if not run:
+        raise HTTPException(404, "run not found")
+    if run["ended"] is None or not run["leaf_hash"]:
+        raise HTTPException(409, "run has not ended; a proof exists only for finished runs")
+    return run_proof(run, q1("SELECT * FROM agents WHERE id=?", run["agent_id"]))
+
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+@app.get("/proof/")
+def proof_index(limit: int = 30):
+    """Public: the chain, newest first. No auth, no account data; only dates, hashes and counts."""
+    days = [dict(r) for r in qa("SELECT date, root, prev, chain_hash, n_runs, sealed_at, ots_status FROM proof_days ORDER BY date DESC LIMIT ?", min(limit, 400))]
+    return {"days": days, "day_url": f"{PUBLIC_URL}/proof/days/YYYY-MM-DD.json", "ots_url": f"{PUBLIC_URL}/proof/days/YYYY-MM-DD.ots",
+            "spec": "leaf=sha256(canonical_json(record)); root=merkle over the day's leaves sorted by run_id; chain_hash=sha256(prev+':'+date+':'+root); genesis prev=64 zeros",
+            "verify": "https://runvouch.com/docs/proof"}
+
+
+@app.get("/proof/days/{name}")
+def proof_day_file(name: str):
+    from fastapi.responses import FileResponse
+    date, ext = name[:10], name[10:]
+    if not _DATE_RE.match(date) or ext not in (".json", ".ots"):
+        raise HTTPException(404, "not found")
+    day = q1("SELECT ots_path FROM proof_days WHERE date=?", date)
+    if not day:
+        raise HTTPException(404, "day not sealed")
+    p = Path(day["ots_path"]) if ext == ".json" else Path(day["ots_path"] + ".ots")
+    if not p.is_file():
+        raise HTTPException(404, "no OpenTimestamps file for this day" if ext == ".ots" else "day file missing")
+    return FileResponse(p, media_type="application/json" if ext == ".json" else "application/octet-stream",
+                        headers={"Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*"})
+
+
 # ───────────────────────────── remote MCP (Streamable HTTP, JSON-RPC 2.0) ─────────────────────────────
 MCP_TOOLS = [
     {"name": "runvouch_status", "description": "Health of all watched agents: state (ok/alert/failed/unproven/running/waiting), last run, 24h cost, open alerts.", "inputSchema": {"type": "object", "properties": {}}, "annotations": {"readOnlyHint": True}},
@@ -1016,6 +1212,7 @@ MCP_TOOLS = [
     {"name": "runvouch_runs", "description": "Recent runs of one agent.", "inputSchema": {"type": "object", "properties": {"agent": {"type": "string"}, "limit": {"type": "integer", "default": 20}}, "required": ["agent"]}, "annotations": {"readOnlyHint": True}},
     {"name": "runvouch_run_start", "description": "Report that a run of `agent` started. Returns run_id.", "inputSchema": {"type": "object", "properties": {"agent": {"type": "string"}, "source": {"type": "string"}}, "required": ["agent"]}},
     {"name": "runvouch_run_end", "description": "Report that a run ended, with status and evidence dict (name -> bool or {type:'url',url}). Green run without evidence alerts.", "inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}, "status": {"type": "string", "enum": ["ok", "fail"]}, "cost": {"type": "number"}, "tokens": {"type": "integer"}, "evidence": {"type": "object"}}, "required": ["run_id"]}},
+    {"name": "runvouch_run_proof", "description": "Tamper-evident proof of a finished run: hashed record, Merkle path, day root, chain hash and OpenTimestamps status. Verify offline with templates/verify_proof.py.", "inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]}, "annotations": {"readOnlyHint": True}},
 ]
 
 
@@ -1032,6 +1229,8 @@ def _mcp_call(acc, name: str, a: dict):
         return run_start(StartIn(agent=a["agent"], source=a.get("source", "mcp")), acc)
     if name == "runvouch_run_end":
         return run_end(EndIn(run_id=a["run_id"], status=a.get("status", "ok"), cost=a.get("cost", 0), tokens=a.get("tokens", 0), evidence=a.get("evidence", {})), acc)
+    if name == "runvouch_run_proof":
+        return run_proof_api(a["run_id"], acc)
     raise ValueError(f"unknown tool {name}")
 
 
@@ -1091,11 +1290,12 @@ if(!Array.isArray(ag)){document.getElementById('out').innerHTML='<p class=err>'+
 document.getElementById('me').textContent=(me.email||me.name)+' · plan '+me.plan+' · '+ag.length+'/'+me.agents_allowed+' agents';
 const cost=ag.reduce((a,x)=>a+(x.cost_24h||0),0);const bad=ag.filter(a=>['alert','failed','unproven'].includes(a.state)).length;
 let s='<div class=kpi><div><b>'+ag.length+'</b><span>agents</span></div><div><b>'+ag.filter(a=>a.state==='ok').length+'</b><span>vouched</span></div><div><b>'+bad+'</b><span>need attention</span></div><div><b>$'+cost.toFixed(2)+'</b><span>cost 24h</span></div></div>';
-s+='<h2>Agents</h2><table><tr><th>agent</th><th>state</th><th>last run</th><th>status</th><th>evidence</th><th>cost 24h</th><th>alerts</th></tr>';
-for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${a.name}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td></tr>`}
+s+='<h2>Agents</h2><table><tr><th>agent</th><th>state</th><th>last run</th><th>status</th><th>evidence</th><th>cost 24h</th><th>alerts</th><th>proof</th></tr>';
+for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${a.name}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td><td>${l&&l.ended?`<a href="#" onclick="proof('${l.id}');return false">proof</a>`:'—'}</td></tr>`}
 s+='</table><h2>Open alerts</h2>';if(!al.length)s+='<p><small>None. Quiet night.</small></p>';else{s+='<table><tr><th>when</th><th>agent</th><th>kind</th><th>message</th><th></th></tr>';for(const x of al){s+=`<tr><td><small>${new Date(x.ts*1000).toLocaleString()}</small></td><td>${x.agent}</td><td><span class="pill alert">${x.kind}</span></td><td>${x.message}</td><td><button onclick="ack(${x.id})">ack</button></td></tr>`}s+='</table>'}
 document.getElementById('out').innerHTML=s}
 function signout(){try{localStorage.removeItem('rvk')}catch(e){}document.getElementById('k').value='';document.getElementById('out').innerHTML='';document.getElementById('me').textContent='signed out'}
+async function proof(id){const r=await fetch(API+'/v1/runs/'+id+'/proof',{headers:{'X-API-Key':document.getElementById('k').value.trim()}});const t=await r.text();window.open(URL.createObjectURL(new Blob([t],{type:'application/json'})),'_blank')}
 async function ack(id){await fetch(API+'/v1/alerts/'+id+'/ack',{method:'POST',headers:{'X-API-Key':document.getElementById('k').value.trim()}});load()}
 try{const k=localStorage.getItem('rvk');if(k){document.getElementById('k').value=k;load()}}catch(e){}
 </script></body></html>"""
