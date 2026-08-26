@@ -28,9 +28,19 @@ NS = {"a": "http://www.w3.org/2005/Atom"}
 
 
 def fetch(url: str) -> bytes:
+    """Reddit rate-limits anonymous feed reads hard: space requests out and retry once on 429."""
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return r.read()
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = r.read()
+            time.sleep(4)
+            return data
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt == 1:
+                time.sleep(20)
+                continue
+            raise
 
 
 def strip(s: str) -> str:
@@ -50,6 +60,8 @@ def feed(sub: str) -> list[dict]:
 
 def score(p: dict) -> int:
     t = (p["title"] + " " + p["body"]).lower()
+    if not any(k in t for k, w in KEYWORDS.items() if w >= 3):
+        return 0                     # no strong signal (cron, routine, monitoring, bill...): skip, whatever the noise says
     s = sum(w for k, w in KEYWORDS.items() if k in t)
     if "?" in p["title"]:
         s += 2                       # a question is an invitation
