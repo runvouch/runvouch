@@ -14,7 +14,16 @@ OUT = ROOT / "public"
 BASE = "https://runvouch.com"
 API = "https://api.runvouch.com"
 TODAY = datetime.date.today().isoformat()
-LS_LIVE = any(l.strip()=="LS_LIVE=1" for l in open(ROOT.parent / ".env")) if (ROOT.parent / ".env").exists() else False
+_ENV = {l.split("=",1)[0]: l.split("=",1)[1].strip() for l in open(ROOT.parent / ".env") if "=" in l and not l.startswith("#")} if (ROOT.parent / ".env").exists() else {}
+LS_LIVE = _ENV.get("LS_LIVE") == "1"
+STRIPE_LIVE = _ENV.get("STRIPE_LIVE") == "1" and _ENV.get("STRIPE_SOLO_URL") and _ENV.get("STRIPE_TEAM_URL")
+BILLING_LIVE = STRIPE_LIVE or LS_LIVE
+SOLO_URL = _ENV.get("STRIPE_SOLO_URL") if STRIPE_LIVE else "https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22"
+TEAM_URL = _ENV.get("STRIPE_TEAM_URL") if STRIPE_LIVE else "https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9"
+EMAIL_PARAM = "prefilled_email" if STRIPE_LIVE else "checkout[email]"
+PROCESSOR = "Lemon Squeezy" if (LS_LIVE and not STRIPE_LIVE) else "Stripe"
+SOLO_BTN = f'<a class="btn" href="{SOLO_URL}" data-ls="{EMAIL_PARAM}">Upgrade to Solo — $9/mo</a>' if BILLING_LIVE else '<a class="btn" href="/contact?topic=billing">Start free — paid plans open Sept 2026</a>'
+TEAM_BTN = f'<a class="btn ghost" href="{TEAM_URL}" data-ls="{EMAIL_PARAM}">Upgrade to Team — $29/mo</a>' if BILLING_LIVE else '<a class="btn ghost" href="/contact?topic=billing">Request Team plan</a>'
 import hashlib
 CSS_HASH = ""  # set after CSS is defined
 
@@ -115,7 +124,7 @@ const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,18*D);g.addColorStop(0,`rgba(${
 x.fillStyle=dropping?'#FFC8C8':'#EAFFF4';x.beginPath();x.arc(p.x,p.y,3*D,0,7);x.fill();
 if(dropping&&p.vy>0.3*D&&p.vy<0.36*D){x.strokeStyle='rgba(255,99,99,.5)';x.lineWidth=1.2*D;x.beginPath();x.arc(p.x,p.y,14*D,0,7);x.stroke()}}
 P=P.filter(p=>p.x<W+40*D&&p.y<H+40*D);t++;requestAnimationFrame(draw)}draw()})();
-document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?checkout[email]='+encodeURIComponent(e)}));
+document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?'+a.dataset.ls+'='+encodeURIComponent(e)}));
 '''.replace("__API__", API)
 
 
@@ -262,10 +271,10 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
 <div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram &amp; webhook alerts</li><li>7-day history</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts</li></ul>' + ('<a class="btn" href="https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22" data-ls>Upgrade to Solo — $9/mo</a>' if LS_LIVE else '<a class="btn" href="/contact?topic=billing">Start free — paid plans open Sept 2026</a>') + '</div>
-<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>Slack &amp; PagerDuty</li><li>Shared dashboard</li><li>API export</li></ul>' + ('<a class="btn ghost" href="https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9" data-ls>Upgrade to Team — $29/mo</a>' if LS_LIVE else '<a class="btn ghost" href="/contact?topic=billing">Request Team plan</a>') + '</div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts</li></ul>{SOLO_BTN}</div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>Slack &amp; PagerDuty</li><li>Shared dashboard</li><li>API export</li></ul>{TEAM_BTN}</div>
 </div>
-<div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Lemon Squeezy; upgrade with the same email you sign up with.</p>
+<div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by {PROCESSOR}; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free API key</button></form>
 <div id="keybox" class="keybox"></div></div>
 </div></section>
@@ -439,9 +448,9 @@ page("/status", "Status — RunVouch", "Live status of the RunVouch API and aler
 <script>fetch(API+'/health').then(r=>{document.getElementById('s-api').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'}).catch(()=>{document.getElementById('s-api').innerHTML='<span class="pill bad">unreachable</span>'});fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'})</script></div></main>''', [ORG_LD])
 page("/security", "Security — RunVouch", "What RunVouch stores, how keys are handled, and how to report a vulnerability.", '''<main><div class="wrap doc"><h1>Security</h1>
 <ul><li>API keys are stored as SHA-256 hashes; the plaintext key is shown once.</li><li>Tool inputs are hashed on the client or server for loop detection; prompts and outputs are never stored.</li><li>Evidence file checks run on your machine; only a boolean is transmitted.</li><li>All traffic is TLS via Cloudflare; infrastructure in the EU (Netherlands).</li><li>Per-key rate limits; alert credentials (Telegram token, webhook URL) are stored per account and used only to deliver your alerts.</li><li>Report vulnerabilities via the <a href="/contact?topic=security">contact form</a> (topic: security) — see <a href="/.well-known/security.txt">security.txt</a>.</li></ul></div></main>''', [ORG_LD])
-page("/privacy", "Privacy — RunVouch", "RunVouch privacy policy: what we collect and why.", '''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by Lemon Squeezy as merchant of record. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
+page("/privacy", "Privacy — RunVouch", "RunVouch privacy policy: what we collect and why.", f'''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by {PROCESSOR}; card details never touch our servers. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
 page("/terms", "Terms — RunVouch", "RunVouch terms of service.", '''<main><div class="wrap doc"><h1>Terms of service</h1><p>RunVouch is provided as-is during early access. Free plans may be rate-limited. Paid plans renew monthly and can be cancelled any time; the current period is not refunded. Don't use RunVouch to monitor anything illegal, and don't attack the service. We may change these terms with notice on this page. Governing law: the Netherlands.</p></div></main>''', [ORG_LD])
-page("/changelog", "Changelog — RunVouch", "What's new in RunVouch.", f'''<main><div class="wrap doc"><h1>Changelog</h1><h3>{TODAY} — 0.2 (early access)</h3><ul><li>Public launch on runvouch.com and api.runvouch.com.</li><li>Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.</li><li>Claude Code plugin with transcript-based cost; MCP server; zero-dependency <code>rv</code> CLI with fail-open.</li><li>Hashed keys, rate limits, self-serve signup, subscriptions via Lemon Squeezy.</li></ul></div></main>''', [ORG_LD])
+page("/changelog", "Changelog — RunVouch", "What's new in RunVouch.", f'''<main><div class="wrap doc"><h1>Changelog</h1><h3>{TODAY} — 0.2 (early access)</h3><ul><li>Public launch on runvouch.com and api.runvouch.com.</li><li>Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.</li><li>Claude Code plugin with transcript-based cost; MCP server; zero-dependency <code>rv</code> CLI with fail-open.</li><li>Hashed keys, rate limits, self-serve signup, subscriptions via {PROCESSOR}.</li></ul></div></main>''', [ORG_LD])
 # ───────────────────────── BLOG ─────────────────────────
 ARTICLES = json.loads((ROOT / "articles.json").read_text(encoding="utf-8"))["articles"] if (ROOT / "articles.json").exists() else []
 BLOG_DATE = "2026-08-25"

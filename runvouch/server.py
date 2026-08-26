@@ -50,6 +50,8 @@ DRIFT_K = float(os.getenv("RUNVOUCH_DRIFT_K", "4.0"))
 SWEEP_SECONDS = int(os.getenv("RUNVOUCH_SWEEP_SECONDS", "30"))
 LS_WEBHOOK_SECRET = os.getenv("LS_WEBHOOK_SECRET", "")
 LS_VARIANT_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("LS_VARIANT_PLANS", "").split(",") if ":" in x)}  # "123:solo,456:team"
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PRICE_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("STRIPE_PRICE_PLANS", "").split(",") if ":" in x)}  # "price_x:solo,price_y:team"
 RATE_PER_MIN = int(os.getenv("RUNVOUCH_RATE_PER_MIN", "1500"))
 SIGNUP_PER_IP_PER_DAY = int(os.getenv("RUNVOUCH_SIGNUPS_PER_IP", "5"))
 CORS_ORIGINS = [o for o in os.getenv("RUNVOUCH_CORS", "").split(",") if o]
@@ -120,7 +122,7 @@ CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY K
 """
 with _lock:
     _db.executescript(SCHEMA)
-    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT"):
+    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT"):
         try:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -571,6 +573,61 @@ async def ls_webhook(request: Request):
             key = "rv_" + secrets.token_urlsafe(24)
             db.execute("INSERT INTO accounts(name, api_key, created, plan, email) VALUES(?,?,?,?,?)",
                        (email.split("@")[0], key_hash(key), time.time(), plan, email))
+    return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
+
+
+def _stripe_sig_ok(raw: bytes, header: str) -> bool:
+    """Stripe-Signature: t=<ts>,v1=<hmac>. HMAC-SHA256 over "<ts>.<raw>", 5-minute tolerance."""
+    parts = dict(p.split("=", 1) for p in header.split(",") if "=" in p)
+    ts, v1 = parts.get("t", ""), parts.get("v1", "")
+    if not ts or not v1 or abs(time.time() - float(ts)) > 300:
+        return False
+    expected = hmac.new(STRIPE_WEBHOOK_SECRET.encode(), f"{ts}.".encode() + raw, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, v1)
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Stripe → plan changes. Payment Links carry the price id; the plan comes from STRIPE_PRICE_PLANS.
+    checkout.session.completed sets the plan and remembers the customer; subscription deleted/unpaid drops to free."""
+    raw = await request.body()
+    if not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(503, "STRIPE_WEBHOOK_SECRET not configured")
+    if not _stripe_sig_ok(raw, request.headers.get("stripe-signature", "")):
+        raise HTTPException(401, "bad signature")
+    ev = json.loads(raw or b"{}")
+    name, ev_id = ev.get("type", ""), "stripe:" + str(ev.get("id", ""))
+    if q1("SELECT id FROM ls_events WHERE id=?", ev_id):
+        return {"ok": True, "dup": True}
+    obj = (ev.get("data") or {}).get("object") or {}
+    customer = str(obj.get("customer") or "")
+    email = ((obj.get("customer_details") or {}).get("email") or obj.get("customer_email") or "").lower().strip()
+    plan, sub_id = None, None
+    if name == "checkout.session.completed" and obj.get("payment_status") in ("paid", "no_payment_required"):
+        prices = [str(li.get("price", {}).get("id", "")) for li in ((obj.get("line_items") or {}).get("data") or [])]
+        prices += [str((obj.get("metadata") or {}).get("price", ""))]
+        plan = next((STRIPE_PRICE_PLANS[p] for p in prices if p in STRIPE_PRICE_PLANS), None) or (obj.get("metadata") or {}).get("plan") or "solo"
+        sub_id = str(obj.get("subscription") or "") or None
+    elif name in ("customer.subscription.updated", "customer.subscription.created"):
+        prices = [str(it.get("price", {}).get("id", "")) for it in ((obj.get("items") or {}).get("data") or [])]
+        if obj.get("status") in ("active", "trialing", "past_due"):
+            plan = next((STRIPE_PRICE_PLANS[p] for p in prices if p in STRIPE_PRICE_PLANS), None)
+        elif obj.get("status") in ("canceled", "unpaid", "incomplete_expired"):
+            plan = "free"
+        sub_id = str(obj.get("id") or "") or None
+    elif name == "customer.subscription.deleted":
+        plan, sub_id = "free", str(obj.get("id") or "") or None
+    acc = (q1("SELECT * FROM accounts WHERE email=?", email) if email else None) or \
+          (q1("SELECT * FROM accounts WHERE stripe_customer_id=?", customer) if customer else None)
+    with tx() as db:
+        db.execute("INSERT INTO ls_events(id, ts, name, payload) VALUES(?,?,?,?)", (ev_id, time.time(), name, raw.decode(errors="ignore")[:20000]))
+        if plan and acc:
+            db.execute("UPDATE accounts SET plan=?, stripe_customer_id=COALESCE(?,stripe_customer_id), stripe_subscription_id=COALESCE(?,stripe_subscription_id) WHERE id=?",
+                       (plan, customer or None, sub_id, acc["id"]))
+        elif plan and plan != "free" and email and not acc:
+            key = "rv_" + secrets.token_urlsafe(24)
+            db.execute("INSERT INTO accounts(name, api_key, created, plan, email, stripe_customer_id, stripe_subscription_id) VALUES(?,?,?,?,?,?,?)",
+                       (email.split("@")[0], key_hash(key), time.time(), plan, email, customer or None, sub_id))
     return {"ok": True, "event": name, "plan": plan, "matched": bool(acc)}
 
 

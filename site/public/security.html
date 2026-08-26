@@ -44,5 +44,5 @@ const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,18*D);g.addColorStop(0,`rgba(${
 x.fillStyle=dropping?'#FFC8C8':'#EAFFF4';x.beginPath();x.arc(p.x,p.y,3*D,0,7);x.fill();
 if(dropping&&p.vy>0.3*D&&p.vy<0.36*D){x.strokeStyle='rgba(255,99,99,.5)';x.lineWidth=1.2*D;x.beginPath();x.arc(p.x,p.y,14*D,0,7);x.stroke()}}
 P=P.filter(p=>p.x<W+40*D&&p.y<H+40*D);t++;requestAnimationFrame(draw)}draw()})();
-document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?checkout[email]='+encodeURIComponent(e)}));
+document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?'+a.dataset.ls+'='+encodeURIComponent(e)}));
 </script></body></html>

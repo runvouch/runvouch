@@ -162,3 +162,32 @@ def test_weekly_report_gating():
     assert server.weekly_report(wed) == 0
     assert server.weekly_report(mon) == 0
     assert server.q1("SELECT COUNT(*) n FROM reports_sent")["n"] >= 0
+
+
+def test_stripe_webhook():
+    import hmac, hashlib
+    server.STRIPE_WEBHOOK_SECRET = "whsec_test"
+    server.STRIPE_PRICE_PLANS = {"price_solo": "solo", "price_team": "team"}
+    n = [0]
+    def send(typ, obj):
+        n[0] += 1
+        body = json.dumps({"id": f"evt_{n[0]}", "type": typ, "data": {"object": obj}}).encode()
+        ts = str(int(time.time()))
+        sig = hmac.new(b"whsec_test", f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+        return c.post("/webhooks/stripe", content=body, headers={"Stripe-Signature": f"t={ts},v1={sig}", "Content-Type": "application/json"})
+    assert c.post("/webhooks/stripe", content=b"{}", headers={"Stripe-Signature": "t=1,v1=bad"}).status_code == 401
+    # signup first, then pay with the same email
+    c.post("/signup", json={"email": "stripe.user@example.com"})
+    r = send("checkout.session.completed", {"customer": "cus_1", "subscription": "sub_1", "payment_status": "paid",
+                                            "customer_details": {"email": "Stripe.User@example.com"}, "metadata": {"plan": "team", "price": "price_team"}})
+    assert r.status_code == 200 and r.json()["plan"] == "team" and r.json()["matched"]
+    assert server.q1("SELECT plan, stripe_customer_id FROM accounts WHERE email='stripe.user@example.com'")["stripe_customer_id"] == "cus_1"
+    # later events carry only the customer id
+    send("customer.subscription.updated", {"id": "sub_1", "customer": "cus_1", "status": "active", "items": {"data": [{"price": {"id": "price_solo"}}]}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='stripe.user@example.com'")["plan"] == "solo"
+    send("customer.subscription.deleted", {"id": "sub_1", "customer": "cus_1", "status": "canceled"})
+    assert server.q1("SELECT plan FROM accounts WHERE email='stripe.user@example.com'")["plan"] == "free"
+    # paid before signing up: account is created on the paid plan
+    send("checkout.session.completed", {"customer": "cus_2", "payment_status": "paid", "customer_details": {"email": "first.pay@example.com"},
+                                        "line_items": {"data": [{"price": {"id": "price_solo"}}]}})
+    assert server.q1("SELECT plan FROM accounts WHERE email='first.pay@example.com'")["plan"] == "solo"

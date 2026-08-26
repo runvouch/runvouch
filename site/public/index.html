@@ -107,10 +107,10 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
 <div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram &amp; webhook alerts</li><li>7-day history</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts</li></ul>' + ('<a class="btn" href="https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22" data-ls>Upgrade to Solo — $9/mo</a>' if LS_LIVE else '<a class="btn" href="/contact?topic=billing">Start free — paid plans open Sept 2026</a>') + '</div>
-<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>Slack &amp; PagerDuty</li><li>Shared dashboard</li><li>API export</li></ul>' + ('<a class="btn ghost" href="https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9" data-ls>Upgrade to Team — $29/mo</a>' if LS_LIVE else '<a class="btn ghost" href="/contact?topic=billing">Request Team plan</a>') + '</div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts</li></ul><a class="btn" href="/contact?topic=billing">Start free — paid plans open Sept 2026</a></div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>Slack &amp; PagerDuty</li><li>Shared dashboard</li><li>API export</li></ul><a class="btn ghost" href="/contact?topic=billing">Request Team plan</a></div>
 </div>
-<div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Lemon Squeezy; upgrade with the same email you sign up with.</p>
+<div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Stripe; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free API key</button></form>
 <div id="keybox" class="keybox"></div></div>
 </div></section>
@@ -158,5 +158,5 @@ const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,18*D);g.addColorStop(0,`rgba(${
 x.fillStyle=dropping?'#FFC8C8':'#EAFFF4';x.beginPath();x.arc(p.x,p.y,3*D,0,7);x.fill();
 if(dropping&&p.vy>0.3*D&&p.vy<0.36*D){x.strokeStyle='rgba(255,99,99,.5)';x.lineWidth=1.2*D;x.beginPath();x.arc(p.x,p.y,14*D,0,7);x.stroke()}}
 P=P.filter(p=>p.x<W+40*D&&p.y<H+40*D);t++;requestAnimationFrame(draw)}draw()})();
-document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?checkout[email]='+encodeURIComponent(e)}));
+document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?'+a.dataset.ls+'='+encodeURIComponent(e)}));
 </script></body></html>
