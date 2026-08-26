@@ -167,6 +167,9 @@ PAGES: dict[str, tuple[str, str, str]] = {}  # path -> (title, desc, body)
 
 
 def page(path, title, desc, body, ld=None, article=False):
+    if path.startswith("/vs/"):  # comparison tables: yes/no cells coloured like the home-page table
+        body = re.sub(r'<td>(yes\b[^<]*)</td>', r'<td class="y">\1</td>', body)
+        body = re.sub(r'<td>(no\b[^<]*)</td>', r'<td class="n">\1</td>', body)
     html = head(title, desc, path, ld, article) + body + FOOTER
     if path == "/":
         p = OUT / "index.html"
