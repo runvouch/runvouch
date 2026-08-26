@@ -770,8 +770,7 @@ async def polar_webhook(request: Request):
             mail = ("canceled", POLAR_PRODUCT_PLANS.get(product, old_plan), obj.get("ends_at") or obj.get("current_period_end"), None)
         elif name == "subscription.revoked":
             mail = ("ended", POLAR_PRODUCT_PLANS.get(product, old_plan), None, None)
-        elif name == "order.refunded" and plan == "free":
-            mail = ("refunded", POLAR_PRODUCT_PLANS.get(product, old_plan), None, None)
+        # refunds: Polar's receipt already confirms it; no second mail from us
     if mail:
         _send_billing(mail[0], to, mail[1], mail[2], mail[3])
     return {"ok": True, "event": name, "plan": plan, "matched": bool(acc), "mail": mail[0] if mail else None}
