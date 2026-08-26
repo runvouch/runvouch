@@ -18,3 +18,8 @@ docs/LEMONSQUEEZY.md
 shot.py
 site/public/ph/
 data/
+packaging/pypi/runvouch/
+packaging/pypi/dist/
+packaging/pypi/build/
+packaging/pypi/*.egg-info/
+packaging/pypi/LICENSE
