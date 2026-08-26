@@ -3,6 +3,8 @@
 Turns every headless / scheduled Claude Code run into a watched run:
 `SessionStart → run start`, `PostToolUse → tool event (retry-storm + cost detection)`, `Stop → run end (+ evidence)`.
 
+Every finished run gets a tamper-evident proof (hashed record, public daily chain, Bitcoin anchor): `rv proof RUN_ID --verify`, see https://runvouch.com/docs/proof
+
 ## Install
 ```
 /plugin marketplace add runvouch/claude-plugin

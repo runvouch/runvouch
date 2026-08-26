@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0B1020">
+<title>Prove what your AI agent did: an audit trail for…</title><meta name="description" content="A real, tamper-evident proof of one agent run: hashed record, public daily Merkle chain, Bitcoin anchor. How to verify it with a stdlib script, and what it cannot prove."><link rel="canonical" href="https://runvouch.com/blog/prove-what-your-ai-agent-did-audit-trail-for-unattended-agents">
+<meta property="og:type" content="article"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="Prove what your AI agent did: an audit trail for…"><meta property="og:description" content="A real, tamper-evident proof of one agent run: hashed record, public daily Merkle chain, Bitcoin anchor. How to verify it with a stdlib script, and what it cannot prove."><meta property="og:url" content="https://runvouch.com/blog/prove-what-your-ai-agent-did-audit-trail-for-unattended-agents"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/logo.svg?v=c398f6cc" type="image/svg+xml"><link rel="icon" href="/favicon.png?v=c398f6cc" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v=c398f6cc"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.c398f6cc.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}, {"@context": "https://schema.org", "@type": "Article", "headline": "Prove what your AI agent did: an audit trail for unattended agents", "description": "A real, tamper-evident proof of one agent run: hashed record, public daily Merkle chain, Bitcoin anchor. How to verify it with a stdlib script, and what it cannot prove.", "datePublished": "2026-08-25", "dateModified": "2026-08-25", "author": {"@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com"}, "publisher": {"@type": "Organization", "name": "RunVouch", "logo": {"@type": "ImageObject", "url": "https://runvouch.com/logo.svg"}}, "mainEntityOfPage": "https://runvouch.com/blog/prove-what-your-ai-agent-did-audit-trail-for-unattended-agents", "image": "https://runvouch.com/og.png"}]</script></head><body>
+<div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig"></canvas></div>
+<header class="top"><div class="wrap nav"><a class="brand" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RunVouch">
+<circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
+<path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · 2026-08-25 · RunVouch</p><h1>Prove what your AI agent did: an audit trail for unattended agents</h1><p class="lead muted">A real, tamper-evident proof of one agent run: hashed record, public daily Merkle chain, Bitcoin anchor. How to verify it with a stdlib script, and what it cannot prove.</p><p>Last night an agent of mine ran at 02:00, wrote a file, and exited 0. I know this because RunVouch told me. But "RunVouch told me" is not something I can hand to an auditor. This post is about the part that shipped this week: a record per run that nobody, including me, can edit afterwards without it showing, and a script that checks it without calling our API.</p>
+
+<h2>Why a log is not enough</h2>
+<p>A log file proves that someone wrote a log file. If your agent runs unattended and a customer, a compliance officer or a regulator later asks "show me what it did on the 25th", a text file on the same box that runs the agent answers the question with "trust me". For most teams that was fine until this year. It is getting less fine for three reasons.</p>
+<p>First, regulation. The EU AI Act introduces logging and record-keeping duties for high-risk AI systems: the system must be able to record events automatically over its lifetime, and deployers must keep those logs for at least six months (<a href="https://artificialintelligenceact.eu/article/12/">Article 12</a> and <a href="https://artificialintelligenceact.eu/article/26/">Article 26</a>; most of these obligations apply from 2 August 2026). Whether your agent is high-risk is a question for your counsel, not for me. If it is, an editable log is a weak log. And to be clear: RunVouch does not make anyone compliant. It gives you a record an auditor can verify themselves.</p>
+<p>Second, customers. When the output of an agent is the product (a nightly digest, an enriched list, a report), the buyer increasingly wants to know it ran on time, produced the thing and cost what you said.</p>
+<p>Third, incidents. After a bad night the first question is "what happened", the second is "is this record the original". The second one is the hard one.</p>
+
+<h2>What a proof looks like</h2>
+<p>This is a real proof, fetched with <code>rv proof 1a19989090b6f268</code> for a run of 25 August. It contains hashes and numbers, nothing else, so there is nothing to redact:</p>
+<pre>{
+  "run_id": "1a19989090b6f268",
+  "record": {
+    "run_id": "1a19989090b6f268",
+    "agent": "health-smart-money-13f",
+    "account_id": 1,
+    "started": 1787676816.2562478,
+    "ended": 1787676821.2587738,
+    "status": "ok",
+    "cost": 0.0, "tokens": 0, "tool_calls": 0, "output_bytes": 14,
+    "evidence": {}, "evidence_ok": 1,
+    "source": "cron", "exit": 0,
+    "tool_events_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "leaf_hash":        "5ffce31f6834c91f56d0de332fd42f8f9dffe942a9bcdefdeb3a2d9f08b86a3d",
+  "stored_leaf_hash": "5ffce31f6834c91f56d0de332fd42f8f9dffe942a9bcdefdeb3a2d9f08b86a3d",
+  "date": "2026-08-25",
+  "merkle_path": [
+    ["51b100b29618cb10244793b08ecd89a7eac14a60dd5ac0ee529b6196c151687a", "right"],
+    ["cc81c8fe2e56979ddd25091b52273eb304975b4a0f40410de49d3e28d13dbcf0", "right"],
+    ["5494215feb161f53f94e956f25c88c3e07c2fb1b5c9af20f4d5dc2b864a5da4c", "right"],
+    ["600c3f2670d839a1250e210508152454f7d4cbd55d0ef09ac77415a4128ac184", "right"]
+  ],
+  "root":       "f49af4df6074ec71de34400d835b725439aa87a4b9d1ac1e05ed26b6d4e015a6",
+  "sealed": true,
+  "chain_hash": "4cdcf3566b0b3e6eb68ed2f7df6a39755dd64da6c66e334eac7df6422dea6370",
+  "prev":       "0000000000000000000000000000000000000000000000000000000000000000",
+  "ots_status": "pending",
+  "verify_url": "https://api.runvouch.com/proof/days/2026-08-25.json",
+  "ots_url":    "https://api.runvouch.com/proof/days/2026-08-25.ots"
+}</pre>
+<p>Reading it top to bottom: <code>record</code> is the run as one JSON object with fixed keys. <code>leaf_hash</code> is the sha256 of that object in canonical form (sorted keys, no spaces). <code>stored_leaf_hash</code> is the hash written in the same database transaction that ended the run; if the row changed later, these two would differ. <code>merkle_path</code> is the list of sibling hashes that leads from this leaf to the <code>root</code> of the day. <code>chain_hash</code> ties the day to the previous one, and <code>prev</code> is 64 zeros here because 25 August is the first sealed day. <code>ots_status: pending</code> means the day file was stamped with OpenTimestamps and the Bitcoin block was not in yet when I fetched this.</p>
+<p>The day file itself is public, no key needed: <a href="https://api.runvouch.com/proof/days/2026-08-25.json">api.runvouch.com/proof/days/2026-08-25.json</a>, thirteen runs from every account that day, listed as random run ids and leaves. The index of all sealed days is at <a href="https://api.runvouch.com/proof/">api.runvouch.com/proof/</a>.</p>
+
+<h2>Verifying it without us</h2>
+<p><a href="https://github.com/runvouch/runvouch/blob/main/templates/verify_proof.py">verify_proof.py</a> is a Python 3 script, standard library only, short enough to read before you run it. Give it the proof and the day file:</p>
+<pre>python3 verify_proof.py proof.json 2026-08-25.json
+PASS leaf hash matches the record
+PASS merkle path leads to the root
+PASS day file lists this run with this leaf
+PASS day file root recomputed from its leaves
+PASS chain hash of the day
+date 2026-08-25 runs 13 chain 4cdcf3566b0b3e6e... ots pending
+VERIFIED</pre>
+<p>Then I changed <code>cost</code> in the record from 0.0 to 0.01 and ran it again:</p>
+<pre>FAIL leaf hash matches the record  computed 4178697a28c799a9ee597f81e5ab402d7fc26602072d15ffca12b6dcae2b5733
+FAIL merkle path leads to the root  computed 0848cd92f876625b6d8b5ae7fa22ad0c0111e1ee39d4d056c8df2b236584d928
+FAIL day file lists this run with this leaf
+PASS day file root recomputed from its leaves
+PASS chain hash of the day
+NOT VERIFIED</pre>
+<p>Exit code 1. The day file is still internally consistent (the last two lines pass) because I did not touch it; the edited record simply is not in it. That is the whole point: to make an edit stick, you would have to change the public day file that every other customer can also download, and then the Bitcoin attestation would no longer match.</p>
+<p>The Bitcoin part uses the open-source OpenTimestamps client, not our code: <code>pip install opentimestamps-client</code>, download the <code>.ots</code> file next to the day file, <code>ots verify 2026-08-25.ots -f 2026-08-25.json</code>. With a local Bitcoin node it checks the block header; without one it tells you which block to look up.</p>
+
+<h2>The limits, plainly</h2>
+<ul>
+<li>The record has no content. It proves that a run with these numbers and these evidence verdicts ended at that time. It does not prove what the agent wrote. If you need the output under seal, hash the file yourself and pass the hash as an evidence check; then it is in the record.</li>
+<li>The record is what your client reported. A client that lies about cost gets its lie preserved faithfully. The chain rules out editing afterwards, not lying at the time.</li>
+<li>A run that never called run end (killed, stalled) has no leaf.</li>
+<li>Until the UTC day is sealed, the proof endpoint returns <code>sealed: false</code>. That is our word, not a proof, for up to 24 hours.</li>
+<li>OpenTimestamps proves the day file existed before a block, not that it did not exist earlier. Ordering between days comes from the chain hash.</li>
+<li>If the ots client or a calendar server is down, the day is sealed without an anchor and the index says so. We do not backfill anchors quietly.</li>
+</ul>
+
+<h2>What to do with it</h2>
+<p>Nothing, most days. The proof is written whether you look or not, on every plan including Free. When someone asks, <code>rv proof RUN_ID --verify</code> gives them the JSON and a zero exit code, and the script and the public day file let them check it on their own machine. The mechanism, key by key, is on <a href="/docs/proof">docs/proof</a>; who needs it and the questions an auditor will ask are on <a href="/verifiable-agent-runs">verifiable agent runs</a>.</p>
+
+<h2>Sources</h2><ul class="muted"><li><a href="https://runvouch.com/docs/proof" rel="noopener">RunVouch docs — verifiable runs (what is hashed, limits)</a></li><li><a href="https://api.runvouch.com/proof/" rel="noopener">Public proof index, api.runvouch.com/proof/</a></li><li><a href="https://api.runvouch.com/proof/days/2026-08-25.json" rel="noopener">Day file 2026-08-25</a></li><li><a href="https://github.com/runvouch/runvouch/blob/main/templates/verify_proof.py" rel="noopener">verify_proof.py, standalone verifier</a></li><li><a href="https://opentimestamps.org/" rel="noopener">OpenTimestamps</a></li><li><a href="https://github.com/opentimestamps/opentimestamps-client" rel="noopener">OpenTimestamps client</a></li><li><a href="https://artificialintelligenceact.eu/article/12/" rel="noopener">EU AI Act, Article 12 (record-keeping)</a></li><li><a href="https://artificialintelligenceact.eu/article/26/" rel="noopener">EU AI Act, Article 26 (obligations of deployers)</a></li></ul><h2>Related field notes</h2><ul><li><a href="/blog/claude-code-cron-unexpected-api-bill-runaway-cost-overnight">My Claude Code cron ran up $1,800 in two nights — the watchdog that stops it at $2</a></li><li><a href="/blog/claude-code-routine-failed-silently-scheduled-task-didnt-run">Claude Code Routine failed silently? How to know your scheduled agent actually ran</a></li><li><a href="/blog/dead-mans-switch-for-ai-agents">The dead man's switch for AI agents (and why a ping isn't enough)</a></li></ul><hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
+<circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
+<path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>RunVouch</div>
+<p class="small" style="margin-top:.6rem">The watchdog for unattended AI agents: proof they did the job, and an alert the moment they don't — or start spending. (For the ops crowd: a dead man's switch, cost cap and outcome check.)</p>
+
+<ul class="avail" aria-label="Available on"><li><a href="https://pypi.org/project/runvouch/">PyPI</a></li><li><a href="https://www.npmjs.com/package/runvouch">npm</a></li><li><a href="https://github.com/runvouch/vouch-action">GitHub Action</a></li><li><a href="https://github.com/runvouch/claude-plugin">Claude Code plugin</a></li><li><a href="https://registry.modelcontextprotocol.io/?search=runvouch">MCP Registry</a></li><li><a href="https://smithery.ai/servers/runvouch/runvouch">Smithery</a></li><li><a href="https://glama.ai/mcp/servers/runvouch/runvouch">Glama</a></li></ul>
+<p class="small muted">© 2026 RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Docs</h4><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
+<div><h4>Compare</h4><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<script>
+const API="https://api.runvouch.com";
+async function signup(e){e.preventDefault();const k=document.getElementById('keybox');k.classList.add('show');k.innerHTML='<pre>…</pre>';
+try{const r=await fetch(API+'/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('em').value})});
+const j=await r.json();if(!r.ok){k.innerHTML='<div class="alertbox">'+(j.detail||('Error '+r.status))+'</div>';return}
+if(j.sent){k.innerHTML='<div class="alertbox">This address already has an account. We just e-mailed a fresh key to it (the old one stopped working). Check your inbox, then <a href="/app">open the dashboard</a>.</div>';return}
+k.innerHTML='<pre><span class="d"># Your key — shown once. Store it now.</span>\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\nexport RUNVOUCH_URL='+API+'\n\n<span class="d"># Install the client, register an agent, wrap your job</span>\npip install runvouch   <span class="d"># or: curl -fsSL https://runvouch.com/rv -o ~/bin/rv</span>\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\'s report"</pre><p class="small muted">Free plan: 3 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
+catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}return false}
+
+(function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
+document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});setTimeout(()=>document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in')),1800);document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
+function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
+function add(rand){const y=lanes[Math.floor(Math.random()*lanes.length)];P.push({x:rand?Math.random()*W:-30*D,y,y0:y,v:(0.35+Math.random()*0.5)*D,life:0,fail:Math.random()<0.14,failAt:600+Math.random()*900,vy:0,trail:[]})}
+R();addEventListener('resize',R);
+function draw(){x.clearRect(0,0,W,H);x.lineWidth=1*D;x.strokeStyle='rgba(169,180,214,.11)';for(const y of lanes){x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}
+if(t%95===0)add(false);
+for(const p of P){p.life++;const dropping=p.fail&&p.life>p.failAt;
+if(dropping){p.vy+=0.045*D;p.y+=p.vy;p.x+=p.v*0.6}else{p.x+=p.v;p.y=p.y0+Math.sin(t*0.02+p.x*0.002)*1.2*D}
+p.trail.push([p.x,p.y]);if(p.trail.length>46)p.trail.shift();
+const col=dropping?'255,99,99':'62,207,142';
+for(let i=1;i<p.trail.length;i++){const a=(i/p.trail.length)*(dropping?.7:.5);x.strokeStyle=`rgba(${col},${a})`;x.lineWidth=(dropping?2.6:2.2)*D;x.beginPath();x.moveTo(...p.trail[i-1]);x.lineTo(...p.trail[i]);x.stroke()}
+const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,18*D);g.addColorStop(0,`rgba(${col},.95)`);g.addColorStop(.3,`rgba(${col},.4)`);g.addColorStop(1,`rgba(${col},0)`);x.fillStyle=g;x.beginPath();x.arc(p.x,p.y,18*D,0,7);x.fill();
+x.fillStyle=dropping?'#FFC8C8':'#EAFFF4';x.beginPath();x.arc(p.x,p.y,3*D,0,7);x.fill();
+if(dropping&&p.vy>0.3*D&&p.vy<0.36*D){x.strokeStyle='rgba(255,99,99,.5)';x.lineWidth=1.2*D;x.beginPath();x.arc(p.x,p.y,14*D,0,7);x.stroke()}}
+P=P.filter(p=>p.x<W+40*D&&p.y<H+40*D);t++;requestAnimationFrame(draw)}draw()})();
+document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()=>{const e=(document.getElementById('em')||{}).value;if(e)a.href=a.href.split('?')[0]+'?'+a.dataset.ls+'='+encodeURIComponent(e)}));
+</script></body></html>

@@ -3,7 +3,7 @@
 <meta property="og:type" content="website"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="RunVouch — the watchdog for unattended AI agents"><meta property="og:description" content="Proof your scheduled AI agents did the job, and an alert the moment they don't — or start spending. Claude Code Routines, headless claude -p, OpenClaw, n8n, cron."><meta property="og:url" content="https://runvouch.com/"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/logo.svg?v=c398f6cc" type="image/svg+xml"><link rel="icon" href="/favicon.png?v=c398f6cc" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v=c398f6cc"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.c398f6cc.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "url": "https://runvouch.com", "applicationCategory": "DeveloperApplication", "operatingSystem": "Any", "description": "RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron). It alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting, or reported success without evidence.", "offers": [{"@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free"}, {"@type": "Offer", "price": "9", "priceCurrency": "USD", "name": "Solo"}, {"@type": "Offer", "price": "29", "priceCurrency": "USD", "name": "Team"}]}, {"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}]</script></head><body>
+<link rel="stylesheet" href="/assets/style.c398f6cc.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "url": "https://runvouch.com", "applicationCategory": "DeveloperApplication", "operatingSystem": "Any", "description": "RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron). It alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting, or reported success without evidence. Every finished run gets a tamper-evident proof: a hashed record, a public daily Merkle chain and a Bitcoin anchor via OpenTimestamps.", "offers": [{"@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free"}, {"@type": "Offer", "price": "9", "priceCurrency": "USD", "name": "Solo"}, {"@type": "Offer", "price": "29", "priceCurrency": "USD", "name": "Team"}]}, {"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}]</script></head><body>
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig"></canvas></div>
 <header class="top"><div class="wrap nav"><a class="brand" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RunVouch">
 <circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
@@ -14,9 +14,9 @@
 <div class="wrap hero-inner"><div>
 <span class="eyebrow reveal"><i></i>watching agents that run while you sleep</span>
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
-<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right.</p>
+<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right. Every finished run gets a tamper-evident proof you can verify without us.</p>
 <div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
-<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span></div>
+<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span><span>tamper-evident proof per run</span></div>
 </div>
 <div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · what the dashboard shows</div>
 <ul class="runs">
@@ -53,6 +53,18 @@ nightly-report   ok   $0.41   0 alerts</pre></div>
 </div>
 </div></section>
 
+<section class="alt" id="proof"><div class="wrap">
+<span class="kicker">verifiable runs</span><h2>Prove what your agent did, <span class="grad">to anyone</span></h2>
+<p class="muted">An alert tells you tonight. A proof tells an auditor, a customer or your future self next year. Every finished run gets one, on every plan, Free included.</p>
+<div class="grid g3">
+<div class="card"><h3>A record per run</h3><p>When a run ends, its facts (agent, start, end, status, cost, tokens, tool calls, evidence verdicts) become one JSON object and a sha256 leaf. Written once, never updated.</p></div>
+<div class="card"><h3>A public daily chain</h3><p>Every UTC day the leaves of all runs form a Merkle root, chained to the previous day. The day file is public at <a href="https://api.runvouch.com/proof/">api.runvouch.com/proof/</a>, no login.</p></div>
+<div class="card"><h3>A Bitcoin anchor</h3><p>Each day file is stamped with OpenTimestamps, so its existence is committed in a Bitcoin block. Check it with <code>ots verify</code>; no RunVouch code involved.</p></div>
+</div>
+<pre>rv proof RUN_ID --verify   <span class="d"># recomputes the leaf and the Merkle path against the public day file, exit 0 or 1</span></pre>
+<p class="small muted">Who needs this and how to verify without trusting us: <a href="/verifiable-agent-runs">verifiable agent runs</a> · the mechanism, byte for byte: <a href="/docs/proof">docs/proof</a></p>
+</div></section>
+
 
 <section><div class="wrap">
 <span class="kicker">platform reality</span><h2>Why a Routine alone <span class="grad">isn't enough</span></h2>
@@ -77,6 +89,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its 7-run baseline. The agent is quietly doing something else.</p></div>
 <div class="card"><h3><span class="tag">STALLED</span></h3><p>Started, no end, no heartbeat past the max runtime. Hung on a prompt nobody will answer.</p></div>
 <div class="card"><h3><span class="tag">COST</span></h3><p>Tokens and dollars per run, read straight from Claude Code transcripts. Weekly cost report per agent.</p></div>
+<div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector, a receipt: a hashed record per run, chained per day, anchored in Bitcoin. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>
 </div>
 <h3 style="margin-top:2rem">What the alert looks like</h3>
 <div class="grid g2">
@@ -107,9 +120,9 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <section id="start"><div class="wrap">
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
-<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts (no cooldown on MISSED and FAILED)</li></ul><a class="btn" href="https://buy.polar.sh/polar_cl_TWutXZxVmocC9i8o6SS0UXI9hG8V5mR8KlgJ12vrZNe" data-ls="customer_email">Upgrade to Solo — $9/mo</a></div>
-<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>PagerDuty incidents</li><li>Shared dashboard (viewer keys)</li><li>API export (CSV / JSON)</li></ul><a class="btn ghost" href="https://buy.polar.sh/polar_cl_XzTkjGGHRdRqlXbCVfbWLiTBWAd4IA9cq6ZjX227pU1" data-ls="customer_email">Upgrade to Team — $29/mo</a></div>
+<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts (no cooldown on MISSED and FAILED)</li><li>Verifiable proof per run</li></ul><a class="btn" href="https://buy.polar.sh/polar_cl_TWutXZxVmocC9i8o6SS0UXI9hG8V5mR8KlgJ12vrZNe" data-ls="customer_email">Upgrade to Solo — $9/mo</a></div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>PagerDuty incidents</li><li>Shared dashboard (viewer keys)</li><li>API export (CSV / JSON)</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="https://buy.polar.sh/polar_cl_XzTkjGGHRdRqlXbCVfbWLiTBWAd4IA9cq6ZjX227pU1" data-ls="customer_email">Upgrade to Team — $29/mo</a></div>
 </div>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Polar; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
@@ -132,7 +145,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 
 <ul class="avail" aria-label="Available on"><li><a href="https://pypi.org/project/runvouch/">PyPI</a></li><li><a href="https://www.npmjs.com/package/runvouch">npm</a></li><li><a href="https://github.com/runvouch/vouch-action">GitHub Action</a></li><li><a href="https://github.com/runvouch/claude-plugin">Claude Code plugin</a></li><li><a href="https://registry.modelcontextprotocol.io/?search=runvouch">MCP Registry</a></li><li><a href="https://smithery.ai/servers/runvouch/runvouch">Smithery</a></li><li><a href="https://glama.ai/mcp/servers/runvouch/runvouch">Glama</a></li></ul>
 <p class="small muted">© 2026 RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
-<div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
 <div><h4>Compare</h4><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>

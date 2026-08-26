@@ -3,6 +3,7 @@
 The watchdog for unattended AI agents. Alerts within minutes when a scheduled agent is
 MISSED, FAILED, reported success without evidence, stuck in a retry storm, over budget,
 drifting or stalled. Telegram, Slack, e-mail or webhook. Free for 3 agents.
+Every finished run gets a tamper-evident proof (hashed record, public daily chain, Bitcoin anchor): `rv proof RUN_ID --verify`, see https://runvouch.com/docs/proof
 
 ```bash
 pip install runvouch

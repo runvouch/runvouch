@@ -152,7 +152,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 {PH_BADGE}
 <ul class="avail" aria-label="Available on"><li><a href="https://pypi.org/project/runvouch/">PyPI</a></li><li><a href="https://www.npmjs.com/package/runvouch">npm</a></li><li><a href="https://github.com/runvouch/vouch-action">GitHub Action</a></li><li><a href="https://github.com/runvouch/claude-plugin">Claude Code plugin</a></li><li><a href="https://registry.modelcontextprotocol.io/?search=runvouch">MCP Registry</a></li><li><a href="https://smithery.ai/servers/runvouch/runvouch">Smithery</a></li><li><a href="https://glama.ai/mcp/servers/runvouch/runvouch">Glama</a></li></ul>
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
-<div><h4>Product</h4><a href="/#how">How it works</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
 <div><h4>Compare</h4><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
@@ -160,7 +160,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 
 ORG_LD = {"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": BASE, "logo": BASE + "/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}
 APP_LD = {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "url": BASE, "applicationCategory": "DeveloperApplication", "operatingSystem": "Any",
-          "description": "RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron). It alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting, or reported success without evidence.",
+          "description": "RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron). It alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting, or reported success without evidence. Every finished run gets a tamper-evident proof: a hashed record, a public daily Merkle chain and a Bitcoin anchor via OpenTimestamps.",
           "offers": [{"@type": "Offer", "price": "0", "priceCurrency": "USD", "name": "Free"}, {"@type": "Offer", "price": "9", "priceCurrency": "USD", "name": "Solo"}, {"@type": "Offer", "price": "29", "priceCurrency": "USD", "name": "Team"}]}
 
 CSS_HASH = hashlib.sha1(CSS.encode()).hexdigest()[:8]
@@ -206,9 +206,9 @@ HOME = f'''
 <div class="wrap hero-inner"><div>
 <span class="eyebrow reveal"><i></i>watching agents that run while you sleep</span>
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
-<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right.</p>
+<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right. Every finished run gets a tamper-evident proof you can verify without us.</p>
 <div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
-<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span></div>
+<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span><span>tamper-evident proof per run</span></div>
 </div>
 <div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · what the dashboard shows</div>
 <ul class="runs">
@@ -245,6 +245,18 @@ nightly-report   ok   $0.41   0 alerts</pre></div>
 </div>
 </div></section>
 
+<section class="alt" id="proof"><div class="wrap">
+<span class="kicker">verifiable runs</span><h2>Prove what your agent did, <span class="grad">to anyone</span></h2>
+<p class="muted">An alert tells you tonight. A proof tells an auditor, a customer or your future self next year. Every finished run gets one, on every plan, Free included.</p>
+<div class="grid g3">
+<div class="card"><h3>A record per run</h3><p>When a run ends, its facts (agent, start, end, status, cost, tokens, tool calls, evidence verdicts) become one JSON object and a sha256 leaf. Written once, never updated.</p></div>
+<div class="card"><h3>A public daily chain</h3><p>Every UTC day the leaves of all runs form a Merkle root, chained to the previous day. The day file is public at <a href="https://api.runvouch.com/proof/">api.runvouch.com/proof/</a>, no login.</p></div>
+<div class="card"><h3>A Bitcoin anchor</h3><p>Each day file is stamped with OpenTimestamps, so its existence is committed in a Bitcoin block. Check it with <code>ots verify</code>; no RunVouch code involved.</p></div>
+</div>
+<pre>rv proof RUN_ID --verify   <span class="d"># recomputes the leaf and the Merkle path against the public day file, exit 0 or 1</span></pre>
+<p class="small muted">Who needs this and how to verify without trusting us: <a href="/verifiable-agent-runs">verifiable agent runs</a> · the mechanism, byte for byte: <a href="/docs/proof">docs/proof</a></p>
+</div></section>
+
 
 <section><div class="wrap">
 <span class="kicker">platform reality</span><h2>Why a Routine alone <span class="grad">isn't enough</span></h2>
@@ -269,6 +281,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its 7-run baseline. The agent is quietly doing something else.</p></div>
 <div class="card"><h3><span class="tag">STALLED</span></h3><p>Started, no end, no heartbeat past the max runtime. Hung on a prompt nobody will answer.</p></div>
 <div class="card"><h3><span class="tag">COST</span></h3><p>Tokens and dollars per run, read straight from Claude Code transcripts. Weekly cost report per agent.</p></div>
+<div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector, a receipt: a hashed record per run, chained per day, anchored in Bitcoin. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>
 </div>
 <h3 style="margin-top:2rem">What the alert looks like</h3>
 <div class="grid g2">
@@ -299,9 +312,9 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <section id="start"><div class="wrap">
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
-<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts (no cooldown on MISSED and FAILED)</li></ul>{SOLO_BTN}</div>
-<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>PagerDuty incidents</li><li>Shared dashboard (viewer keys)</li><li>API export (CSV / JSON)</li></ul>{TEAM_BTN}</div>
+<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts (no cooldown on MISSED and FAILED)</li><li>Verifiable proof per run</li></ul>{SOLO_BTN}</div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>PagerDuty incidents</li><li>Shared dashboard (viewer keys)</li><li>API export (CSV / JSON)</li><li>Verifiable proof per run</li></ul>{TEAM_BTN}</div>
 </div>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by {PROCESSOR}; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
@@ -319,11 +332,86 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 </main>'''
 
 page("/", "RunVouch — the watchdog for unattended AI agents", "Proof your scheduled AI agents did the job, and an alert the moment they don't — or start spending. Claude Code Routines, headless claude -p, OpenClaw, n8n, cron.", HOME, [APP_LD, ORG_LD])
+VERIFY_FAQ = [
+    ("Does RunVouch make my agent compliant with the EU AI Act?", "No, and nobody can promise that with a tool. The Act introduces logging and record-keeping duties for providers and deployers of high-risk AI systems. RunVouch gives you one piece of that: a record per run that cannot be altered afterwards without it showing, and that an auditor can verify with a script rather than with your word. Whether your system is high-risk, and what else you must keep, is a question for your legal counsel."),
+    ("What exactly is in the record?", "run_id, agent, account_id, started, ended, status, cost, tokens, tool_calls, output_bytes, evidence (name to true/false), evidence_ok, source, exit (when reported) and tool_events_hash, a hash over the ordered tool events (tool name, input hash, ok flag, timestamp). Nothing else. Prompts, model output, tool inputs and file contents never reach RunVouch, so they are not in it."),
+    ("Can RunVouch change a record after the fact?", "Not without it showing. The leaf hash of the run is written in the same database transaction that ends the run, the leaves of the day are published in a public day file with a Merkle root, the root is chained to the previous day, and the day file is stamped in Bitcoin with OpenTimestamps. Changing one leaf changes the root that every other customer can see and that the Bitcoin attestation no longer matches."),
+    ("Do I need to trust RunVouch to verify a proof?", "No. templates/verify_proof.py is a standalone Python 3 script, standard library only, that recomputes the leaf, the Merkle path, the day root and the chain hash. The Bitcoin anchor is checked with the open-source OpenTimestamps client: ots verify DATE.json.ots -f DATE.json. Neither step calls RunVouch code."),
+    ("Which plans include proofs?", "All of them, including Free. Proofs are part of how runs are stored, not a feature we switch on. On Free the full run record is purged after 7 days, on Solo and Team after 90 days; the leaf hash stays in the public day file, so a proof you saved keeps verifying."),
+    ("When is a proof final?", "A day is sealed a few minutes after UTC midnight and anchored in Bitcoin some hours later. For a run that ended today, the proof endpoint returns sealed: false and a live root; until the seal it is our word, not a proof. ots_status tells you whether the Bitcoin block is in yet."),
+    ("What does the proof not prove?", "It does not show what the agent wrote. It shows that a run with these numbers and these evidence booleans ended at this time and was not edited afterwards. If your client reports wrong numbers, the proof preserves them faithfully. A run that never called run end (killed, stalled) has no leaf. OpenTimestamps proves existence before a block, not after."),
+]
+VERIFY_LD = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in VERIFY_FAQ]}
+page("/verifiable-agent-runs", "Verifiable AI agent runs: a tamper-evident audit trail | RunVouch",
+     "Prove what an AI agent did: a hashed record per run, a public daily Merkle chain, a Bitcoin anchor. Verify offline with a stdlib script. On every plan, Free included.",
+     '''<main><div class="wrap doc"><p class="small muted"><a href="/">RunVouch</a> / Verifiable agent runs</p>
+<h1>Prove what your AI agent did. <span class="grad">To anyone, without trusting us.</span></h1>
+<p class="lead muted">A tamper-evident record for every run of an unattended agent: what ran, when, with which evidence, at what cost. Hashed the moment the run ends, chained in a public daily file, anchored in Bitcoin. An auditor verifies it with a 60-line script and the open-source OpenTimestamps client. Included on every plan, Free too.</p>
+<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/docs/proof">Read the mechanism</a></p>
+
+<h2 id="who">Who needs this, and why now</h2>
+<p>An agent that runs while nobody watches produces two things: a result, and a claim that it produced the result. Until now the claim lived in a log file that the same team could edit. Three groups are starting to ask for more than that.</p>
+<ul>
+<li><b>Regulated teams.</b> The EU AI Act introduces logging and record-keeping duties: high-risk AI systems must be able to record events automatically over their lifetime (Article 12), and deployers must keep the logs the system generates for at least six months (Article 26). Most of those obligations apply from 2 August 2026 (source: <a href="https://artificialintelligenceact.eu/article/12/" rel="noopener">artificialintelligenceact.eu, Article 12</a> and <a href="https://artificialintelligenceact.eu/article/26/" rel="noopener">Article 26</a>). Whether your agent is high-risk is your counsel's call. If it is, a log you can alter is a weak log.</li>
+<li><b>Customers who buy the output of an agent.</b> A nightly research digest, an enrichment pipeline, a report for a client: the buyer wants to know it ran on time, produced the file and cost what you said. A proof they can check beats an invoice line.</li>
+<li><b>Anyone after an incident.</b> When a run went wrong, the first question is "what actually happened and when", and the second is "is this record the original". A record fixed at run end, chained with every other run of the day, answers the second question for good.</li>
+</ul>
+<p>Finance and compliance teams, internal audit, and engineers who have to hand something to those teams: this page is for you. RunVouch does not make anyone compliant. It gives you a record an auditor can verify themselves.</p>
+
+<h2 id="how">How it works, in five lines</h2>
+<ol>
+<li>When a run ends, RunVouch builds one JSON object with the facts of the run and stores its sha256, the <em>leaf</em>. Written once, in the same transaction that ends the run.</li>
+<li>Every UTC day, the leaves of all runs of all accounts form a Merkle tree. The top is the day <em>root</em>.</li>
+<li><code>chain_hash = sha256(prev + ":" + date + ":" + root)</code> links the day to the previous day. First day: 64 zeros.</li>
+<li>The day file (date, root, prev, chain hash, list of run_id and leaf) is public at <a href="https://api.runvouch.com/proof/">api.runvouch.com/proof/</a>. No login. Run ids are random; the file does not reveal who ran what.</li>
+<li>The day file is stamped with OpenTimestamps, which commits its hash in a Bitcoin block. The <code>.ots</code> file sits next to the day file.</li>
+</ol>
+<pre>rv proof RUN_ID            <span class="d"># the proof JSON: record, leaf, Merkle path, root, chain hash, ots status</span>
+rv proof RUN_ID --verify   <span class="d"># recomputes everything against the public day file; exit 0 or 1</span></pre>
+
+<h2 id="record">What is in the record, and what is not</h2>
+<p>The record has these keys and nothing else: <code>run_id, agent, account_id, started, ended, status, cost, tokens, tool_calls, output_bytes, evidence, evidence_ok, source, exit, tool_events_hash</code>. Evidence is a map of check names to true or false: the file changed, the URL returned 200, the assertion held. <code>tool_events_hash</code> covers the ordered tool events of the run: tool name, the input hash the client sent, ok flag, timestamp.</p>
+<p><b>Not in it:</b> prompts, model output, tool inputs, file contents, log lines. RunVouch never receives those, so it cannot hash them. That is a limit and a feature at once: the proof shows that a run with these numbers and these evidence verdicts ended at this time and was not edited afterwards. It does not show what the agent wrote. If you need the content itself under seal, hash the output file on your side and pass that hash as an evidence check; it then becomes part of the record.</p>
+<p>The record is built from what your client reported. If the client lies about cost, the proof preserves the lie faithfully. What the chain rules out is editing afterwards, by you or by us. The full list of limits is on <a href="/docs/proof#honest-limits">docs/proof</a>.</p>
+
+<h2 id="verify">Verify without trusting RunVouch</h2>
+<p>Two open tools, neither of them ours to run:</p>
+<pre>curl -H "X-API-Key: rv_..." https://api.runvouch.com/v1/runs/RUN_ID/proof > proof.json
+curl https://api.runvouch.com/proof/days/2026-08-25.json > day.json
+python3 verify_proof.py proof.json day.json
+PASS leaf hash matches the record
+PASS merkle path leads to the root
+PASS day file lists this run with this leaf
+PASS day file root recomputed from its leaves
+PASS chain hash of the day
+VERIFIED</pre>
+<p><a href="https://github.com/runvouch/runvouch/blob/main/templates/verify_proof.py">verify_proof.py</a> is Python 3, standard library only, about 60 lines you can read in full before you run it. Change one byte of the record and the first line reads FAIL with exit code 1. For the Bitcoin anchor:</p>
+<pre>pip install opentimestamps-client
+curl -O https://api.runvouch.com/proof/days/2026-08-25.ots
+ots verify 2026-08-25.ots -f day.json</pre>
+<p>With a local Bitcoin node this checks the block header itself; without one it tells you which block to look up in any explorer. A day whose <code>ots_status</code> still reads <code>pending</code> is sealed but not yet in a block; usually a matter of hours.</p>
+
+<h2 id="pricing">Pricing</h2>
+<p>Proofs are on every plan, including Free. They are part of how runs are stored, not an add-on. The plans differ in the number of agents, history and alert channels: <a href="/pricing">pricing</a>. On Free the full run record is purged after 7 days, on Solo and Team after 90; the leaf hash stays in the public day file, so a proof you saved keeps verifying after that.</p>
+
+<h2 id="faq">Questions an auditor will ask</h2>
+<div class="faq">''' + "".join(f"<details><summary>{q}</summary><p>{a}</p></details>" for q, a in VERIFY_FAQ) + '''</div>
+
+<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0">
+<h2>Start with one agent</h2>
+<p class="muted">Wrap the job, let it run once, fetch the proof, hand it to whoever asked. Free for 3 agents, no card.</p>
+<pre>pip install runvouch
+rv agent nightly-report --cadence 24h --evidence
+rv run nightly-report --evidence-file out/report.html -- claude -p "build tonight's report"
+rv proof RUN_ID --verify</pre>
+<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/docs/proof">The mechanism, byte for byte</a><a class="btn ghost" href="/blog/prove-what-your-ai-agent-did-audit-trail-for-unattended-agents">Field note with a real proof</a></p>
+</div></main>''', [ORG_LD, VERIFY_LD])
 
 PRICING_LD = {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "applicationCategory": "DeveloperApplication", "operatingSystem": "Any", "url": BASE + "/pricing",
-              "offers": [{"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "3 agents, all 8 detectors, e-mail, Telegram, Slack and webhook alerts, 7-day history"},
-                         {"@type": "Offer", "name": "Solo", "price": "9", "priceCurrency": "USD", "description": "15 agents, 90-day history, weekly cost report, priority alerts", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "9", "priceCurrency": "USD", "billingDuration": "P1M"}},
-                         {"@type": "Offer", "name": "Team", "price": "29", "priceCurrency": "USD", "description": "100 agents, 90-day history, PagerDuty incidents, shared dashboard, API export", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "29", "priceCurrency": "USD", "billingDuration": "P1M"}}]}
+              "description": "RunVouch watches unattended AI agents (Claude Code, OpenClaw, n8n, cron): alerts on missed, failed, looping, over-budget or unproven runs, and a verifiable, tamper-evident proof per run on every plan.",
+              "offers": [{"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "3 agents, all 8 detectors, e-mail, Telegram, Slack and webhook alerts, 7-day history, verifiable proof per run"},
+                         {"@type": "Offer", "name": "Solo", "price": "9", "priceCurrency": "USD", "description": "15 agents, 90-day history, weekly cost report, priority alerts, verifiable proof per run", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "9", "priceCurrency": "USD", "billingDuration": "P1M"}},
+                         {"@type": "Offer", "name": "Team", "price": "29", "priceCurrency": "USD", "description": "100 agents, 90-day history, PagerDuty incidents, shared dashboard, API export, verifiable proof per run", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "29", "priceCurrency": "USD", "billingDuration": "P1M"}}]}
 # ───────────────────────── PRICING ─────────────────────────
 PRICING_FAQ = '''<section class="alt faq"><div class="wrap"><span class="kicker">faq</span><h2>What the plans mean, exactly</h2>
 <details><summary>What does "history" mean?</summary><p>How long RunVouch keeps your runs, tool events and acknowledged alerts: 7 days on Free, 90 days on Solo and Team. A purge runs once a day and deletes what is older than your window. Open alerts stay until you acknowledge them. Runs that are part of a sealed proof day keep their leaf hash, so <a href="/docs/proof">proofs still verify</a> after the full record is gone.</p></details>
@@ -543,7 +631,7 @@ doc("/docs/api", "RunVouch HTTP API", "REST API reference for RunVouch: agents, 
      ("Alert webhook payload", '<pre>{"kind":"RETRY_STORM","agent":"repo-janitor","run_id":"9808c5af…","message":"tool \'Bash\' called 41x with identical input in one run.","ts":1787673506.3}</pre>')])
 
 page("/docs/", "RunVouch documentation", "Guides for monitoring Claude Code, cron jobs, OpenClaw, n8n and the MCP server with RunVouch.", '''<main><div class="wrap doc"><h1>Documentation</h1><p class="lead muted">Pick your runtime. Every guide is copy-paste and takes under five minutes.</p>
-<div class="grid g2"><a class="card" href="/docs/claude-code"><h3>Claude Code</h3><p>Routines, headless claude -p, hooks plugin, transcript cost.</p></a><a class="card" href="/docs/cron"><h3>Cron &amp; scripts</h3><p>rv run for anything: Python, Node, bash, GitHub Actions.</p></a><a class="card" href="/docs/github-actions"><h3>GitHub Actions</h3><p>One step: MISSED when the schedule stops, NO_EVIDENCE when it fakes it.</p></a><a class="card" href="/docs/openclaw"><h3>OpenClaw</h3><p>Heartbeats, per-task runs, daily caps.</p></a><a class="card" href="/docs/n8n"><h3>n8n</h3><p>Two HTTP nodes; catch the failures Error Workflows miss.</p></a><a class="card" href="/docs/python-node"><h3>Python &amp; Node</h3><p>LangGraph, OpenAI Agents SDK, CrewAI, any script.</p></a><a class="card" href="/docs/templates"><h3>Agent templates</h3><p>Nightly 13F digest, Form D raises, hiring watch: copy, set keys, monitored.</p></a><a class="card" href="/docs/proof"><h3>Verifiable runs</h3><p>Hash per run, Merkle root per day, anchored in Bitcoin. Verify offline.</p></a><a class="card" href="/docs/alerts"><h3>Alert channels</h3><p>E-mail, Telegram, Slack, webhook, PagerDuty: one settings call each.</p></a><a class="card" href="/docs/mcp"><h3>MCP server</h3><p>Agents that check on agents.</p></a><a class="card" href="/docs/api"><h3>HTTP API</h3><p>Everything the CLI does, over REST.</p></a></div></div></main>''', [ORG_LD])
+<div class="grid g2"><a class="card" href="/docs/claude-code"><h3>Claude Code</h3><p>Routines, headless claude -p, hooks plugin, transcript cost.</p></a><a class="card" href="/docs/cron"><h3>Cron &amp; scripts</h3><p>rv run for anything: Python, Node, bash, GitHub Actions.</p></a><a class="card" href="/docs/github-actions"><h3>GitHub Actions</h3><p>One step: MISSED when the schedule stops, NO_EVIDENCE when it fakes it.</p></a><a class="card" href="/docs/openclaw"><h3>OpenClaw</h3><p>Heartbeats, per-task runs, daily caps.</p></a><a class="card" href="/docs/n8n"><h3>n8n</h3><p>Two HTTP nodes; catch the failures Error Workflows miss.</p></a><a class="card" href="/docs/python-node"><h3>Python &amp; Node</h3><p>LangGraph, OpenAI Agents SDK, CrewAI, any script.</p></a><a class="card" href="/docs/templates"><h3>Agent templates</h3><p>Nightly 13F digest, Form D raises, hiring watch: copy, set keys, monitored.</p></a><a class="card" href="/docs/proof"><h3>Verifiable runs</h3><p>Hash per run, Merkle root per day, anchored in Bitcoin. Verify offline. Need to show an auditor? Start at <span style="color:var(--acc2)">/verifiable-agent-runs</span>.</p></a><a class="card" href="/docs/alerts"><h3>Alert channels</h3><p>E-mail, Telegram, Slack, webhook, PagerDuty: one settings call each.</p></a><a class="card" href="/docs/mcp"><h3>MCP server</h3><p>Agents that check on agents.</p></a><a class="card" href="/docs/api"><h3>HTTP API</h3><p>Everything the CLI does, over REST.</p></a></div></div></main>''', [ORG_LD])
 
 
 # ───────────────────────── VS PAGES ─────────────────────────
@@ -578,7 +666,7 @@ s.textContent=r.ok?'Sent — we reply by email within one working day.':'Could n
 page("/status", "Status — RunVouch", "Live status of the RunVouch API, dashboard and alert delivery, checked from your browser against the production API.", '''<main><div class="wrap doc"><h1>Status</h1><p class="lead muted">Checked live from your browser against the API.</p><table><tr><th>Component</th><th>Status</th></tr><tr><td>API (api.runvouch.com)</td><td id="s-api">checking…</td></tr><tr><td>Dashboard</td><td id="s-app">checking…</td></tr><tr><td>Alert delivery (Telegram / e-mail / webhook)</td><td id="s-alerts">checking…</td></tr></table><p class="small muted" style="margin-top:1rem">Incidents are posted here and in the <a href="/changelog">changelog</a>.</p>
 <script>fetch(API+'/health').then(async r=>{document.getElementById('s-api').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>';try{const j=await r.json();const a=(j.checks||{}).alert_delivery;document.getElementById('s-alerts').innerHTML=a==='ok'?'<span class="pill ok">operational</span>':a==='idle'?'<span class="pill ok">idle (no alerts due)</span>':'<span class="pill bad">'+(a||'unknown')+'</span>'}catch(e){document.getElementById('s-alerts').textContent='unknown'}}).catch(()=>{document.getElementById('s-api').innerHTML='<span class="pill bad">unreachable</span>'});fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'})</script></div></main>''', [ORG_LD])
 page("/security", "Security — RunVouch", "What RunVouch stores, how keys are handled, and how to report a vulnerability.", '''<main><div class="wrap doc"><h1>Security</h1>
-<ul><li>API keys are stored as SHA-256 hashes; the plaintext key is shown once.</li><li>Tool inputs are hashed on the client or server for loop detection; prompts and outputs are never stored.</li><li>Evidence file checks run on your machine; only a boolean is transmitted.</li><li>Every finished run gets a hash that is chained per day and anchored in Bitcoin via OpenTimestamps, so a record cannot be altered afterwards without it showing; see <a href="/docs/proof">verifiable runs</a>.</li><li>All traffic is TLS via Cloudflare; infrastructure in the EU (Netherlands).</li><li>Per-key rate limits; alert credentials (Telegram token, webhook URL) are stored per account and used only to deliver your alerts.</li><li>Report vulnerabilities via the <a href="/contact?topic=security">contact form</a> (topic: security) — see <a href="/.well-known/security.txt">security.txt</a>.</li></ul></div></main>''', [ORG_LD])
+<ul><li>API keys are stored as SHA-256 hashes; the plaintext key is shown once.</li><li>Tool inputs are hashed on the client or server for loop detection; prompts and outputs are never stored.</li><li>Evidence file checks run on your machine; only a boolean is transmitted.</li><li>Every finished run gets a hash that is chained per day and anchored in Bitcoin via OpenTimestamps, so a record cannot be altered afterwards without it showing; see <a href="/docs/proof">verifiable runs</a>. An auditor can verify a run with a standalone script and <code>ots verify</code>, without trusting us: <a href="/verifiable-agent-runs">how</a>.</li><li>All traffic is TLS via Cloudflare; infrastructure in the EU (Netherlands).</li><li>Per-key rate limits; alert credentials (Telegram token, webhook URL) are stored per account and used only to deliver your alerts.</li><li>Report vulnerabilities via the <a href="/contact?topic=security">contact form</a> (topic: security) — see <a href="/.well-known/security.txt">security.txt</a>.</li></ul></div></main>''', [ORG_LD])
 page("/privacy", "Privacy — RunVouch", "RunVouch privacy policy: the run metadata and account data we process, what we never store (prompts, outputs), retention, and how to delete your data.", f'''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. Runs, tool events and acknowledged alerts are purged after the history window of your plan (7 days on Free, 90 days on Solo and Team); the per-run leaf hash stays in the public proof chain. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by {PROCESSOR}; card details never touch our servers. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
 page("/terms", "Terms — RunVouch", "RunVouch terms of service: early-access status, monthly plans that cancel any time, acceptable use, and liability limits in plain language.", '''<main><div class="wrap doc"><h1>Terms of service</h1><p>RunVouch is provided as-is during early access. Free plans may be rate-limited. Paid plans renew monthly and can be cancelled any time; the current period is not refunded. Don't use RunVouch to monitor anything illegal, and don't attack the service. We may change these terms with notice on this page. Governing law: the Netherlands.</p></div></main>''', [ORG_LD])
 page("/changelog", "Changelog — RunVouch", "What's new in RunVouch: releases of the API, CLI, Claude Code plugin, MCP server and detectors, with dates.", f'''<main><div class="wrap doc"><h1>Changelog</h1><h3>{TODAY} — 0.2 (early access)</h3><ul><li>Public launch on runvouch.com and api.runvouch.com.</li><li>Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.</li><li>Claude Code plugin with transcript-based cost; MCP server; zero-dependency <code>rv</code> CLI with fail-open.</li><li>Hashed keys, rate limits, self-serve signup, subscriptions via {PROCESSOR}.</li></ul></div></main>''', [ORG_LD])
@@ -591,6 +679,7 @@ SOURCES = {
     "claude-code-routine-failed-silently-scheduled-task-didnt-run": [("Claude Code docs — scheduled tasks, limitations", "https://code.claude.com/docs/en/scheduled-tasks#limitations"), ("Claude Code docs — routines", "https://code.claude.com/docs/en/routines")],
     "dead-mans-switch-for-ai-agents": [("Healthchecks.io docs", "https://healthchecks.io/docs/"), ("Claude Code issue #37686", "https://github.com/anthropics/claude-code/issues/37686")],
     "openclaw-stuck-in-polling-loop-150-no-alert": [("OpenClaw issue #16808", "https://github.com/openclaw/openclaw/issues/16808")],
+    "prove-what-your-ai-agent-did-audit-trail-for-unattended-agents": [("RunVouch docs — verifiable runs (what is hashed, limits)", "https://runvouch.com/docs/proof"), ("Public proof index, api.runvouch.com/proof/", "https://api.runvouch.com/proof/"), ("Day file 2026-08-25", "https://api.runvouch.com/proof/days/2026-08-25.json"), ("verify_proof.py, standalone verifier", "https://github.com/runvouch/runvouch/blob/main/templates/verify_proof.py"), ("OpenTimestamps", "https://opentimestamps.org/"), ("OpenTimestamps client", "https://github.com/opentimestamps/opentimestamps-client"), ("EU AI Act, Article 12 (record-keeping)", "https://artificialintelligenceact.eu/article/12/"), ("EU AI Act, Article 26 (obligations of deployers)", "https://artificialintelligenceact.eu/article/26/")],
     "7-ways-unattended-ai-agents-fail-silently": [("Claude Code issue #37686", "https://github.com/anthropics/claude-code/issues/37686"), ("OpenClaw issue #16808", "https://github.com/openclaw/openclaw/issues/16808"), ("dev.to — $437 overnight", "https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7")],
 }
 def _sources_html(art):
@@ -636,7 +725,7 @@ except Exception as e:
 (OUT / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(f"<url><loc>{BASE}{p}</loc><lastmod>{TODAY}</lastmod></url>" for p in PAGES) + "</urlset>")
 (OUT / "llms.txt").write_text(f"""# RunVouch
 
-> RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via e-mail, Telegram, Slack or webhook; PagerDuty on Team. History 7 days on Free, 90 days on Solo and Team. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
+> RunVouch is the watchdog for unattended AI agents, with a tamper-evident proof per run — a dead man's switch, cost cap and outcome check — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via e-mail, Telegram, Slack or webhook; PagerDuty on Team. History 7 days on Free, 90 days on Solo and Team. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
 
 Install: `pip install runvouch` (or `curl -fsSL {BASE}/rv -o ~/bin/rv && chmod +x ~/bin/rv`) then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.
@@ -649,6 +738,7 @@ API base: {API} (header X-API-Key).
 - [Cron & scripts]({BASE}/docs/cron): rv run for any job; GitHub Actions
 - [Python & Node]({BASE}/docs/python-node): LangGraph, OpenAI Agents SDK, CrewAI callbacks
 - [Agent templates]({BASE}/docs/templates): three copy-paste agents on official SEC and career-site data (DataSignals Lab), wrapped in rv run with evidence and cost caps
+- [Verifiable agent runs]({BASE}/verifiable-agent-runs): who needs a tamper-evident record of what an AI agent did (finance, compliance, EU AI Act logging and record-keeping duties, audits), what is and is not in the record, and how to verify it without trusting RunVouch
 - [Verifiable runs]({BASE}/docs/proof): every finished run gets a sha256 leaf, every UTC day a Merkle root chained to the previous day and stamped with OpenTimestamps (Bitcoin); public day files at {API}/proof/, offline verifier script
 - [Alert channels]({BASE}/docs/alerts): e-mail, Telegram, Slack incoming webhook and JSON webhook on every plan; PagerDuty Events API v2 on Team (incident per agent and kind, resolved on ack); Solo and Team deliver MISSED and FAILED without the 10-minute cooldown
 - [GitHub Actions]({BASE}/docs/github-actions) · [OpenClaw]({BASE}/docs/openclaw) · [n8n]({BASE}/docs/n8n) · [MCP server]({BASE}/docs/mcp) · [HTTP API]({BASE}/docs/api)

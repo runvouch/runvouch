@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "com.runvouch/runvouch",
-  "description": "The watchdog for unattended AI agents: agent health, alerts, run reports with evidence and cost.",
+  "description": "Watchdog for unattended AI agents: alerts, evidence checks and a verifiable proof per run.",
   "version": "0.3.3",
   "websiteUrl": "https://runvouch.com/docs/mcp",
   "remotes": [

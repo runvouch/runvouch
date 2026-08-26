@@ -1,6 +1,6 @@
 <p align="center"><img src="https://runvouch.com/logo-400.png" width="96" alt="RunVouch"></p>
 <h1 align="center">RunVouch</h1>
-<p align="center"><b>The watchdog for unattended AI agents — proof they did the job, and an alert the moment they don't (or start spending).</b><br>Claude Code Routines · headless <code>claude -p</code> · OpenClaw · n8n · cron</p>
+<p align="center"><b>The watchdog for unattended AI agents — proof they did the job, and an alert the moment they don't (or start spending), with a tamper-evident proof per run.</b><br>Claude Code Routines · headless <code>claude -p</code> · OpenClaw · n8n · cron</p>
 <p align="center"><a href="https://runvouch.com">Website</a> · <a href="https://runvouch.com/docs/">Docs</a> · <a href="https://runvouch.com/blog/">Field notes</a> · <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=runvouch">MCP Registry</a> · <a href="https://www.producthunt.com/products/runvouch">Product Hunt</a></p>
 <p align="center"><a href="https://pypi.org/project/runvouch/"><img src="https://img.shields.io/pypi/v/runvouch?label=pypi" alt="PyPI"></a> <a href="https://www.npmjs.com/package/runvouch"><img src="https://img.shields.io/npm/v/runvouch?label=npm" alt="npm"></a> <a href="https://github.com/runvouch/vouch-action"><img src="https://img.shields.io/badge/GitHub%20Action-vouch--action%40v1-2ea44f" alt="GitHub Action"></a> <a href="https://registry.modelcontextprotocol.io/?search=runvouch"><img src="https://img.shields.io/badge/MCP%20Registry-com.runvouch%2Frunvouch-4c8dff" alt="MCP Registry"></a> <a href="https://smithery.ai/servers/runvouch/runvouch"><img src="https://img.shields.io/badge/Smithery-runvouch%2Frunvouch-orange" alt="Smithery"></a> <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a></p>
 
@@ -11,6 +11,13 @@ pip install runvouch     # or: npm install -g runvouch  (zero-dependency client 
 rv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence
 rv run nightly-report --evidence-file out/report.html -- claude -p "build tonight's report"
 ```
+
+## Verifiable runs
+Every finished run gets a sha256 record, every UTC day a Merkle root chained to the previous day and stamped in Bitcoin with OpenTimestamps. The day files are public at https://api.runvouch.com/proof/ and `templates/verify_proof.py` (stdlib only) checks a proof without our code. On every plan, Free included.
+```
+rv proof RUN_ID --verify     # recomputes leaf + Merkle path against the public day file, exit 0 or 1
+```
+Mechanism and limits: https://runvouch.com/docs/proof · who needs it: https://runvouch.com/verifiable-agent-runs
 
 ## Detectors
 

@@ -1,6 +1,6 @@
 # RunVouch
 
-> RunVouch is the watchdog for unattended AI agents — a dead man's switch, cost cap and outcome check — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via e-mail, Telegram, Slack or webhook; PagerDuty on Team. History 7 days on Free, 90 days on Solo and Team. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
+> RunVouch is the watchdog for unattended AI agents, with a tamper-evident proof per run — a dead man's switch, cost cap and outcome check — Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via e-mail, Telegram, Slack or webhook; PagerDuty on Team. History 7 days on Free, 90 days on Solo and Team. Free for 3 agents; $9 Solo; $29 Team. Self-hostable (MIT).
 
 Install: `pip install runvouch` (or `curl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv`) then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.
@@ -13,6 +13,7 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [Cron & scripts](https://runvouch.com/docs/cron): rv run for any job; GitHub Actions
 - [Python & Node](https://runvouch.com/docs/python-node): LangGraph, OpenAI Agents SDK, CrewAI callbacks
 - [Agent templates](https://runvouch.com/docs/templates): three copy-paste agents on official SEC and career-site data (DataSignals Lab), wrapped in rv run with evidence and cost caps
+- [Verifiable agent runs](https://runvouch.com/verifiable-agent-runs): who needs a tamper-evident record of what an AI agent did (finance, compliance, EU AI Act logging and record-keeping duties, audits), what is and is not in the record, and how to verify it without trusting RunVouch
 - [Verifiable runs](https://runvouch.com/docs/proof): every finished run gets a sha256 leaf, every UTC day a Merkle root chained to the previous day and stamped with OpenTimestamps (Bitcoin); public day files at https://api.runvouch.com/proof/, offline verifier script
 - [Alert channels](https://runvouch.com/docs/alerts): e-mail, Telegram, Slack incoming webhook and JSON webhook on every plan; PagerDuty Events API v2 on Team (incident per agent and kind, resolved on ack); Solo and Team deliver MISSED and FAILED without the 10-minute cooldown
 - [GitHub Actions](https://runvouch.com/docs/github-actions) · [OpenClaw](https://runvouch.com/docs/openclaw) · [n8n](https://runvouch.com/docs/n8n) · [MCP server](https://runvouch.com/docs/mcp) · [HTTP API](https://runvouch.com/docs/api)
@@ -23,6 +24,7 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [The dead man's switch for AI agents (and why a ping isn't enough)](https://runvouch.com/blog/dead-mans-switch-for-ai-agents): A ping monitor knows a job ran. For an agent that is the least interesting fact. What a dead man's switch has to check when the job is an LLM.
 - [OpenClaw stuck in a polling loop: $150, a crash, and no alert — detect it in 60 seconds](https://runvouch.com/blog/openclaw-stuck-in-polling-loop-150-no-alert): An OpenClaw agent called the same tool 1,535 times in two hours. Every call looked fine. How a retry-storm rule and a daily cap catch this before the bill.
 - [7 ways unattended AI agents fail silently — and one check for each](https://runvouch.com/blog/7-ways-unattended-ai-agents-fail-silently): Seven ways a scheduled AI agent fails without an error — from a run that never starts to a run that does nothing — and the one detector that catches each.
+- [Prove what your AI agent did: an audit trail for unattended agents](https://runvouch.com/blog/prove-what-your-ai-agent-did-audit-trail-for-unattended-agents): A real, tamper-evident proof of one agent run: hashed record, public daily Merkle chain, Bitcoin anchor. How to verify it with a stdlib script, and what it cannot prove.
 
 ## Compare
 - [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)
