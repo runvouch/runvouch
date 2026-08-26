@@ -374,3 +374,204 @@ def test_chain_two_days_and_proof_endpoint(monkeypatch, tmp_path):
     from runvouch import cli
     monkeypatch.setattr(cli.urllib.request, "urlopen", lambda url, timeout=20: __import__("io").BytesIO(dayf.read_bytes()))
     assert cli.verify_proof(p) is True and cli.verify_proof(bad) is False
+
+
+# ───────────────────────────── plan features: channels, priority, retention, export, viewer keys ─────────────────────────────
+def _acct(plan):
+    k = c.post("/admin/accounts", params={"name": "p-" + plan, "plan": plan}, headers={"X-Admin-Token": "adm"}).json()["api_key"]
+    return k, {"X-API-Key": k}
+
+
+def test_slack_channel(monkeypatch):
+    sent = []
+    monkeypatch.setattr(server, "_webhook", lambda url, payload: sent.append((url, payload)) or True)
+    assert c.put("/v1/settings", json={"slack_webhook_url": "https://example.com/not-slack"}, headers=H).status_code == 422
+    assert c.put("/v1/settings", json={"slack_webhook_url": "https://hooks.slack.com/services/T0/B0/x"}, headers=H).status_code == 200
+    assert c.get("/v1/me", headers=H).json()["channels"]["slack"] is True
+    c.post("/v1/agents", json={"name": "slacky"}, headers=H)
+    rid = c.post("/v1/runs/start", json={"agent": "slacky"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "fail", "meta": {"error": "kaput"}}, headers=H)
+    aid = [a for a in alerts("FAILED") if a["run_id"] == rid][0]["id"]
+    server._deliver(aid)
+    slack = [p for u, p in sent if u.startswith("https://hooks.slack.com/")]
+    assert slack and "kaput" in slack[0]["text"] and slack[0]["blocks"][0]["type"] == "header"
+    assert "FAILED" in slack[0]["blocks"][0]["text"]["text"] and "slacky" in json.dumps(slack[0]["blocks"][1])
+    assert "runvouch.com/app" in json.dumps(slack[0]["blocks"][-1])
+    assert server.q1("SELECT delivered FROM alerts WHERE id=?", aid)["delivered"] == 1
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET slack_webhook_url=NULL WHERE id=(SELECT account_id FROM alerts WHERE id=?)", (aid,))
+
+
+def test_pagerduty_team_only_trigger_and_resolve(monkeypatch):
+    calls = []
+    monkeypatch.setattr(server, "_pagerduty", lambda rk, action, dedup, summary="", severity="error", details=None: calls.append((rk, action, dedup, severity)) or True)
+    fk, fh = _acct("free")
+    r = c.put("/v1/settings", json={"pagerduty_routing_key": "R" * 32}, headers=fh)
+    assert r.status_code == 402 and "Team" in r.json()["detail"]
+    assert c.put("/v1/settings", json={"pagerduty_routing_key": "R" * 32}, headers=H).status_code == 200
+    assert c.get("/v1/me", headers=H).json()["channels"]["pagerduty"] is True
+    c.post("/v1/agents", json={"name": "pager"}, headers=H)
+    rid = c.post("/v1/runs/start", json={"agent": "pager"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "fail"}, headers=H)
+    aid = [a for a in alerts("FAILED") if a["run_id"] == rid][0]["id"]
+    server._deliver(aid)
+    assert calls[-1] == ("R" * 32, "trigger", "runvouch:pager:FAILED", "error")
+    # DRIFT is not a paging kind
+    n = len(calls)
+    with server.tx() as db:
+        db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message) VALUES((SELECT account_id FROM alerts WHERE id=?), (SELECT agent_id FROM alerts WHERE id=?), ?, ?, 'DRIFT', 'x')", (aid, aid, rid, time.time()))
+    server._deliver(server.q1("SELECT MAX(id) m FROM alerts")["m"])
+    assert len(calls) == n
+    # ack resolves the same dedup key (background thread)
+    c.post(f"/v1/alerts/{aid}/ack", headers=H)
+    for _ in range(50):
+        if any(x[1] == "resolve" for x in calls):
+            break
+        time.sleep(0.02)
+    assert ("R" * 32, "resolve", "runvouch:pager:FAILED", "error") in calls
+    # test-alert exercises PagerDuty like the other channels
+    c.post("/v1/settings/test-alert", headers=H)
+    tid = server.q1("SELECT id FROM alerts WHERE kind='TEST' ORDER BY id DESC LIMIT 1")["id"]
+    server._deliver(tid)
+    assert calls[-1][1] == "trigger" and calls[-1][2].endswith(":TEST") and calls[-1][3] == "info"
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET pagerduty_routing_key=NULL WHERE api_key=?", (server.key_hash(KEY),))
+
+
+def test_pagerduty_payload_shape(monkeypatch):
+    sent = []
+    monkeypatch.setattr(server, "_webhook", lambda url, payload: sent.append((url, payload)) or True)
+    assert server._pagerduty("rk", "trigger", "runvouch:a:MISSED", "sum", "error", {"agent": "a"}) is True
+    url, p = sent[-1]
+    assert url == server.PD_URL and p["event_action"] == "trigger" and p["dedup_key"] == "runvouch:a:MISSED" and p["payload"]["severity"] == "error"
+    server._pagerduty("rk", "resolve", "runvouch:a:MISSED")
+    assert sent[-1][1] == {"routing_key": "rk", "event_action": "resolve", "dedup_key": "runvouch:a:MISSED"}
+
+
+def test_priority_alerts_skip_cooldown_on_paid_plans():
+    def two_failures(h, name):
+        c.post("/v1/agents", json={"name": name}, headers=h)
+        ids = []
+        for _ in range(2):
+            rid = c.post("/v1/runs/start", json={"agent": name}, headers=h).json()["run_id"]
+            c.post("/v1/runs/end", json={"run_id": rid, "status": "fail"}, headers=h)
+            ids.append(server.q1("SELECT delivered FROM alerts WHERE run_id=? AND kind='FAILED'", rid)["delivered"])
+        return ids
+    fk, fh = _acct("free")
+    assert two_failures(fh, "flaky") == [0, -1]        # free: second FAILED inside the 10-minute cooldown is stored, not sent
+    sk, sh = _acct("solo")
+    assert two_failures(sh, "flaky") == [0, 0]         # paid: every MISSED / FAILED is queued for delivery immediately
+
+
+def test_retention_purge_keeps_proof(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "PROOF_DIR", tmp_path)
+    monkeypatch.setattr(server, "OTS_BIN", str(tmp_path / "no-ots"))
+    fk, fh = _acct("free")
+    c.post("/v1/agents", json={"name": "old"}, headers=fh)
+    now = time.time()
+    day_old = server._day_of(now - 20 * 86400)
+    t_old = server._day_ts(day_old) + 3600
+    def run(ended_at, **end):
+        rid = c.post("/v1/runs/start", json={"agent": "old"}, headers=fh).json()["run_id"]
+        c.post("/v1/runs/tool", json={"run_id": rid, "tool": "llm", "input": {"q": rid}}, headers=fh)
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", **end}, headers=fh)
+        with server.tx() as db:
+            db.execute("UPDATE runs SET started=?, ended=? WHERE id=?", (ended_at - 5, ended_at, rid))
+            r = server.q1("SELECT * FROM runs WHERE id=?", rid); ag = server.q1("SELECT * FROM agents WHERE id=?", r["agent_id"])
+            db.execute("UPDATE runs SET leaf_hash=? WHERE id=?", (pf.leaf_hash(server.leaf_record(r, ag)), rid))
+        return rid
+    a, b = run(t_old), run(t_old + 60)
+    fresh = run(now - 3600)
+    team_old = _run("prover", t_old + 120)  # same day, team account: 90-day window, must survive
+    assert server.seal_days(now=now) >= 1
+    day = server.q1("SELECT * FROM proof_days WHERE date=?", day_old)
+    before = c.get(f"/v1/runs/{a}/proof", headers=fh).json()
+    assert before["sealed"] and before["root"] == day["root"]
+    # an old acked alert and an old open one
+    agent_id = server.q1("SELECT id FROM agents WHERE name='old'")["id"]; acc_id = server.q1("SELECT account_id FROM agents WHERE id=?", agent_id)["account_id"]
+    with server.tx() as db:
+        db.execute("INSERT INTO alerts(account_id, agent_id, ts, kind, message, acked) VALUES(?,?,?,?,?,1)", (acc_id, agent_id, t_old, "FAILED", "old acked"))
+        db.execute("INSERT INTO alerts(account_id, agent_id, ts, kind, message, acked) VALUES(?,?,?,?,?,0)", (acc_id, agent_id, t_old, "MISSED", "old open"))
+    out = server.purge_once(now)
+    assert out["runs"] >= 2 and out["tool_events"] >= 2 and out["alerts"] >= 1
+    assert server.q1("SELECT id FROM runs WHERE id=?", a) is None and server.q1("SELECT id FROM runs WHERE id=?", fresh) is not None
+    assert server.q1("SELECT COUNT(*) n FROM tool_events WHERE run_id=?", a)["n"] == 0
+    assert server.q1("SELECT message FROM alerts WHERE message='old acked'") is None and server.q1("SELECT message FROM alerts WHERE message='old open'") is not None
+    lv = server.q1("SELECT * FROM run_leaves WHERE id=?", a)
+    assert lv and lv["leaf_hash"] == before["leaf_hash"] and lv["ended"] == t_old
+    # the team account (90 days) keeps its 20-day-old run
+    assert server.q1("SELECT id FROM runs WHERE id=?", team_old) is not None
+    # proof after purge: same leaf, same path, same sealed root; day file unchanged
+    after = c.get(f"/v1/runs/{a}/proof", headers=fh).json()
+    assert after["purged"] is True and after["leaf_hash"] == before["leaf_hash"] and after["root"] == day["root"] and after["merkle_path"] == before["merkle_path"]
+    assert pf.apply_path(after["leaf_hash"], [tuple(s) for s in after["merkle_path"]]) == day["root"]
+    assert after["record"] is None and after["chain_hash"] == day["chain_hash"]
+    dj = c.get(f"/proof/days/{day_old}.json").json()
+    assert {l["run_id"] for l in dj["leaves"]} == {a, b, team_old} and dj["root"] == day["root"]
+    assert {r["id"] for r in server._day_leaves(day_old)} == {a, b, team_old}
+    # a day sealed after the purge still sees the moved leaves
+    with server.tx() as db:
+        db.execute("DELETE FROM proof_days")
+    assert server.seal_days(now=now) >= 1
+    assert server.q1("SELECT root FROM proof_days WHERE date=?", day_old)["root"] == day["root"]
+    # second purge on the same day is a no-op; the daily wrapper runs once per UTC day
+    assert server.purge_once(now)["runs"] == 0
+    server._last_purge_day = ""
+    assert server.purge_daily(now) is not None and server.purge_daily(now) is None
+
+
+def test_export_team_only():
+    fk, fh = _acct("free")
+    r = c.get("/v1/export", params={"from": "2026-01-01", "to": "2026-12-31"}, headers=fh)
+    assert r.status_code == 402 and "API export" in r.json()["detail"]
+    assert c.get("/v1/export", params={"from": "2026-01-10", "to": "2026-01-09"}, headers=H).status_code == 422
+    assert c.get("/v1/export", params={"from": "nope", "to": "2026-01-09"}, headers=H).status_code == 422
+    assert c.get("/v1/export", params={"from": "2026-01-10", "to": "2026-01-11", "format": "xml"}, headers=H).status_code == 422
+    c.post("/v1/agents", json={"name": "exp"}, headers=H)
+    day = server._day_of(time.time() - 10 * 86400); t0 = server._day_ts(day)
+    ids = sorted([_run("exp", t0 + 100), _run("exp", t0 + 200), _run("exp", t0 + 86400 + 50)])
+    r = c.get("/v1/export", params={"from": day, "to": day, "format": "csv"}, headers=H)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv") and "attachment" in r.headers["content-disposition"]
+    lines = r.text.strip().splitlines()
+    assert lines[0] == "agent,run_id,started,ended,status,cost,tokens,tool_calls,evidence_ok,leaf_hash" and len(lines) == 3 and lines[1].startswith("exp,")
+    j = c.get("/v1/export", params={"from": day, "to": server._day_of(t0 + 86400)}, headers=H).json()
+    assert [x["run_id"] for x in j if x["agent"] == "exp"] == sorted(ids, key=lambda i: server.q1("SELECT started FROM runs WHERE id=?", i)["started"])
+    assert set(j[0]) == set(server.EXPORT_COLS) and len(j[0]["leaf_hash"]) == 64 and j[0]["evidence_ok"] == 1
+    assert c.get("/v1/export", params={"from": "2020-01-01", "to": "2020-01-02"}, headers=H).json() == []
+
+
+def test_viewer_keys_read_only():
+    fk, fh = _acct("free")
+    assert c.post("/v1/me/viewer-keys", json={"name": "wall"}, headers=fh).status_code == 402
+    r = c.post("/v1/me/viewer-keys", json={"name": "wall"}, headers=H).json()
+    vk = r["viewer_key"]; vh = {"X-API-Key": vk}
+    assert vk.startswith("rvv_") and r["id"]
+    assert [k["name"] for k in c.get("/v1/me/viewer-keys", headers=H).json()] == ["wall"]
+    me = c.get("/v1/me", headers=vh).json()
+    assert me["viewer"] is True and me["plan"] == "team"
+    assert c.get("/v1/agents", headers=vh).status_code == 200
+    assert c.get("/v1/agents/prover/runs", headers=vh).status_code == 200
+    assert c.get("/v1/alerts", headers=vh).status_code == 200
+    assert c.get("/v1/export", params={"from": "2026-01-10", "to": "2026-01-11"}, headers=vh).status_code == 200  # read-only GET is allowed
+    assert c.post("/v1/agents", json={"name": "nope"}, headers=vh).status_code == 403
+    assert c.post("/v1/runs/start", json={"agent": "prover"}, headers=vh).status_code == 403
+    assert c.put("/v1/settings", json={"alert_email": "x@y.z"}, headers=vh).status_code == 403
+    assert c.post("/v1/me/viewer-keys", json={"name": "x"}, headers=vh).status_code == 403
+    assert c.delete("/v1/agents/prover", headers=vh).status_code == 403
+    aid = alerts()[0]["id"]
+    assert c.post(f"/v1/alerts/{aid}/ack", headers=vh).status_code == 200
+    m = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "runvouch_run_start", "arguments": {"agent": "prover"}}}, headers=vh).json()
+    assert m["result"].get("isError") and "read-only" in m["result"]["content"][0]["text"]
+    m = c.post("/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "runvouch_status", "arguments": {}}}, headers=vh).json()
+    assert not m["result"].get("isError")
+    assert c.get("/v1/me/viewer-keys", headers=H).json()[0]["last_used"] is not None
+    assert c.delete(f"/v1/me/viewer-keys/{r['id']}", headers=H).status_code == 200
+    assert c.get("/v1/agents", headers=vh).status_code == 401
+    assert c.delete(f"/v1/me/viewer-keys/{r['id']}", headers=H).status_code == 404
+    # a viewer key dies with the plan
+    r2 = c.post("/v1/me/viewer-keys", headers=H).json()
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET plan='solo' WHERE api_key=?", (server.key_hash(KEY),))
+    assert c.get("/v1/agents", headers={"X-API-Key": r2["viewer_key"]}).status_code == 401
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET plan='team' WHERE api_key=?", (server.key_hash(KEY),))

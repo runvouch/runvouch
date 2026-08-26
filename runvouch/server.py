@@ -41,7 +41,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
@@ -128,10 +128,14 @@ CREATE TABLE IF NOT EXISTS signups(id INTEGER PRIMARY KEY, ip TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS ls_events(id TEXT PRIMARY KEY, ts REAL, name TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY KEY(account_id, week));
 CREATE TABLE IF NOT EXISTS proof_days(date TEXT PRIMARY KEY, root TEXT, prev TEXT, chain_hash TEXT, n_runs INTEGER, sealed_at REAL, ots_status TEXT, ots_path TEXT);
+CREATE TABLE IF NOT EXISTS run_leaves(id TEXT PRIMARY KEY, agent_id INTEGER, ended REAL, leaf_hash TEXT);
+CREATE INDEX IF NOT EXISTS ix_run_leaves_ended ON run_leaves(ended);
+CREATE TABLE IF NOT EXISTS viewer_keys(id INTEGER PRIMARY KEY, account_id INTEGER, key_hash TEXT UNIQUE, name TEXT, created REAL, last_used REAL);
 """
 with _lock:
     _db.executescript(SCHEMA)
-    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT", "polar_customer_id TEXT", "polar_subscription_id TEXT"):
+    for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT", "polar_customer_id TEXT", "polar_subscription_id TEXT",
+                "slack_webhook_url TEXT", "pagerduty_routing_key TEXT"):
         try:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -167,15 +171,40 @@ def qa(sql: str, *args) -> list[sqlite3.Row]:
 
 
 # ───────────────────────────── auth ─────────────────────────────
-def account_from_key(x_api_key: str = Header(default="")) -> sqlite3.Row:
+_VIEWER_WRITE_OK = re.compile(r"^/v1/alerts/\d+/ack$")
+
+
+def is_viewer(acc) -> bool:
+    return isinstance(acc, dict) and bool(acc.get("viewer"))
+
+
+def account_from_key(x_api_key: str = Header(default=""), request: Request = None):
+    """rv_ keys: the account row. rvv_ viewer keys (Team): the same account as a dict with viewer=True,
+    allowed to GET and to ack alerts, nothing else."""
     if not x_api_key:
         raise HTTPException(401, "X-API-Key header required")
     h = key_hash(x_api_key)
+    if x_api_key.startswith("rvv_"):
+        vk = q1("SELECT * FROM viewer_keys WHERE key_hash=?", h)
+        acc = q1("SELECT * FROM accounts WHERE id=?", vk["account_id"]) if vk else None
+        if not acc or acc["plan"] != "team":
+            raise HTTPException(401, "invalid api key")
+        if request is not None and request.method != "GET" and not _VIEWER_WRITE_OK.match(request.url.path):
+            raise HTTPException(403, "viewer key: read-only (GET and alert ack only)")
+        rate_check("k:" + h, RATE_PER_MIN)
+        with tx() as db:
+            db.execute("UPDATE viewer_keys SET last_used=? WHERE id=?", (time.time(), vk["id"]))
+        return {**dict(acc), "viewer": True, "viewer_key_id": vk["id"]}
     acc = q1("SELECT * FROM accounts WHERE api_key=?", h)
     if not acc:
         raise HTTPException(401, "invalid api key")
     rate_check("k:" + h, RATE_PER_MIN)
     return acc
+
+
+def require_plan(acc, plan: str, feature: str) -> None:
+    if acc["plan"] != plan:
+        raise HTTPException(402, f"{feature} is part of the {PLAN_NAMES[plan]} plan; your account is on {PLAN_NAMES.get(acc['plan'], acc['plan'])}. Upgrade at https://runvouch.com/pricing")
 
 
 def require_admin(x_admin_token: str = Header(default="")):
@@ -200,6 +229,7 @@ def rotate_key(account_id: int) -> str:
 
 
 PLAN_LIMITS = {"free": 3, "solo": 15, "team": 100}
+RETENTION_DAYS = {"free": 7, "solo": 90, "team": 90}  # runs, tool events and acked alerts older than this are purged daily
 
 
 # ───────────────────────────── alerts ─────────────────────────────
@@ -255,9 +285,37 @@ def _webhook(url: str, payload: dict) -> bool:
         return False
 
 
+def _slack(url: str, text: str, kind: str, agent: str, message: str) -> bool:
+    """Slack incoming webhook: plain text fallback plus blocks (kind, agent, message, dashboard link)."""
+    payload = {"text": text, "blocks": [
+        {"type": "header", "text": {"type": "plain_text", "text": f"RunVouch {kind}: {agent}"[:150]}},
+        {"type": "section", "fields": [{"type": "mrkdwn", "text": f"*Kind*\n{kind}"}, {"type": "mrkdwn", "text": f"*Agent*\n{agent}"}]},
+        {"type": "section", "text": {"type": "mrkdwn", "text": message[:2900]}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": "<https://runvouch.com/app|Open the dashboard>"}]}]}
+    return _webhook(url, payload)
+
+
+PD_KINDS = {"MISSED", "FAILED", "STALLED", "BUDGET_RUN", "BUDGET_DAY", "TEST"}
+PD_URL = "https://events.pagerduty.com/v2/enqueue"
+
+
+def _pagerduty(routing_key: str, action: str, dedup_key: str, summary: str = "", severity: str = "error", details: Optional[dict] = None) -> bool:
+    """PagerDuty Events API v2. action: trigger | resolve. dedup_key ties our alert to one incident."""
+    payload: dict = {"routing_key": routing_key, "event_action": action, "dedup_key": dedup_key}
+    if action == "trigger":
+        payload["payload"] = {"summary": summary[:1024], "source": "runvouch.com", "severity": severity, "custom_details": details or {}}
+        payload["links"] = [{"href": "https://runvouch.com/app", "text": "RunVouch dashboard"}]
+    return _webhook(PD_URL, payload)
+
+
+def pd_dedup_key(agent: str, kind: str) -> str:
+    return f"runvouch:{agent}:{kind}"
+
+
 import queue as _queue
 _deliver_q: "_queue.Queue[int]" = _queue.Queue()
 ALERT_COOLDOWN = int(os.getenv("RUNVOUCH_ALERT_COOLDOWN", "600"))  # same kind+agent at most once per 10 min
+PRIORITY_KINDS = {"MISSED", "FAILED"}  # paid plans: delivered immediately, no cooldown
 
 
 def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str) -> None:
@@ -270,7 +328,12 @@ def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - 3600)
     if dup:
         return
-    recent = None if kind == "TEST" else q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - ALERT_COOLDOWN)
+    if kind == "TEST":
+        recent = None
+    elif kind in PRIORITY_KINDS and (q1("SELECT plan FROM accounts WHERE id=?", account_id) or {"plan": "free"})["plan"] != "free":
+        recent = None  # priority alerts: paid plans skip the cooldown for MISSED and FAILED
+    else:
+        recent = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - ALERT_COOLDOWN)
     with tx() as db:
         cur = db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message, delivered) VALUES(?,?,?,?,?,?,?)",
                          (account_id, agent_id, run_id, time.time(), kind, message, -1 if recent else 0))
@@ -292,6 +355,11 @@ def _deliver(alert_id: int) -> None:
         delivered |= _telegram(acc["telegram_token"], acc["telegram_chat"], text)
     if acc["webhook_url"]:
         delivered |= _webhook(acc["webhook_url"], {"kind": a["kind"], "agent": name, "run_id": a["run_id"], "message": a["message"], "ts": a["ts"]})
+    if acc["slack_webhook_url"]:
+        delivered |= _slack(acc["slack_webhook_url"], text, a["kind"], name, a["message"])
+    if acc["pagerduty_routing_key"] and acc["plan"] == "team" and a["kind"] in PD_KINDS:
+        delivered |= _pagerduty(acc["pagerduty_routing_key"], "trigger", pd_dedup_key(name, a["kind"]), f"[{a['kind']}] {name}: {a['message']}",
+                                "info" if a["kind"] == "TEST" else "error", {"agent": name, "kind": a["kind"], "run_id": a["run_id"], "alert_id": a["id"]})
     if acc["alert_email"]:
         delivered |= _email(acc["alert_email"], f"[RunVouch] {a['kind']}: {name}", a["message"] + "\n\nhttps://runvouch.com/app")
     with tx() as db:
@@ -412,7 +480,7 @@ def weekly_report(now: Optional[float] = None) -> int:
         return 0
     week = time.strftime("%G-W%V", lt)
     sent = 0
-    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL OR alert_email IS NOT NULL"):
+    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL OR alert_email IS NOT NULL OR slack_webhook_url IS NOT NULL"):
         if q1("SELECT 1 FROM reports_sent WHERE account_id=? AND week=?", acc["id"], week):
             continue
         t0 = now - 7 * 86400
@@ -433,6 +501,8 @@ def weekly_report(now: Optional[float] = None) -> int:
             ok |= _email(acc["alert_email"], f"[RunVouch] weekly report {week}", text)
         if acc["webhook_url"]:
             ok |= _webhook(acc["webhook_url"], {"kind": "WEEKLY_REPORT", "week": week, "cost_7d": round(total_cost, 4), "runs": total_runs, "failed": fails, "alerts": [dict(a) for a in alerts]})
+        if acc["slack_webhook_url"]:
+            ok |= _slack(acc["slack_webhook_url"], text, "WEEKLY_REPORT", f"{len(rows)} agents", text)
         with tx() as db:
             db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(?,?)", (acc["id"], week))
         sent += int(ok)
@@ -487,7 +557,9 @@ def _day_ts(date: str) -> int:
 
 def _day_leaves(date: str) -> list[sqlite3.Row]:
     t0 = _day_ts(date)
-    return qa("SELECT id, leaf_hash FROM runs WHERE leaf_hash IS NOT NULL AND ended>=? AND ended<? ORDER BY id", t0, t0 + 86400)
+    # purged runs live on in run_leaves (id, ended, leaf_hash), so a sealed day keeps the same leaf list after retention
+    return qa("SELECT id, leaf_hash FROM (SELECT id, leaf_hash, ended FROM runs WHERE leaf_hash IS NOT NULL "
+              "UNION SELECT id, leaf_hash, ended FROM run_leaves) WHERE ended>=? AND ended<? ORDER BY id", t0, t0 + 86400)
 
 
 def ots_stamp(path: Path) -> str:
@@ -558,7 +630,7 @@ def seal_days(now: Optional[float] = None) -> int:
     if last:
         start = _day_of(_day_ts(last["date"]) + 86400)
     else:
-        first = q1("SELECT MIN(ended) m FROM runs WHERE leaf_hash IS NOT NULL")
+        first = q1("SELECT MIN(m) m FROM (SELECT MIN(ended) m FROM runs WHERE leaf_hash IS NOT NULL UNION SELECT MIN(ended) FROM run_leaves)")
         if not first or not first["m"]:
             return 0  # the chain starts on the first day that has a leaf; earlier days are not sealed as if empty
         start = _day_of(first["m"])
@@ -604,6 +676,52 @@ def run_proof(run: sqlite3.Row, agent: sqlite3.Row) -> dict:
 
 
 
+_last_purge_day = ""
+
+
+def purge_once(now: Optional[float] = None) -> dict:
+    """Retention per plan (RETENTION_DAYS): delete runs, their tool events and acked alerts older than the window.
+    Runs that carry a leaf keep (id, agent_id, ended, leaf_hash) in run_leaves so sealed proof days stay verifiable."""
+    now = now or time.time()
+    out = {"runs": 0, "tool_events": 0, "alerts": 0}
+    for acc in qa("SELECT id, plan FROM accounts"):
+        cutoff = now - RETENTION_DAYS.get(acc["plan"], 7) * 86400
+        old = qa("SELECT r.id, r.agent_id, r.ended, r.leaf_hash FROM runs r JOIN agents g ON g.id=r.agent_id "
+                 "WHERE g.account_id=? AND COALESCE(r.ended, r.started)<?", acc["id"], cutoff)
+        with tx() as db:
+            for r in old:
+                if r["leaf_hash"]:
+                    db.execute("INSERT OR IGNORE INTO run_leaves(id, agent_id, ended, leaf_hash) VALUES(?,?,?,?)", (r["id"], r["agent_id"], r["ended"], r["leaf_hash"]))
+                out["tool_events"] += db.execute("DELETE FROM tool_events WHERE run_id=?", (r["id"],)).rowcount
+                out["runs"] += db.execute("DELETE FROM runs WHERE id=?", (r["id"],)).rowcount
+            out["alerts"] += db.execute("DELETE FROM alerts WHERE account_id=? AND acked=1 AND ts<?", (acc["id"], cutoff)).rowcount
+    return out
+
+
+def purge_daily(now: Optional[float] = None) -> Optional[dict]:
+    global _last_purge_day
+    now = now or time.time()
+    if _day_of(now) == _last_purge_day:
+        return None
+    _last_purge_day = _day_of(now)
+    return purge_once(now)
+
+
+def purged_proof(leaf: sqlite3.Row) -> dict:
+    """After retention only the leaf survives: no record to recompute, but the Merkle path to the sealed root still holds."""
+    date = _day_of(leaf["ended"])
+    rows = _day_leaves(date)
+    leaves = [r["leaf_hash"] for r in rows]
+    idx = next((i for i, r in enumerate(rows) if r["id"] == leaf["id"]), None)
+    day = q1("SELECT * FROM proof_days WHERE date=?", date)
+    return {"run_id": leaf["id"], "record": None, "leaf_hash": leaf["leaf_hash"], "stored_leaf_hash": leaf["leaf_hash"], "date": date, "agent": leaf["agent"],
+            "merkle_path": _pf.merkle_path(leaves, idx) if idx is not None else [], "root": _pf.merkle_root(leaves),
+            "sealed": bool(day), "chain_hash": day["chain_hash"] if day else None, "prev": day["prev"] if day else None,
+            "ots_status": day["ots_status"] if day else "not sealed", "verify_url": f"{PUBLIC_URL}/proof/days/{date}.json",
+            "purged": True, "note": "the full run record was removed by your plan's history retention; the leaf hash and its path to the sealed day root remain",
+            "docs": "https://runvouch.com/docs/proof"}
+
+
 def _sweeper():
     n = 0
     while True:
@@ -611,6 +729,7 @@ def _sweeper():
             sweep_once()
             owner_digest()
             proof_maintenance()
+            purge_daily()
             if n % 20 == 0:
                 weekly_report()
         except Exception:
@@ -667,6 +786,8 @@ class SettingsIn(BaseModel):
     telegram_chat: Optional[str] = None
     webhook_url: Optional[str] = None
     alert_email: Optional[str] = None
+    slack_webhook_url: Optional[str] = None
+    pagerduty_routing_key: Optional[str] = None
 
 
 def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
@@ -760,7 +881,10 @@ def contact(body: ContactIn, request: Request):
 @app.get("/v1/me")
 def me(acc=Depends(account_from_key)):
     return {"name": acc["name"], "email": acc["email"], "plan": acc["plan"], "agents_allowed": PLAN_LIMITS.get(acc["plan"], 3),
-            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"] or acc["alert_email"])}
+            "history_days": RETENTION_DAYS.get(acc["plan"], 7), "viewer": is_viewer(acc),
+            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"] or acc["alert_email"] or acc["slack_webhook_url"] or acc["pagerduty_routing_key"]),
+            "channels": {"email": bool(acc["alert_email"]), "telegram": bool(acc["telegram_token"] and acc["telegram_chat"]), "webhook": bool(acc["webhook_url"]),
+                         "slack": bool(acc["slack_webhook_url"]), "pagerduty": bool(acc["pagerduty_routing_key"] and acc["plan"] == "team")}}
 
 
 @app.post("/v1/me/rotate-key")
@@ -1004,9 +1128,15 @@ async def polar_webhook(request: Request):
 
 @app.put("/v1/settings")
 def put_settings(s: SettingsIn, acc=Depends(account_from_key)):
+    if s.pagerduty_routing_key:
+        require_plan(acc, "team", "PagerDuty")
+    if s.slack_webhook_url and not s.slack_webhook_url.startswith("https://hooks.slack.com/"):
+        raise HTTPException(422, "slack_webhook_url must be a Slack incoming webhook (https://hooks.slack.com/services/...)")
     with tx() as db:
         db.execute("UPDATE accounts SET telegram_token=COALESCE(?,telegram_token), telegram_chat=COALESCE(?,telegram_chat), "
-                   "webhook_url=COALESCE(?,webhook_url), alert_email=COALESCE(?,alert_email) WHERE id=?", (s.telegram_token, s.telegram_chat, s.webhook_url, s.alert_email, acc["id"]))
+                   "webhook_url=COALESCE(?,webhook_url), alert_email=COALESCE(?,alert_email), slack_webhook_url=COALESCE(?,slack_webhook_url), "
+                   "pagerduty_routing_key=COALESCE(?,pagerduty_routing_key) WHERE id=?",
+                   (s.telegram_token, s.telegram_chat, s.webhook_url, s.alert_email, s.slack_webhook_url, s.pagerduty_routing_key, acc["id"]))
     return {"ok": True}
 
 
@@ -1139,9 +1269,92 @@ def list_alerts(acked: bool = False, acc=Depends(account_from_key)):
 
 @app.post("/v1/alerts/{alert_id}/ack")
 def ack_alert(alert_id: int, acc=Depends(account_from_key)):
+    a = q1("SELECT a.kind, a.acked, g.name FROM alerts a JOIN agents g ON g.id=a.agent_id WHERE a.id=? AND a.account_id=?", alert_id, acc["id"])
     with tx() as db:
         db.execute("UPDATE alerts SET acked=1 WHERE id=? AND account_id=?", (alert_id, acc["id"]))
+    if a and not a["acked"] and acc["pagerduty_routing_key"] and acc["plan"] == "team" and a["kind"] in PD_KINDS:
+        threading.Thread(target=_pagerduty, args=(acc["pagerduty_routing_key"], "resolve", pd_dedup_key(a["name"], a["kind"])), daemon=True).start()
     return {"ok": True}
+
+
+# ───────────────────────────── Team: export and viewer keys ─────────────────────────────
+EXPORT_COLS = ("agent", "run_id", "started", "ended", "status", "cost", "tokens", "tool_calls", "evidence_ok", "leaf_hash")
+
+
+def _export_rows(account_id: int, t0: float, t1: float):
+    with _lock:
+        cur = _db.execute("SELECT g.name agent, r.id run_id, r.started, r.ended, r.status, r.cost, r.tokens, r.tool_calls, r.evidence_ok, r.leaf_hash "
+                          "FROM runs r JOIN agents g ON g.id=r.agent_id WHERE g.account_id=? AND r.started>=? AND r.started<? ORDER BY r.started", (account_id, t0, t1))
+        while True:
+            rows = cur.fetchmany(500)
+            if not rows:
+                return
+            for r in rows:
+                yield r
+
+
+@app.get("/v1/export")
+def export_runs(from_: str = Query(alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"), to: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+                format: str = "json", acc=Depends(account_from_key)):
+    """Team: every run of the account with started in [from, to] (UTC days), streamed as CSV or a JSON array."""
+    from fastapi.responses import StreamingResponse
+    require_plan(acc, "team", "API export")
+    if format not in ("csv", "json"):
+        raise HTTPException(422, "format must be csv or json")
+    try:
+        t0, t1 = _day_ts(from_), _day_ts(to) + 86400
+    except ValueError:
+        raise HTTPException(422, "from/to must be valid dates (YYYY-MM-DD)")
+    if t1 <= t0:
+        raise HTTPException(422, "to must not be before from")
+
+    def csv_gen():
+        import csv, io
+        buf = io.StringIO(); w = csv.writer(buf)
+        w.writerow(EXPORT_COLS); yield buf.getvalue(); buf.seek(0); buf.truncate()
+        for r in _export_rows(acc["id"], t0, t1):
+            w.writerow([r[k] for k in EXPORT_COLS]); yield buf.getvalue(); buf.seek(0); buf.truncate()
+
+    def json_gen():
+        yield "["
+        first = True
+        for r in _export_rows(acc["id"], t0, t1):
+            yield ("" if first else ",\n") + json.dumps({k: r[k] for k in EXPORT_COLS})
+            first = False
+        yield "]\n"
+
+    fname = f"runvouch-{from_}-{to}.{format}"
+    return StreamingResponse(csv_gen() if format == "csv" else json_gen(), media_type="text/csv" if format == "csv" else "application/json",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+class ViewerKeyIn(BaseModel):
+    name: str = Field("viewer", min_length=1, max_length=64)
+
+
+@app.post("/v1/me/viewer-keys")
+def create_viewer_key(body: ViewerKeyIn = ViewerKeyIn(), acc=Depends(account_from_key)):
+    """Team: a read-only key (rvv_) for a shared dashboard. Can GET and ack alerts; nothing else. Shown once."""
+    require_plan(acc, "team", "Shared dashboard (viewer keys)")
+    key = "rvv_" + secrets.token_urlsafe(24)
+    with tx() as db:
+        cur = db.execute("INSERT INTO viewer_keys(account_id, key_hash, name, created) VALUES(?,?,?,?)", (acc["id"], key_hash(key), body.name, time.time()))
+    return {"id": cur.lastrowid, "name": body.name, "viewer_key": key, "note": "read-only: GET /v1/agents, /v1/runs, /v1/alerts, /v1/export and the dashboard, plus alert ack. Shown once."}
+
+
+@app.get("/v1/me/viewer-keys")
+def list_viewer_keys(acc=Depends(account_from_key)):
+    require_plan(acc, "team", "Shared dashboard (viewer keys)")
+    return [dict(r) for r in qa("SELECT id, name, created, last_used FROM viewer_keys WHERE account_id=? ORDER BY id", acc["id"])]
+
+
+@app.delete("/v1/me/viewer-keys/{key_id}")
+def delete_viewer_key(key_id: int, acc=Depends(account_from_key)):
+    with tx() as db:
+        n = db.execute("DELETE FROM viewer_keys WHERE id=? AND account_id=?", (key_id, acc["id"])).rowcount
+    if not n:
+        raise HTTPException(404, "viewer key not found")
+    return {"ok": True, "revoked": key_id}
 
 
 @app.post("/v1/agents/{name}/pause")
@@ -1171,7 +1384,10 @@ def agent_runs(name: str, limit: int = 30, acc=Depends(account_from_key)):
 def run_proof_api(run_id: str, acc=Depends(account_from_key)):
     run = q1("SELECT r.* FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=? AND g.account_id=?", run_id, acc["id"])
     if not run:
-        raise HTTPException(404, "run not found")
+        purged = q1("SELECT l.*, g.name agent FROM run_leaves l JOIN agents g ON g.id=l.agent_id WHERE l.id=? AND g.account_id=?", run_id, acc["id"])
+        if not purged:
+            raise HTTPException(404, "run not found")
+        return purged_proof(purged)
     if run["ended"] is None or not run["leaf_hash"]:
         raise HTTPException(409, "run has not ended; a proof exists only for finished runs")
     return run_proof(run, q1("SELECT * FROM agents WHERE id=?", run["agent_id"]))
@@ -1253,6 +1469,8 @@ async def mcp_http(request: Request):
     if m == "tools/call":
         try:
             acc = account_from_key(key)
+            if is_viewer(acc) and p["name"] not in ("runvouch_status", "runvouch_alerts", "runvouch_ack", "runvouch_runs", "runvouch_run_proof"):
+                raise HTTPException(403, "viewer key: read-only")
             out = _mcp_call(acc, p["name"], p.get("arguments") or {})
             return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(out, indent=1, default=str)}]}})
         except HTTPException as e:
@@ -1281,23 +1499,45 @@ table{border-collapse:collapse;width:100%;background:var(--bg3);border:1px solid
 small{color:var(--fg3)}.err{color:#FF7A7A}@media(max-width:800px){.kpi{grid-template-columns:1fr 1fr}}</style></head><body>
 <div class=top><b>RunVouch</b> <small>dashboard</small><a href="https://runvouch.com/docs/">Docs</a></div><div class=wrap>
 <div id=upg style="display:none;border:1px solid #2f6b3a;background:rgba(46,160,67,.12);border-radius:10px;padding:.8rem 1rem;margin:0 0 1rem"><b>Thanks — your upgrade is in.</b> Paste the API key you got at signup to see the new agent limit. Lost it? Use <a href="/contact?topic=billing">contact</a> with the email you paid with and we will rotate it for you.</div><p><input id=k type=password placeholder="paste your API key (rv_…)" autocomplete="off"> <button onclick="load()">Load</button> <button onclick="signout()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Sign out</button> <small id=me></small></p><p><small>Your key is kept only in this browser (local storage). Sign out removes it. Nobody else can see your agents without your key.</small></p>
-<div id=out></div></div><script>
+<div id=out></div><div id=cfg></div></div><script>
 const API=location.hostname.startsWith('api.')||location.hostname==='localhost'||location.hostname==='127.0.0.1'?'':'https://api.runvouch.com';
 const qk=new URLSearchParams(location.search).get('key');if(qk){try{localStorage.setItem('rvk',qk)}catch(e){}history.replaceState({},'',location.pathname)}
-async if(new URLSearchParams(location.search).get('upgraded')){document.getElementById('upg').style.display='block'}
-function load(){const k=document.getElementById('k').value.trim();try{localStorage.setItem('rvk',k)}catch(e){}
+if(new URLSearchParams(location.search).get('upgraded')){document.getElementById('upg').style.display='block'}
+function key(){return document.getElementById('k').value.trim()}
+function hdr(){return {'X-API-Key':key(),'Content-Type':'application/json'}}
+function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]))}
+async function load(){const k=key();try{localStorage.setItem('rvk',k)}catch(e){}
 const h={'X-API-Key':k};let me,ag,al;try{me=await (await fetch(API+'/v1/me',{headers:h})).json();ag=await (await fetch(API+'/v1/agents',{headers:h})).json();al=await (await fetch(API+'/v1/alerts',{headers:h})).json()}catch(e){document.getElementById('out').innerHTML='<p class=err>Network error: '+e+'</p>';return}
 if(!Array.isArray(ag)){document.getElementById('out').innerHTML='<p class=err>'+(ag.detail||'error')+'</p>';return}
-document.getElementById('me').textContent=(me.email||me.name)+' · plan '+me.plan+' · '+ag.length+'/'+me.agents_allowed+' agents';
+document.getElementById('me').textContent=(me.email||me.name)+' · plan '+me.plan+' · '+ag.length+'/'+me.agents_allowed+' agents · '+me.history_days+'-day history'+(me.viewer?' · viewer (read-only)':'');
 const cost=ag.reduce((a,x)=>a+(x.cost_24h||0),0);const bad=ag.filter(a=>['alert','failed','unproven'].includes(a.state)).length;
 let s='<div class=kpi><div><b>'+ag.length+'</b><span>agents</span></div><div><b>'+ag.filter(a=>a.state==='ok').length+'</b><span>vouched</span></div><div><b>'+bad+'</b><span>need attention</span></div><div><b>$'+cost.toFixed(2)+'</b><span>cost 24h</span></div></div>';
 s+='<h2>Agents</h2><table><tr><th>agent</th><th>state</th><th>last run</th><th>status</th><th>evidence</th><th>cost 24h</th><th>alerts</th><th>proof</th></tr>';
-for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${a.name}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td><td>${l&&l.ended?`<a href="#" onclick="proof('${l.id}');return false">proof</a>`:'—'}</td></tr>`}
-s+='</table><h2>Open alerts</h2>';if(!al.length)s+='<p><small>None. Quiet night.</small></p>';else{s+='<table><tr><th>when</th><th>agent</th><th>kind</th><th>message</th><th></th></tr>';for(const x of al){s+=`<tr><td><small>${new Date(x.ts*1000).toLocaleString()}</small></td><td>${x.agent}</td><td><span class="pill alert">${x.kind}</span></td><td>${x.message}</td><td><button onclick="ack(${x.id})">ack</button></td></tr>`}s+='</table>'}
-document.getElementById('out').innerHTML=s}
-function signout(){try{localStorage.removeItem('rvk')}catch(e){}document.getElementById('k').value='';document.getElementById('out').innerHTML='';document.getElementById('me').textContent='signed out'}
-async function proof(id){const r=await fetch(API+'/v1/runs/'+id+'/proof',{headers:{'X-API-Key':document.getElementById('k').value.trim()}});const t=await r.text();window.open(URL.createObjectURL(new Blob([t],{type:'application/json'})),'_blank')}
-async function ack(id){await fetch(API+'/v1/alerts/'+id+'/ack',{method:'POST',headers:{'X-API-Key':document.getElementById('k').value.trim()}});load()}
+for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${esc(a.name)}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td><td>${l&&l.ended?`<a href="#" onclick="proof('${l.id}');return false">proof</a>`:'—'}</td></tr>`}
+s+='</table><h2>Open alerts</h2>';if(!al.length)s+='<p><small>None. Quiet night.</small></p>';else{s+='<table><tr><th>when</th><th>agent</th><th>kind</th><th>message</th><th></th></tr>';for(const x of al){s+=`<tr><td><small>${new Date(x.ts*1000).toLocaleString()}</small></td><td>${esc(x.agent)}</td><td><span class="pill alert">${x.kind}</span></td><td>${esc(x.message)}</td><td><button onclick="ack(${x.id})">ack</button></td></tr>`}s+='</table>'}
+document.getElementById('out').innerHTML=s;
+if(me.viewer){document.getElementById('cfg').innerHTML='<p><small>Viewer key: you can read everything and ack alerts. Settings are managed with the account key.</small></p>';return}
+const ch=me.channels||{};const team=me.plan==='team';const st=n=>ch[n]?' <span class="pill ok">set</span>':' <span class="pill waiting">not set</span>';
+let f='<h2>Alert channels</h2><p><small>Every alert goes to every channel you fill in. Leave a field empty to keep its current value. Full list and settings calls: <a href="https://runvouch.com/docs/alerts">docs/alerts</a>.</small></p>';
+f+='<p>E-mail'+st('email')+'<br><input id=s_alert_email type=email placeholder="you@company.com" autocomplete="off"></p>';
+f+='<p>Telegram'+st('telegram')+'<br><input id=s_telegram_token placeholder="bot token (from @BotFather)" autocomplete="off"> <input id=s_telegram_chat placeholder="chat id" style="width:12rem" autocomplete="off"></p>';
+f+='<p>Webhook (JSON POST)'+st('webhook')+'<br><input id=s_webhook_url type=url placeholder="https://..." autocomplete="off"></p>';
+f+='<p>Slack incoming webhook'+st('slack')+'<br><input id=s_slack_webhook_url type=url placeholder="https://hooks.slack.com/services/..." autocomplete="off"></p>';
+f+='<p>PagerDuty (Events API v2 routing key)'+(team?st('pagerduty'):' <span class="pill waiting">team plan</span>')+'<br><input id=s_pagerduty_routing_key placeholder="32-character integration key" autocomplete="off"'+(team?'':' disabled')+'>'+(team?'':' <small>MISSED, FAILED, STALLED and BUDGET alerts open an incident; ack here resolves it. <a href="https://runvouch.com/pricing">Team plan</a>.</small>')+'</p>';
+f+='<p><button onclick="saveSettings()">Save channels</button> <button onclick="testAlert()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Send test alert</button> <small id=cfgmsg></small></p>';
+if(team){f+='<h2>Shared dashboard</h2><p><small>Viewer keys (rvv_) open this dashboard read-only: agents, runs, alerts, export and alert ack. No settings, no run reporting. Hand one to a teammate or paste it in a wall display.</small></p><div id=vk></div><p><input id=vkname placeholder="name (e.g. ops wall)" style="width:14rem"> <button onclick="newViewerKey()">Create viewer key</button> <small id=vkmsg></small></p>'}
+document.getElementById('cfg').innerHTML=f;if(team)loadViewerKeys()}
+async function saveSettings(){const b={};for(const n of ['alert_email','telegram_token','telegram_chat','webhook_url','slack_webhook_url','pagerduty_routing_key']){const e=document.getElementById('s_'+n);if(e&&e.value.trim())b[n]=e.value.trim()}
+const r=await fetch(API+'/v1/settings',{method:'PUT',headers:hdr(),body:JSON.stringify(b)});const j=await r.json();document.getElementById('cfgmsg').textContent=r.ok?'saved':(j.detail||'error');if(r.ok)load()}
+async function testAlert(){const r=await fetch(API+'/v1/settings/test-alert',{method:'POST',headers:hdr()});const j=await r.json();document.getElementById('cfgmsg').textContent=r.ok?'test alert queued for every configured channel':(j.detail||'error')}
+async function loadViewerKeys(){const r=await fetch(API+'/v1/me/viewer-keys',{headers:hdr()});const ks=await r.json();if(!Array.isArray(ks)){document.getElementById('vk').innerHTML='<p class=err>'+esc(ks.detail)+'</p>';return}
+if(!ks.length){document.getElementById('vk').innerHTML='<p><small>No viewer keys yet.</small></p>';return}
+let s='<table><tr><th>id</th><th>name</th><th>created</th><th>last used</th><th></th></tr>';for(const k of ks){s+=`<tr><td>${k.id}</td><td>${esc(k.name)}</td><td><small>${new Date(k.created*1000).toLocaleString()}</small></td><td><small>${k.last_used?new Date(k.last_used*1000).toLocaleString():'never'}</small></td><td><button onclick="revokeViewerKey(${k.id})" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">revoke</button></td></tr>`}document.getElementById('vk').innerHTML=s+'</table>'}
+async function newViewerKey(){const name=document.getElementById('vkname').value.trim()||'viewer';const r=await fetch(API+'/v1/me/viewer-keys',{method:'POST',headers:hdr(),body:JSON.stringify({name})});const j=await r.json();document.getElementById('vkmsg').innerHTML=r.ok?'Shown once, store it now: <code>'+esc(j.viewer_key)+'</code>':esc(j.detail||'error');if(r.ok)loadViewerKeys()}
+async function revokeViewerKey(id){await fetch(API+'/v1/me/viewer-keys/'+id,{method:'DELETE',headers:hdr()});loadViewerKeys()}
+function signout(){try{localStorage.removeItem('rvk')}catch(e){}document.getElementById('k').value='';document.getElementById('out').innerHTML='';document.getElementById('cfg').innerHTML='';document.getElementById('me').textContent='signed out'}
+async function proof(id){const r=await fetch(API+'/v1/runs/'+id+'/proof',{headers:{'X-API-Key':key()}});const t=await r.text();window.open(URL.createObjectURL(new Blob([t],{type:'application/json'})),'_blank')}
+async function ack(id){await fetch(API+'/v1/alerts/'+id+'/ack',{method:'POST',headers:{'X-API-Key':key()}});load()}
 try{const k=localStorage.getItem('rvk');if(k){document.getElementById('k').value=k;load()}}catch(e){}
 </script></body></html>"""
 
