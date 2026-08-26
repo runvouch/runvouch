@@ -166,10 +166,27 @@ CSS_HASH = hashlib.sha1(CSS.encode()).hexdigest()[:8]
 PAGES: dict[str, tuple[str, str, str]] = {}  # path -> (title, desc, body)
 
 
+def _colour_tables(body):
+    """Comparison tables: only the RunVouch column (last cell of a row) gets colour — green for yes, muted for no.
+    Competitor cells stay neutral: honest, but the eye lands on our column."""
+    def row(m):
+        cells = re.findall(r'<td[^>]*>.*?</td>', m.group(0), re.S)
+        if len(cells) < 3:
+            return m.group(0)
+        out = []
+        for i, c in enumerate(cells):
+            txt = re.sub(r'<[^>]+>', '', c).strip().lower()
+            c = re.sub(r'<td[^>]*>', '<td>', c, count=1)
+            if i == len(cells) - 1:
+                if txt.startswith("yes"): c = c.replace('<td>', '<td class="y">', 1)
+                elif txt.startswith("no"): c = c.replace('<td>', '<td class="n">', 1)
+            out.append(c)
+        return "<tr>" + "".join(out) + "</tr>"
+    return re.sub(r'<tr>(?:(?!</tr>).)*?<td(?:(?!</tr>).)*</tr>', row, body, flags=re.S)
+
+
 def page(path, title, desc, body, ld=None, article=False):
-    if path.startswith("/vs/"):  # comparison tables: yes/no cells coloured like the home-page table
-        body = re.sub(r'<td>(yes\b[^<]*)</td>', r'<td class="y">\1</td>', body)
-        body = re.sub(r'<td>(no\b[^<]*)</td>', r'<td class="n">\1</td>', body)
+    body = _colour_tables(body)
     html = head(title, desc, path, ld, article) + body + FOOTER
     if path == "/":
         p = OUT / "index.html"

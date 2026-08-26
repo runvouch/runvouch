@@ -93,10 +93,10 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <section class="alt"><div class="wrap">
 <span class="kicker">compare</span><h2>Why not Healthchecks, Cronitor or <span class="grad">Langfuse</span>?</h2>
 <table><tr><th></th><th>Ping monitors<br><span class="small">Healthchecks · Cronitor</span></th><th>Trace platforms<br><span class="small">Langfuse · LangSmith · Arize</span></th><th>RunVouch</th></tr>
-<tr><td>Knows the job ran on time</td><td class="y">yes</td><td class="n">no</td><td class="y">yes</td></tr>
-<tr><td>Knows the job actually <em>did</em> something (evidence)</td><td class="n">no</td><td class="n">no</td><td class="y">yes</td></tr>
-<tr><td>Detects retry storms across tool calls</td><td class="n">no</td><td class="n">manual, in traces</td><td class="y">automatic</td></tr>
-<tr><td>Hard cost cap per run / per day</td><td class="n">no</td><td class="n">dashboards, no cap</td><td class="y">yes + pause</td></tr>
+<tr><td>Knows the job ran on time</td><td>yes</td><td>no</td><td class="y">yes</td></tr>
+<tr><td>Knows the job actually <em>did</em> something (evidence)</td><td>no</td><td>no</td><td class="y">yes</td></tr>
+<tr><td>Detects retry storms across tool calls</td><td>no</td><td>manual, in traces</td><td>automatic</td></tr>
+<tr><td>Hard cost cap per run / per day</td><td>no</td><td>dashboards, no cap</td><td class="y">yes + pause</td></tr>
 <tr><td>Setup</td><td>1 URL</td><td>SDK in your code</td><td>2 lines or a plugin</td></tr>
 <tr><td>Built for</td><td>ops teams, cron</td><td>ML teams debugging prompts</td><td>people running agents unattended</td></tr>
 <tr><td>Price</td><td>$0–85/mo</td><td>per seat / per million spans</td><td>$0 · $9 · $29</td></tr></table>
