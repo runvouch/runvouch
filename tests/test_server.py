@@ -195,8 +195,7 @@ def test_stripe_webhook():
 
 def test_polar_webhook():
     import hmac, hashlib, base64
-    secret = base64.b64encode(b"polar-test-secret").decode()
-    server.POLAR_WEBHOOK_SECRET = "whsec_" + secret
+    server.POLAR_WEBHOOK_SECRET = "polar-test-secret"  # Polar: raw secret string is the HMAC key
     server.POLAR_PRODUCT_PLANS = {"prod-solo": "solo", "prod-team": "team"}
     n = [0]
     def send(typ, obj):

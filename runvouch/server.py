@@ -640,13 +640,21 @@ def _polar_sig_ok(raw: bytes, headers) -> bool:
     wid, ts, sigs = headers.get("webhook-id", ""), headers.get("webhook-timestamp", ""), headers.get("webhook-signature", "")
     if not wid or not ts or not sigs or abs(time.time() - float(ts)) > 300:
         return False
+    # Polar signs with the secret's raw bytes (it base64-encodes the secret itself before handing it to
+    # standardwebhooks); a whsec_-prefixed secret is base64 per the Standard Webhooks spec. Accept both.
     secret = POLAR_WEBHOOK_SECRET[6:] if POLAR_WEBHOOK_SECRET.startswith("whsec_") else POLAR_WEBHOOK_SECRET
+    keys = [POLAR_WEBHOOK_SECRET.encode(), secret.encode()]
     try:
-        key = base64.b64decode(secret + "=" * (-len(secret) % 4))
+        keys.append(base64.b64decode(secret + "=" * (-len(secret) % 4)))
     except Exception:
-        key = secret.encode()
-    expected = base64.b64encode(hmac.new(key, f"{wid}.{ts}.".encode() + raw, hashlib.sha256).digest()).decode()
-    return any(hmac.compare_digest(expected, s.split(",", 1)[1]) for s in sigs.split() if s.startswith("v1,"))
+        pass
+    msg = f"{wid}.{ts}.".encode() + raw
+    given = [s.split(",", 1)[1] for s in sigs.split() if s.startswith("v1,")]
+    for key in keys:
+        expected = base64.b64encode(hmac.new(key, msg, hashlib.sha256).digest()).decode()
+        if any(hmac.compare_digest(expected, g) for g in given):
+            return True
+    return False
 
 
 @app.post("/webhooks/polar")
