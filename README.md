@@ -6,7 +6,7 @@
 A green run means the scheduler worked, not that the task got done. RunVouch alerts within minutes when a scheduled agent is missing, failed, looping, over budget, drifting — or reported success without evidence.
 
 ```
-pip install runvouch     # zero-dependency client (or: curl -fsSL https://runvouch.com/rv -o ~/bin/rv)
+pip install runvouch     # or: npm install -g runvouch  (zero-dependency client + rv CLI)
 rv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence
 rv run nightly-report --evidence-file out/report.html -- claude -p "build tonight's report"
 ```

@@ -348,7 +348,7 @@ doc("/docs/python-node", "Python & Node clients, LangGraph, OpenAI Agents — Ru
     "Report runs, tool calls, cost and evidence from Python or Node code: LangGraph, OpenAI Agents SDK, CrewAI, any script. Zero dependencies, fails open.",
     "Python & Node: LangGraph, OpenAI Agents SDK and any script",
     "Two single-file clients with no dependencies. Both fail open: if RunVouch is unreachable your code runs unmonitored and prints one warning.",
-    [("Python", '''<pre><span class="d"># curl -fsSL https://runvouch.com/runvouch.py -o runvouch.py</span>
+    [("Python", '''<pre><span class="d"># pip install runvouch   (or: curl -fsSL https://runvouch.com/runvouch.py -o runvouch.py)</span>
 import os, runvouch
 runvouch.agent("nightly-etl", cadence_s=86400, cap_run_cost=2, evidence_required=True)
 
@@ -375,15 +375,15 @@ import runvouch
 with runvouch.vouch("inbox-agent", evidence=lambda: {"replied": replied_count > 0}) as run:
     result = Runner.run_sync(agent, "Triage today's inbox")
     run.tool("openai.run", None, tokens=result.context_wrapper.usage.total_tokens)</pre><p>Per-tool reporting is optional; per-run cost and evidence are enough for daily caps, drift and "green ≠ done".</p>'''),
-     ("Node", '''<pre><span class="d">// curl -fsSL https://runvouch.com/runvouch.js -o runvouch.js   (Node 18+)</span>
-const rv = require('./runvouch');
+     ("Node", '''<pre><span class="d">// npm install runvouch   (Node 18+; or: curl -fsSL https://runvouch.com/runvouch.js -o runvouch.js)</span>
+const rv = require('runvouch');
 await rv.agent('nightly-report', { cadence_s: 86400, cap_run_cost: 2, evidence_required: true });
 
 await rv.vouch('nightly-report', async (run) => {
   for (const page of pages) { await run.tool('fetch', { url: page }); await scrape(page); }
 }, { evidence: async () => ({ report: fs.existsSync('out/report.html') }) });</pre>'''),
      ("CrewAI, AutoGen, anything else", '''<p>Wrap the entry point with <code>rv run</code> (no code changes) or use the two HTTP calls: <code>POST /v1/runs/start</code> and <code>POST /v1/runs/end</code> — see the <a href="/docs/api">API</a>. Cost from OpenRouter/OpenAI/Anthropic responses goes into <code>cost</code> on the end call.</p>''')],
-    [("Download the client", "curl -fsSL https://runvouch.com/runvouch.py -o runvouch.py"), ("Register the agent", "runvouch.agent(name, cadence_s=…, cap_run_cost=…, evidence_required=True)"), ("Wrap the job", "with runvouch.vouch(name, evidence=…) as run: …")])
+    [("Install the client", "pip install runvouch (Python) or npm install runvouch (Node)"), ("Register the agent", "runvouch.agent(name, cadence_s=…, cap_run_cost=…, evidence_required=True)"), ("Wrap the job", "with runvouch.vouch(name, evidence=…) as run: …")])
 
 doc("/docs/github-actions", "Monitor scheduled GitHub Actions — RunVouch docs", "A watchdog for scheduled GitHub Actions workflows: alerts when the schedule silently stops firing, the job fails, or it finishes green without doing the work.",
     "GitHub Actions", "GitHub disables scheduled workflows after 60 days without commits and never tells you; a cron job can also exit 0 without producing anything. RunVouch watches both: a MISSED alert when no run starts within the cadence, and NO_EVIDENCE when the output file was not written.",
