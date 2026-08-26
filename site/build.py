@@ -206,11 +206,11 @@ HOME = f'''
 <div class="wrap hero-inner"><div>
 <span class="eyebrow reveal"><i></i>watching agents that run while you sleep</span>
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
-<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right. Every finished run gets a tamper-evident proof you can verify without us.</p>
+<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch watches agents that run while you sleep and tells you when a run is missed, fails quietly, loops, or blows its budget. Works with Claude Code Routines, headless <code>claude&nbsp;-p</code>, OpenClaw, n8n and cron. When it went right, you get a record you can verify without us.</p>
 <div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
-<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span><span>tamper-evident proof per run</span></div>
+<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email, Telegram, Slack or webhook</span><span>self-host (MIT)</span></div>
 </div>
-<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · what the dashboard shows</div>
+<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · tonight an alert, next year a record you can verify</div>
 <ul class="runs">
 <li><span class="t">02:00 nightly-report</span><span class="m"><b>Missed.</b> Expected 02:00, nothing by 02:15</span><span class="pill bad">missed</span></li>
 <li><span class="t">03:00 inbox-triage</span><span class="m">Exit 0, but <b>no evidence</b>: <code>digest.html</code> unchanged</span><span class="pill warn">unproven</span></li>
@@ -281,7 +281,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its 7-run baseline. The agent is quietly doing something else.</p></div>
 <div class="card"><h3><span class="tag">STALLED</span></h3><p>Started, no end, no heartbeat past the max runtime. Hung on a prompt nobody will answer.</p></div>
 <div class="card"><h3><span class="tag">COST</span></h3><p>Tokens and dollars per run, read straight from Claude Code transcripts. Weekly cost report per agent.</p></div>
-<div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector, a receipt: a hashed record per run, chained per day, anchored in Bitcoin. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>
+<div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector but a receipt: one hashed record per run, written once, that an auditor can check with a standalone script. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>
 </div>
 <h3 style="margin-top:2rem">What the alert looks like</h3>
 <div class="grid g2">
@@ -313,8 +313,8 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
 <div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts (no cooldown on MISSED and FAILED)</li><li>Verifiable proof per run</li></ul>{SOLO_BTN}</div>
-<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>PagerDuty incidents</li><li>Shared dashboard (viewer keys)</li><li>API export (CSV / JSON)</li><li>Verifiable proof per run</li></ul>{TEAM_BTN}</div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>MISSED and FAILED alerts sent every time, no 10-minute cooldown</li><li>Verifiable proof per run</li></ul>{SOLO_BTN}</div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>API export (CSV / JSON) for audits</li><li>Read-only dashboard for teammates (viewer keys)</li><li>PagerDuty incidents</li><li>Verifiable proof per run</li></ul>{TEAM_BTN}</div>
 </div>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by {PROCESSOR}; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
@@ -326,7 +326,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <details><summary>Why 3 agents on the free plan?</summary><p>Most solo builders run one to three scheduled agents. Free covers that completely, forever. Paid plans are for people who run more — that's the only difference besides history and reports.</p></details>
 <details><summary>Does RunVouch see my prompts or data?</summary><p>No. It receives what your job reports: start/end, exit status, tool names and a hash of their input (for loop detection), cost/tokens, output size, and true/false evidence results. Evidence checks on files run on your machine; only the verdict is sent.</p></details>
 <details><summary>What if RunVouch is down?</summary><p><code>rv run</code> fails open: your job still runs unmonitored and prints a warning. Monitoring must never break the thing it monitors.</p></details>
-<details><summary>Can I self-host?</summary><p>Yes — the server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
+<details><summary>Can I self-host?</summary><p>Yes. The server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
 <details><summary>Where does it run?</summary><p>EU (Netherlands) infrastructure behind Cloudflare. Data stays in the EU.</p></details>
 </div></section>
 </main>'''
@@ -531,7 +531,7 @@ doc("/docs/n8n", "Monitor n8n AI workflows — RunVouch docs", "Catch n8n workfl
 doc("/docs/templates", "Agent templates: nightly digests on official data, with evidence - RunVouch docs",
     "Three copy-paste agent templates: a nightly 13F consensus digest, Form D raises in your sector, and a weekly competitor hiring watch. Official SEC and career-site data via DataSignals Lab, wrapped in rv run with evidence and cost caps.",
     "Agent templates: nightly digests on official data, with evidence",
-    'Three ready-to-run agents that pull official public data (SEC 13F, Form D, company career sites) from <a href="https://datasignalslab.com/datasignals-mcp.html">DataSignals Lab</a>, write a file, and are watched by RunVouch: MISSED if the schedule stops, FAILED on a broken call, NO_EVIDENCE if the run was green but the file was not written, BUDGET if a run costs more than the cap. Plain Python, standard library only; each folder also has the <code>claude -p</code> or n8n variant. Copy a folder, set two keys, done in two minutes.',
+    'Three ready-to-run agents on official public data (SEC 13F, Form D, company career sites) from <a href="https://datasignalslab.com/datasignals-mcp.html">DataSignals Lab</a>. Each one writes a file, and RunVouch checks that the file actually changed, that the run started on time, and what it cost. Plain Python, standard library only, with a <code>claude -p</code> or n8n variant in every folder. Copy a folder, set two keys, done in two minutes.',
     [("What you need", '''<p>A RunVouch key (free for 3 agents) and, depending on the template, an <a href="https://console.apify.com/settings/integrations">Apify token</a> (free account; the DataSignals MCP server is free for the first 50 calls a month, then $0.20 per result on your own account) or a DataSignals Events API key (a permanent free plan exists: one stream, 250 events a month, 24 hours behind; <a href="https://datasignalslab.com/events-api.html#free-key">request it here</a>, the key arrives by e-mail). Nothing here needs a card. All templates: <a href="https://github.com/runvouch/runvouch/tree/main/templates">github.com/runvouch/runvouch/tree/main/templates</a>.</p>'''),
      ("1. Nightly 13F consensus digest", '''<p>Which stocks are the funds you follow buying? One MCP call a night (<code>hedge_fund_13f</code>, cross-fund consensus from SEC EDGAR 13F), a top 10 in <code>out/13f-digest.md</code>, and a diff against yesterday. Two flavours: <code>digest.py</code> (no Claude) or <code>prompt.md</code> for headless <code>claude -p</code>.</p><pre>rv agent nightly-13f-digest --cadence 24h --grace 2h --cap-run-cost 1 --evidence
 rv run nightly-13f-digest --evidence-file out/13f-digest.md -- python3 digest.py --spend-cap 5

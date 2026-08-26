@@ -14,11 +14,11 @@
 <div class="wrap hero-inner"><div>
 <span class="eyebrow reveal"><i></i>watching agents that run while you sleep</span>
 <h1 class="reveal">Know your agents did the job —<br><span class="grad">before the bill tells you</span> they didn't.</h1>
-<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch is the watchdog for agents that run while you sleep — Claude Code Routines, headless <code>claude -p</code>, OpenClaw, n8n and cron: missed runs, silent failures, retry loops and runaway cost, with proof when it went right. Every finished run gets a tamper-evident proof you can verify without us.</p>
+<p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch watches agents that run while you sleep and tells you when a run is missed, fails quietly, loops, or blows its budget. Works with Claude Code Routines, headless <code>claude&nbsp;-p</code>, OpenClaw, n8n and cron. When it went right, you get a record you can verify without us.</p>
 <div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
-<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email · telegram · slack · webhook</span><span>self-host (MIT)</span><span>tamper-evident proof per run</span></div>
+<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email, Telegram, Slack or webhook</span><span>self-host (MIT)</span></div>
 </div>
-<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · what the dashboard shows</div>
+<div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · 5 agents · tonight an alert, next year a record you can verify</div>
 <ul class="runs">
 <li><span class="t">02:00 nightly-report</span><span class="m"><b>Missed.</b> Expected 02:00, nothing by 02:15</span><span class="pill bad">missed</span></li>
 <li><span class="t">03:00 inbox-triage</span><span class="m">Exit 0, but <b>no evidence</b>: <code>digest.html</code> unchanged</span><span class="pill warn">unproven</span></li>
@@ -89,7 +89,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its 7-run baseline. The agent is quietly doing something else.</p></div>
 <div class="card"><h3><span class="tag">STALLED</span></h3><p>Started, no end, no heartbeat past the max runtime. Hung on a prompt nobody will answer.</p></div>
 <div class="card"><h3><span class="tag">COST</span></h3><p>Tokens and dollars per run, read straight from Claude Code transcripts. Weekly cost report per agent.</p></div>
-<div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector, a receipt: a hashed record per run, chained per day, anchored in Bitcoin. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>
+<div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector but a receipt: one hashed record per run, written once, that an auditor can check with a standalone script. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>
 </div>
 <h3 style="margin-top:2rem">What the alert looks like</h3>
 <div class="grid g2">
@@ -121,8 +121,8 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
 <div class="price">
 <div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>Priority alerts (no cooldown on MISSED and FAILED)</li><li>Verifiable proof per run</li></ul><a class="btn" href="https://buy.polar.sh/polar_cl_TWutXZxVmocC9i8o6SS0UXI9hG8V5mR8KlgJ12vrZNe" data-ls="customer_email">Upgrade to Solo — $9/mo</a></div>
-<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>PagerDuty incidents</li><li>Shared dashboard (viewer keys)</li><li>API export (CSV / JSON)</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="https://buy.polar.sh/polar_cl_XzTkjGGHRdRqlXbCVfbWLiTBWAd4IA9cq6ZjX227pU1" data-ls="customer_email">Upgrade to Team — $29/mo</a></div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>15 agents</li><li>90-day history</li><li>Weekly cost report</li><li>MISSED and FAILED alerts sent every time, no 10-minute cooldown</li><li>Verifiable proof per run</li></ul><a class="btn" href="https://buy.polar.sh/polar_cl_TWutXZxVmocC9i8o6SS0UXI9hG8V5mR8KlgJ12vrZNe" data-ls="customer_email">Upgrade to Solo — $9/mo</a></div>
+<div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>API export (CSV / JSON) for audits</li><li>Read-only dashboard for teammates (viewer keys)</li><li>PagerDuty incidents</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="https://buy.polar.sh/polar_cl_XzTkjGGHRdRqlXbCVfbWLiTBWAd4IA9cq6ZjX227pU1" data-ls="customer_email">Upgrade to Team — $29/mo</a></div>
 </div>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Polar; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
@@ -134,7 +134,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <details><summary>Why 3 agents on the free plan?</summary><p>Most solo builders run one to three scheduled agents. Free covers that completely, forever. Paid plans are for people who run more — that's the only difference besides history and reports.</p></details>
 <details><summary>Does RunVouch see my prompts or data?</summary><p>No. It receives what your job reports: start/end, exit status, tool names and a hash of their input (for loop detection), cost/tokens, output size, and true/false evidence results. Evidence checks on files run on your machine; only the verdict is sent.</p></details>
 <details><summary>What if RunVouch is down?</summary><p><code>rv run</code> fails open: your job still runs unmonitored and prints a warning. Monitoring must never break the thing it monitors.</p></details>
-<details><summary>Can I self-host?</summary><p>Yes — the server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
+<details><summary>Can I self-host?</summary><p>Yes. The server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
 <details><summary>Where does it run?</summary><p>EU (Netherlands) infrastructure behind Cloudflare. Data stays in the EU.</p></details>
 </div></section>
 </main><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
