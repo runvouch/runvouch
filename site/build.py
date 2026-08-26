@@ -486,7 +486,8 @@ VERIFIED</pre>
 <li>A run that never called <code>/v1/runs/end</code> (stalled, killed) has no leaf and is not in any day.</li>
 <li>The record contains no content. It cannot prove that the report your agent wrote said X; it proves that a run with evidence <code>report_written: true</code> ended at that time and cost that much.</li>
 <li>OpenTimestamps gives a proof that the day file existed before a certain Bitcoin block. It does not give a proof of "not after". The chain hash gives the ordering between days.</li>
-<li>If the ots client is missing or a calendar is down, the day is sealed without an anchor and says so. We do not backfill anchors silently.</li></ul>''')],
+<li>If the ots client is missing or a calendar is down, the day is sealed without an anchor and says so. We do not backfill anchors silently.</li>
+<li>Runs that ended before 26 August 2026 (the day this shipped) got their leaf computed afterwards from the stored fields, not at the moment they ended. From that day on the leaf is written in the same transaction that ends the run. The first sealed day is 2026-08-25.</li></ul>''')],
     [("Fetch the proof", "rv proof RUN_ID, or GET /v1/runs/RUN_ID/proof with your key, once the run has ended."), ("Wait for the seal", "After UTC midnight the day is sealed: sealed becomes true and the public day file exists."), ("Verify", "python3 verify_proof.py proof.json DATE.json; exit 0 means intact."), ("Check the anchor", "ots verify DATE.json.ots -f DATE.json once ots_status reads bitcoin:BLOCK.")])
 
 doc("/docs/mcp", "RunVouch MCP server — let agents check on agents", "Add the RunVouch MCP server so Claude and other MCP clients can ask which agents are healthy, read alerts, and report their own runs.",
