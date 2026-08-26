@@ -1,0 +1,45 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Ambient preview</title>
+<style>
+body{margin:0;background:#0B1020;color:#EEF2FF;font:15px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif}
+section{position:relative;height:300px;border-bottom:1px solid rgba(169,180,214,.15);overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.label{position:absolute;left:24px;top:18px;z-index:2;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a9b4d6}
+.label b{display:block;font-size:22px;letter-spacing:0;text-transform:none;color:#EEF2FF;margin-top:4px}
+.label small{display:block;color:#a9b4d6;text-transform:none;letter-spacing:0;margin-top:4px;max-width:520px}
+</style></head><body>
+
+<section id="a"><div class="label">A<b>Rustige banen, geen vallende bol</b><small>Zelfde metafoor als nu (runs die langs banen lopen), maar minder en trager. Een mislukte run valt niet: hij stopt, wordt amber en krijgt een klein kruisje. Rood alleen voor het echte alarm.</small></div><canvas id="ca"></canvas></section>
+
+<section id="b"><div class="label">B<b>Nachtrooster</b><small>Letterlijk wat het product doet: een rooster van geplande runs dat zich van links naar rechts vult. Groen = draaide en bewezen, amber = gemist, alles beweegt een keer en staat dan stil.</small></div><canvas id="cb"></canvas></section>
+
+<section id="c"><div class="label">C<b>Stil</b><small>Alleen het fijne raster en een zachte gloed. De uitleg zit dan volledig in het dashboard-voorbeeld en de tekst. Rustigste optie, minst uitleg.</small></div><canvas id="cc"></canvas></section>
+
+<script>
+const D=devicePixelRatio||1;
+function grid(x,W,H){x.strokeStyle='rgba(169,180,214,.07)';x.lineWidth=1;for(let gx=0;gx<W;gx+=48*D){x.beginPath();x.moveTo(gx,0);x.lineTo(gx,H);x.stroke()}for(let gy=0;gy<H;gy+=48*D){x.beginPath();x.moveTo(0,gy);x.lineTo(W,gy);x.stroke()}}
+function glow(x,W,H){const g=x.createRadialGradient(W*.8,H*.1,0,W*.8,H*.1,W*.5);g.addColorStop(0,'rgba(76,141,255,.18)');g.addColorStop(1,'rgba(76,141,255,0)');x.fillStyle=g;x.fillRect(0,0,W,H)}
+function size(c){c.width=c.offsetWidth*D;c.height=c.offsetHeight*D;return [c.width,c.height]}
+
+// A: calm lanes
+(function(){const c=document.getElementById('ca'),x=c.getContext('2d');let [W,H]=size(c);const lanes=[0.3,0.5,0.7,0.88].map(f=>f*H);const P=[];
+for(let i=0;i<7;i++)P.push({x:Math.random()*W,y:lanes[i%lanes.length],v:(0.12+Math.random()*0.15)*D,fail:i===3,life:0,stopAt:W*0.62});
+function draw(){x.clearRect(0,0,W,H);glow(x,W,H);grid(x,W,H);x.strokeStyle='rgba(169,180,214,.13)';for(const y of lanes){x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}
+for(const p of P){const stopped=p.fail&&p.x>=p.stopAt;if(!stopped)p.x+=p.v;if(p.x>W+20)p.x=-20;
+const col=stopped?'#F5B547':'#3DDC84';x.shadowColor=col;x.shadowBlur=14*D;x.fillStyle=col;x.beginPath();x.arc(p.x,p.y,3.2*D,0,6.29);x.fill();x.shadowBlur=0;
+if(!stopped){const g=x.createLinearGradient(p.x-70*D,p.y,p.x,p.y);g.addColorStop(0,'rgba(61,220,132,0)');g.addColorStop(1,'rgba(61,220,132,.45)');x.strokeStyle=g;x.lineWidth=2*D;x.beginPath();x.moveTo(p.x-70*D,p.y);x.lineTo(p.x,p.y);x.stroke()}
+else{x.strokeStyle='#F5B547';x.lineWidth=1.6*D;x.beginPath();x.moveTo(p.x+8*D,p.y-5*D);x.lineTo(p.x+16*D,p.y+3*D);x.moveTo(p.x+16*D,p.y-5*D);x.lineTo(p.x+8*D,p.y+3*D);x.stroke()}}
+requestAnimationFrame(draw)}draw()})();
+
+// B: night roster
+(function(){const c=document.getElementById('cb'),x=c.getContext('2d');let [W,H]=size(c);const cols=14,rows=3,pw=34*D,ph=12*D,gapx=14*D,gapy=22*D;const x0=W*0.45,y0=H*0.34;let t=0;
+const state=[];for(let r=0;r<rows;r++)for(let i=0;i<cols;i++)state.push({r,i,kind:(r===1&&i===6)?'miss':'ok',at:(i*rows+r)*9+r*4});
+function draw(){t++;x.clearRect(0,0,W,H);glow(x,W,H);grid(x,W,H);
+for(const s of state){const px=x0+s.i*(pw+gapx),py=y0+s.r*(ph+gapy);x.fillStyle='rgba(169,180,214,.10)';x.fillRect(px,py,pw,ph);
+if(t>s.at){const k=Math.min(1,(t-s.at)/12);const col=s.kind==='ok'?'#3DDC84':'#F5B547';x.globalAlpha=k;x.fillStyle=col;x.fillRect(px,py,pw*k,ph);x.globalAlpha=1}}
+x.fillStyle='rgba(169,180,214,.55)';x.font=`${11*D}px Geist Mono, monospace`;['02:00','03:00','04:00'].forEach((l,r)=>x.fillText(l,x0-58*D,y0+r*(ph+gapy)+ph-2*D));
+if(t>state.length*9+60)t=0;requestAnimationFrame(draw)}draw()})();
+
+// C: still
+(function(){const c=document.getElementById('cc'),x=c.getContext('2d');let [W,H]=size(c);glow(x,W,H);grid(x,W,H)})();
+</script></body></html>
