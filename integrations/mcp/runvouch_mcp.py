@@ -36,6 +36,8 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}, "status": {"type": "string", "enum": ["ok", "fail"]},
                                                       "cost": {"type": "number"}, "tokens": {"type": "integer"}, "evidence": {"type": "object"}},
                      "required": ["run_id"]}},
+    {"name": "runvouch_run_proof", "description": "Tamper-evident proof of a finished run: hashed record, Merkle path, day root, chain hash and OpenTimestamps status. Verify offline with templates/verify_proof.py.",
+     "inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]}, "annotations": {"readOnlyHint": True}},
 ]
 
 
@@ -53,6 +55,8 @@ def call(name, a):
     if name == "runvouch_run_end":
         return api("POST", "/v1/runs/end", {"run_id": a["run_id"], "status": a.get("status", "ok"), "cost": a.get("cost", 0),
                                             "tokens": a.get("tokens", 0), "evidence": a.get("evidence", {})})
+    if name == "runvouch_run_proof":
+        return api("GET", f"/v1/runs/{a['run_id']}/proof")
     raise ValueError(f"unknown tool {name}")
 
 
