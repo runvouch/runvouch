@@ -24,7 +24,7 @@ rv run nightly-report --evidence-file out/report.html -- claude -p "build tonigh
 | `DRIFT` | duration / output size off its 7-run baseline (robust MAD) — silently doing something else |
 | `STALLED` | started, no end and no heartbeat past max runtime |
 
-Alerts go to Telegram, any webhook (Slack/Discord/PagerDuty), and the dashboard.
+Alerts go to e-mail, Telegram, Slack, any JSON webhook, PagerDuty (Team) and the dashboard.
 
 ## Layout
 ```
