@@ -60,7 +60,7 @@ header.top{position:sticky;top:0;z-index:20;background:rgba(11,16,32,.78);backdr
 .btn{display:inline-flex;align-items:center;gap:.5rem;background:var(--acc);color:#fff!important;padding:.78rem 1.25rem;border-radius:10px;font-weight:600;border:0;cursor:pointer;font-size:1rem;font-family:Figtree;box-shadow:0 8px 24px -10px rgba(76,141,255,.7);transition:transform .2s var(--ease),background .2s}
 .btn:hover{background:#3C7CF0;transform:translateY(-1px);text-decoration:none}.btn.ghost{background:rgba(169,180,214,.06);color:var(--fg)!important;border:1px solid var(--line2);box-shadow:none}.btn.ghost:hover{background:rgba(169,180,214,.12)}
 .btn:focus-visible,a:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
-.hero{position:relative;padding:5rem 0 3.5rem;display:flex;align-items:center;overflow:hidden}
+.hero{position:relative;padding:7.4rem 0 3.5rem;display:flex;align-items:center;overflow:hidden}
 .hero-inner{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center;width:100%}
 .eyebrow{display:inline-flex;align-items:center;gap:.6rem;border:1px solid var(--line2);background:rgba(169,180,214,.05);color:var(--fg2);border-radius:999px;padding:.35rem .9rem .35rem .6rem;font-weight:500;font-size:.82rem;margin-bottom:1.4rem}
 .eyebrow i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px var(--good);animation:blink 1.6s infinite}@keyframes blink{50%{opacity:.25}}
@@ -100,7 +100,7 @@ footer{border-top:1px solid var(--line);padding:3rem 0;color:var(--fg2);font-siz
 .doc{max-width:780px;padding-top:5.6rem;padding-bottom:3rem}.doc h2{margin-top:2.4rem}.doc .toc{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:1rem 1.25rem;margin:1.5rem 0}.doc .toc a{color:var(--fg2)}
 .logos{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center;color:var(--fg2);font-weight:500;font-size:.88rem}.logos span{border:1px solid var(--line2);background:rgba(169,180,214,.04);padding:.5rem .9rem;border-radius:999px}
 html,body{overflow-x:hidden;max-width:100%}.doc table{display:block;overflow-x:auto;max-width:100%}footer .cols>div{min-width:0}.ticker{display:flex;align-items:center;max-width:100vw}.tk-label{flex:none;margin:0 1rem 0 var(--pad,1.25rem);padding:.15rem .55rem;border:1px solid var(--line2);border-radius:999px;font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}.tk-wrap{flex:1;overflow:hidden;white-space:nowrap}
-@media(max-width:900px){.hero-inner{grid-template-columns:1fr;gap:2rem}.hero{padding-top:3rem}.g3,.g4,.g2,.price{grid-template-columns:1fr}footer .cols{grid-template-columns:1fr 1fr;gap:1.5rem}footer .cols>div:first-child{grid-column:1/-1}.nav nav{display:none}.nav .btn{margin-left:auto}.tk-label{display:none}}
+@media(max-width:900px){.hero-inner{grid-template-columns:1fr;gap:2rem}.hero{padding-top:5rem}.g3,.g4,.g2,.price{grid-template-columns:1fr}footer .cols{grid-template-columns:1fr 1fr;gap:1.5rem}footer .cols>div:first-child{grid-column:1/-1}.nav nav{display:none}.nav .btn{margin-left:auto}.tk-label{display:none}}
 .roster-pad main>section:first-child{padding-top:5.6rem}
 @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}.tk-track,.eyebrow i{animation:none}}
 '''
@@ -119,9 +119,9 @@ document.querySelectorAll('main section > .wrap > h2, main section .card, main .
 const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
 if(c.dataset.mode==='roster'){/* day roster: rows are agents, columns are the 24 hours of one day; fills like a clock, holds, then a new day. green vouched, amber missed or unproven, red failed */
 let S=[],cols=24,rows=3,pw=0,ph=0,gx=0,gy=0,x0=0,y0=0,tick=0,maxAt=0;
-const COL={ok:'#3DDC84',warn:'#F5B547',fail:'#FF6B6B'},NAMES=['nightly-report','inbox-triage','price-scraper'];
+const COL={ok:'#3DDC84',warn:'#F5B547',fail:'#FF6B6B'},POOL=['nightly-report','inbox-triage','price-scraper','lead-enricher','repo-janitor','13f-digest','hiring-watch','invoice-sync','changelog-bot','backup-check','ticket-triage','form-d-raises'];let NAMES=POOL.slice(0,3);
 function RR(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const narrow=c.offsetWidth<700;rows=narrow?2:3;x0=(narrow?12:110)*D;const avail=W-x0-16*D;gx=Math.max(3*D,avail*0.012);pw=(avail-gx*(cols-1))/cols;ph=7*D;gy=20*D;y0=(narrow?84:92)*D;S=[];maxAt=0;
-for(let r=0;r<rows;r++)for(let i=0;i<cols;i++){const u=Math.random();const at=i*9+r*2;maxAt=Math.max(maxAt,at);S.push({r,i,kind:u<0.86?'ok':u<0.95?'warn':'fail',at})}tick=0}
+NAMES=POOL.slice().sort(()=>Math.random()-0.5).slice(0,3);for(let r=0;r<rows;r++)for(let i=0;i<cols;i++){const u=Math.random();const at=i*9+r*2;maxAt=Math.max(maxAt,at);S.push({r,i,kind:u<0.86?'ok':u<0.95?'warn':'fail',at})}tick=0}
 RR();addEventListener('resize',RR);
 function drawR(){tick++;x.clearRect(0,0,W,H);x.font=`${10*D}px Geist Mono, monospace`;x.textAlign='left';
 if(c.offsetWidth>=700){x.fillStyle='rgba(169,180,214,.5)';NAMES.slice(0,rows).forEach((l,r)=>x.fillText(l,x0-100*D,y0+r*gy+ph))}
@@ -129,6 +129,7 @@ x.fillStyle='rgba(169,180,214,.38)';[0,6,12,18,24].forEach(h=>{const px=x0+Math.
 for(const s of S){const px=x0+s.i*(pw+gx),py=y0+s.r*gy;x.fillStyle='rgba(169,180,214,.09)';x.fillRect(px,py,pw,ph);
 if(tick>s.at){const k=Math.min(1,(tick-s.at)/10);x.globalAlpha=0.62*k;x.shadowColor=COL[s.kind];x.shadowBlur=(s.kind==='ok'?0:10)*D;x.fillStyle=COL[s.kind];x.fillRect(px,py,pw*k,ph);x.shadowBlur=0;x.globalAlpha=1}}
 const sweep=Math.min(tick,maxAt)/9;const sx=x0+Math.min(sweep,cols)*(pw+gx);if(tick<=maxAt+10){x.fillStyle='rgba(238,242,255,.35)';x.fillRect(sx,y0-4*D,1*D,rows*gy)}
+x.textAlign='right';x.fillStyle='rgba(169,180,214,.42)';x.fillText(c.offsetWidth<700?'every hour, every agent, checked':'one day, three agents, every hour checked',W-16*D,y0+rows*gy+4*D);
 if(tick>maxAt+10+300){RR()}requestAnimationFrame(drawR)}
 drawR();return}
 function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
