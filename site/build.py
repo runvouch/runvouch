@@ -280,6 +280,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <span class="kicker">integrations</span><h2>Works with what you <span class="grad">already run</span></h2>
 <div class="logos"><span>Claude Code Routines</span><span>claude -p (headless)</span><span>Claude Code hooks</span><span>MCP</span><span>OpenClaw</span><span>n8n</span><span>cron / systemd</span><span>GitHub Actions</span><span>LangGraph</span><span>Python / Node / bash</span></div>
 <p class="muted" style="margin-top:1rem">Native <a href="/docs/claude-code">Claude Code plugin</a> (hooks report start, every tool call and stop), an <a href="/docs/mcp">MCP server</a> so agents can check on each other, and a zero-dependency CLI for everything else.</p>
+<p class="muted" style="margin-top:.6rem">Nothing to watch yet? Start from a <a href="/docs/templates">ready-made agent on official data</a>: a nightly 13F digest, Form D raises in your sector, or a weekly competitor hiring watch, each with evidence built in.</p>
 </div></section>
 
 <section class="alt"><div class="wrap">
