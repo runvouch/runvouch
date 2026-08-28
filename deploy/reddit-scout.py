@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 STATE = os.path.join(ROOT, "data", "reddit-seen.json")
+HISTORY = os.path.join(ROOT, "data", "reddit-drafts.jsonl")   # every drafted comment, so new ones never repeat old ones
 UA = "nightly-runs-reader/0.1 (personal; reads public feeds; contact launch@runvouch.com)"
 SUBS = ["ClaudeAI", "ClaudeCode", "n8n", "selfhosted", "Anthropic", "claude"]
 # GitHub issues are where the pain is written down first (#37686: $1,800 in two nights; openclaw #16808: polling loop).
@@ -131,10 +132,26 @@ unattended AI agents. Rules, all hard:
 Output only the comment text."""
 
 
+def recent_drafts(n: int = 12) -> list[dict]:
+    if not os.path.exists(HISTORY):
+        return []
+    rows = [json.loads(l) for l in open(HISTORY) if l.strip()]
+    return rows[-n:]
+
+
 def draft(thread_text: str) -> str:
-    """Ask the local Claude Code CLI (same as the blog engine) for a comment draft; returns '' when it declines."""
+    """Ask the local Claude Code CLI (same as the blog engine) for a comment draft; returns '' when it declines.
+    The last twelve drafts go along so the new one does not reuse their openings, examples, numbers or structure:
+    readers of these threads overlap, and the same anecdote twice reads as a campaign."""
+    prev = recent_drafts()
+    avoid = ""
+    if prev:
+        avoid = ("\n\nCOMMENTS ALREADY POSTED RECENTLY (do not reuse their opening line, their examples, their numbers or their "
+                 "structure; pick a different angle, a different concrete detail and a different first sentence type, "
+                 "for example a short observation, a direct answer, a question back, or a one-line story):\n" +
+                 "\n---\n".join(d["text"][:400] for d in prev))
     try:
-        r = subprocess.run([CLAUDE, "-p", RULES + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
+        r = subprocess.run([CLAUDE, "-p", RULES + avoid + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
                            capture_output=True, text=True, timeout=240)
         out = json.loads(r.stdout or "{}").get("result", "").strip()
         return "" if (not out or out.upper().startswith("SKIP")) else out
@@ -175,12 +192,23 @@ def main() -> int:
         except Exception as e:
             print(f"github {repo}: {e}", file=sys.stderr)
     fresh = [p for p in cands if p["url"] not in seen]
-    fresh.sort(key=score, reverse=True)
+    # rotate: a subreddit or repo that got a draft in the last 3 days scores lower, so the same audience
+    # does not see the same account every day
+    laatst = {}
+    for d in recent_drafts(30):
+        laatst[d.get("sub", "")] = max(laatst.get(d.get("sub", ""), 0), d.get("ts", 0))
+    def rank(p):
+        s_ = score(p)
+        if time.time() - laatst.get(p["sub"], 0) < 3 * 86400:
+            s_ -= 3
+        return s_
+    fresh.sort(key=rank, reverse=True)
     top = [p for p in fresh if score(p) >= 6][:4]
-    blocks, drafted = [], 0
+    blocks, drafted, bronnen = [], 0, set()
     for p in top:
         text = ""
-        if drafted < 2 and "--no-draft" not in sys.argv:
+        bron = "github" if p["sub"].startswith("github") else "reddit"
+        if drafted < 2 and bron not in bronnen and "--no-draft" not in sys.argv:
             try:
                 text = draft(thread(p["url"]))
             except Exception as e:
@@ -188,10 +216,14 @@ def main() -> int:
         waar = (f"{p['sub']} (plaats als het runvouch-account, niet je eigen)" if p["sub"].startswith("github") else f"r/{p['sub']}")
         if text:
             drafted += 1
+            bronnen.add(bron)
+            if "--dry" not in sys.argv:
+                with open(HISTORY, "a") as f:
+                    f.write(json.dumps({"ts": time.time(), "sub": p["sub"], "url": p["url"], "text": text}) + "\n")
             blocks.append(f"{waar}: {p['title'][:100]}\n{p['url']}\n\nKANT-EN-KLAAR (kopieer, plak onder de post, 'Comment'):\n{text}")
         else:
             blocks.append(f"{waar}: {p['title'][:100]}\n{p['url']}\n(geen concept: zeg 'reddit' + link als je hier wilt reageren)")
-    msg = ("Reddit en GitHub vandaag - " + str(drafted) + " reactie(s) klaar om te plakken:\n\n" + "\n\n----\n\n".join(blocks)) if top else "Reddit en GitHub vandaag: geen passende nieuwe threads."
+    msg = ("Reddit en GitHub vandaag - " + str(drafted) + " reactie(s) klaar om te plakken (hooguit 1 per site per dag; plaats er 1, de tweede alleen als hij echt goed is):\n\n" + "\n\n----\n\n".join(blocks)) if top else "Reddit en GitHub vandaag: geen passende nieuwe threads."
     print(msg)
     if "--dry" not in sys.argv:
         for chunk in [msg[i:i + 3800] for i in range(0, len(msg), 3800)]:
