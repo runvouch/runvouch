@@ -63,7 +63,10 @@ def main() -> int:
     path = os.path.join(OUT, time.strftime("%Y-%m-%d") + ".md")
     open(path, "w").write(out + "\n")
     print(out)
-    telegram("Koperswandeling " + time.strftime("%Y-%m-%d") + "\n\n" + out)
+    if out.startswith("OK"):
+        print("(OK: geen defecten, niets naar Telegram)")
+    else:
+        telegram("Koperswandeling " + time.strftime("%Y-%m-%d") + "\n\n" + out)
     return 0 if out.startswith("OK") else 1
 
 

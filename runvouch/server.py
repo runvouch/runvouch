@@ -316,10 +316,12 @@ import queue as _queue
 _deliver_q: "_queue.Queue[int]" = _queue.Queue()
 ALERT_COOLDOWN = int(os.getenv("RUNVOUCH_ALERT_COOLDOWN", "600"))  # same kind+agent at most once per 10 min
 PRIORITY_KINDS = {"MISSED", "FAILED"}  # paid plans: delivered immediately, no cooldown
+DRIFT_MIN_MEDIAN = {"duration": 30.0, "output size": 2048.0}  # below this baseline drift is noise (a 1 s job that takes 3 s)
 
 
-def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str) -> None:
-    """Persist the alert and hand delivery to a background thread, never block a request on Telegram/email."""
+def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str, quiet: bool = False) -> None:
+    """Persist the alert and hand delivery to a background thread, never block a request on Telegram/email.
+    quiet=True stores the alert (dashboard, API) without sending it."""
     if kind == "TEST":
         dup = None
     elif run_id:
@@ -328,7 +330,9 @@ def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str
         dup = q1("SELECT id FROM alerts WHERE agent_id=? AND kind=? AND ts>?", agent_id, kind, time.time() - 3600)
     if dup:
         return
-    if kind == "TEST":
+    if quiet:
+        recent = True
+    elif kind == "TEST":
         recent = None
     elif kind in PRIORITY_KINDS and (q1("SELECT plan FROM accounts WHERE id=?", account_id) or {"plan": "free"})["plan"] != "free":
         recent = None  # priority alerts: paid plans skip the cooldown for MISSED and FAILED
@@ -398,6 +402,8 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
         if cur is None or len(series) < 4:
             continue
         med = _median(series)
+        if med < DRIFT_MIN_MEDIAN[label]:
+            continue
         # robust MAD with an absolute floor: 5 s / 512 bytes, or 10% of the median, a 1-second job
         # that takes 2 seconds, or a log line that is 60 bytes longer, is noise, not drift
         floor = 5.0 if label == "duration" else 512.0
@@ -510,7 +516,7 @@ def weekly_report(now: Optional[float] = None) -> int:
 
 
 def owner_digest(now: Optional[float] = None) -> bool:
-    """Once a day (first sweep after 07:00 UTC): one Telegram line to the owner with signups and plan counts."""
+    """Once a day (first sweep after 07:00 UTC): one Telegram line to the owner, only when there were signups."""
     now = now or time.time()
     day = datetime.utcfromtimestamp(now).strftime("%Y-%m-%d")
     if datetime.utcfromtimestamp(now).hour < 7 or q1("SELECT 1 FROM reports_sent WHERE account_id=0 AND week=?", day):
@@ -524,6 +530,8 @@ def owner_digest(now: Optional[float] = None) -> bool:
     active = q1("SELECT COUNT(DISTINCT agent_id) n FROM runs WHERE started>?", now - 86400)["n"]
     with tx() as db:
         db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(0, ?)", (day,))
+    if not new:
+        return False  # nothing happened: no message (the Monday weekly report carries the totals)
     return _telegram(owner["telegram_token"], owner["telegram_chat"],
                      f"RunVouch dagstand {day}: {new} nieuwe accounts in 24u, {total} accounts totaal, {paid} betalend, {active} agents actief in 24u.")
 
@@ -1250,7 +1258,10 @@ def run_end(e: EndIn, acc=Depends(account_from_key)):
     with tx() as db:  # the leaf is fixed here and never rewritten; the day seal later includes it
         db.execute("UPDATE runs SET leaf_hash=? WHERE id=?", (_pf.leaf_hash(leaf_record(run, a)), e.run_id))
     if e.status != "ok":
-        raise_alert(a["account_id"], a["id"], e.run_id, "FAILED", f"run ended with status '{e.status}'. {e.meta.get('error','')}".strip())
+        # a retry started by the remediator reports its own outcome (Hersteld / heeft jou nodig); a second FAILED for
+        # the same story every 15 minutes is noise, so it is stored but not sent
+        raise_alert(a["account_id"], a["id"], e.run_id, "FAILED", f"run ended with status '{e.status}'. {e.meta.get('error','')}".strip(),
+                    quiet=(run["source"] == "remediator"))
     elif (a["evidence_required"] or e.evidence) and not ev_ok:
         failed = [k for k, v in ev_detail.items() if v is not True]
         raise_alert(a["account_id"], a["id"], e.run_id, "NO_EVIDENCE",

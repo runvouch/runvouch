@@ -204,7 +204,7 @@ def main() -> int:
         return s_
     fresh.sort(key=rank, reverse=True)
     top = [p for p in fresh if score(p) >= 6][:4]
-    blocks, drafted, bronnen = [], 0, set()
+    blocks, drafted, bronnen, overig = [], 0, set(), []
     for p in top:
         text = ""
         bron = "github" if p["sub"].startswith("github") else "reddit"
@@ -213,20 +213,35 @@ def main() -> int:
                 text = draft(thread(p["url"]))
             except Exception as e:
                 print("thread:", e, file=sys.stderr)
-        waar = (f"{p['sub']} (plaats als het runvouch-account, niet je eigen)" if p["sub"].startswith("github") else f"r/{p['sub']}")
         if text:
             drafted += 1
             bronnen.add(bron)
             if "--dry" not in sys.argv:
                 with open(HISTORY, "a") as f:
                     f.write(json.dumps({"ts": time.time(), "sub": p["sub"], "url": p["url"], "text": text}) + "\n")
-            blocks.append(f"{waar}: {p['title'][:100]}\n{p['url']}\n\nKANT-EN-KLAAR (kopieer, plak onder de post, 'Comment'):\n{text}")
+            if bron == "github":
+                kop = "GITHUB - reageer als account runvouch (niet je eigen)"
+                waar = p["sub"].replace("github ", "", 1) + " (issue)"
+            else:
+                kop = "REDDIT - reageer als u/nightly_runs"
+                waar = "r/" + p["sub"]
+            blocks.append(f"=== {kop} ===\n{waar}: {p['title'][:100]}\n\nLINK:\n{p['url']}\n\nANTWOORD (kopieer en plak als comment):\n{text}")
         else:
-            blocks.append(f"{waar}: {p['title'][:100]}\n{p['url']}\n(geen concept: zeg 'reddit' + link als je hier wilt reageren)")
-    msg = ("Reddit en GitHub vandaag - " + str(drafted) + " reactie(s) klaar om te plakken (hooguit 1 per site per dag; plaats er 1, de tweede alleen als hij echt goed is):\n\n" + "\n\n----\n\n".join(blocks)) if top else "Reddit en GitHub vandaag: geen passende nieuwe threads."
+            overig.append(p)
+    if blocks:
+        msg = "Reddit en GitHub vandaag - " + str(drafted) + " antwoord(en) klaar\n\n" + "\n\n".join(blocks)
+        if overig:
+            msg += "\n\nGezien, geen antwoord geschreven (zeg 'reddit' + link als je er toch een wilt):\n" + "\n".join(
+                f"- {p['url']}" for p in overig)
+    else:
+        msg = "Reddit en GitHub vandaag: geen antwoord geschreven."
+        if overig:
+            msg += "\nGezien: " + ", ".join(p["url"] for p in overig)
     print(msg)
     if "--dry" not in sys.argv:
-        for chunk in [msg[i:i + 3800] for i in range(0, len(msg), 3800)]:
+        if not blocks:
+            print("telegram: niets te melden, geen bericht gestuurd", file=sys.stderr)
+        for chunk in ([msg[i:i + 3800] for i in range(0, len(msg), 3800)] if blocks else []):
             telegram(chunk)
         seen |= {p["url"] for p in top}
         os.makedirs(os.path.dirname(STATE), exist_ok=True)

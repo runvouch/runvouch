@@ -575,3 +575,12 @@ def test_viewer_keys_read_only():
     assert c.get("/v1/agents", headers={"X-API-Key": r2["viewer_key"]}).status_code == 401
     with server.tx() as db:
         db.execute("UPDATE accounts SET plan='team' WHERE api_key=?", (server.key_hash(KEY),))
+
+
+def test_remediator_retry_failure_is_stored_but_not_sent():
+    sk, sh = _acct("solo")
+    c.post("/v1/agents", json={"name": "retry-job"}, headers=sh)
+    rid = c.post("/v1/runs/start", json={"agent": "retry-job", "source": "remediator"}, headers=sh).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "fail"}, headers=sh)
+    row = server.q1("SELECT delivered FROM alerts WHERE run_id=? AND kind='FAILED'", rid)
+    assert row["delivered"] == -1  # the remediator reports the outcome itself; the alert is only on the dashboard
