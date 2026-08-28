@@ -26,8 +26,54 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [7 ways unattended AI agents fail silently, and one check for each](https://runvouch.com/blog/7-ways-unattended-ai-agents-fail-silently): Seven ways a scheduled AI agent fails without an error, from a run that never starts to a run that does nothing, and the one detector that catches each.
 - [Prove what your AI agent did: an audit trail for unattended agents](https://runvouch.com/blog/prove-what-your-ai-agent-did-audit-trail-for-unattended-agents): A real, tamper-evident proof of one agent run: hashed record, public daily Merkle chain, Bitcoin anchor. How to verify it with a stdlib script, and what it cannot prove.
 
+## Integrations (one page per runtime: where the job runs, key as secret, snippet, what fails silently there)
+- [Kubernetes CronJob](https://runvouch.com/integrations/kubernetes-cronjob): Alert when a Kubernetes CronJob stops firing, exits 0 without doing the work, loops, or an LLM job inside it overspends. One line in the container command.
+- [systemd timers](https://runvouch.com/integrations/systemd-timers): Get alerted when a systemd timer stops firing or its service fails silently, including user timers. Wrap ExecStart with rv run.
+- [GitLab CI scheduled pipelines](https://runvouch.com/integrations/gitlab-ci-schedules): Catch GitLab pipeline schedules that stop running (owner token expired, schedule deactivated) or pass without producing the artifact. One job line.
+- [Jenkins](https://runvouch.com/integrations/jenkins): Alert when a Jenkins job with a cron trigger stops running or passes without its artifact, without touching Jenkins notifications.
+- [Heroku Scheduler](https://runvouch.com/integrations/heroku-scheduler): Heroku Scheduler is documented as best effort and can skip runs. RunVouch alerts when a scheduled dyno did not start or its task did nothing.
+- [AWS Lambda + EventBridge Scheduler](https://runvouch.com/integrations/aws-lambda-eventbridge): Alert when an EventBridge schedule stops invoking your Lambda, the function returns early without doing the work, or an LLM call inside it overspends.
+- [Google Cloud Scheduler](https://runvouch.com/integrations/google-cloud-scheduler): Alert when a Cloud Scheduler job stops firing, the Cloud Run job or function returns 2xx without doing the work, or an LLM step overspends.
+- [Azure Functions timer trigger](https://runvouch.com/integrations/azure-functions-timer): Alert when an Azure Functions timer trigger stops running (app stopped, scale-to-zero on Consumption) or completes without doing the work.
+- [Cloudflare Workers Cron Triggers](https://runvouch.com/integrations/cloudflare-workers-cron): Two fetch() calls in your scheduled() handler give a Cloudflare Worker cron a dead man's switch, evidence and a cost cap.
+- [Vercel Cron Jobs](https://runvouch.com/integrations/vercel-cron): Vercel cron calls a route and records the status code. RunVouch adds the missing part: did the route do the work, on time, within budget.
+- [Supabase (pg_cron + Edge Functions)](https://runvouch.com/integrations/supabase-pg-cron): pg_cron fires an HTTP call through pg_net and forgets it. RunVouch tells you whether the Edge Function ran, finished and produced its result.
+- [Render Cron Jobs](https://runvouch.com/integrations/render-cron): Wrap a Render cron job command with rv run to get MISSED, FAILED, NO_EVIDENCE and cost alerts, without adding a service.
+- [Railway cron schedules](https://runvouch.com/integrations/railway-cron): Railway runs a service on a cron schedule and shows the logs. RunVouch adds the dead man's switch, evidence check and cost cap.
+- [Fly.io scheduled Machines](https://runvouch.com/integrations/fly-io): Fly.io has no cron service; scheduled Machines and in-container cron both need an outside watchdog. rv run gives them one.
+- [Cron inside Docker (supercronic, crond)](https://runvouch.com/integrations/docker-cron): Cron in a container dies with the container and logs to nowhere. Wrap each line with rv run so you learn about it before the next morning.
+- [Apache Airflow](https://runvouch.com/integrations/airflow): Airflow alerts on task failure and SLA misses. RunVouch adds what a green DAG run cannot prove: the output exists, the run was on time, the LLM tasks stayed under budget.
+- [Prefect](https://runvouch.com/integrations/prefect): Prefect marks runs Late when no worker picks them up. RunVouch pages you about it, checks the flow produced its result, and caps LLM spend per run.
+- [Dagster](https://runvouch.com/integrations/dagster): Dagster schedules stop when the daemon stops. RunVouch alerts on the missing run, checks the asset was actually produced, and caps LLM cost per run.
+- [Celery beat](https://runvouch.com/integrations/celery-beat): Celery beat schedules; workers execute. When either is gone, periodic tasks silently stop. RunVouch alerts on the missing run and on tasks that finish without their result.
+- [APScheduler (in-process)](https://runvouch.com/integrations/apscheduler): In-process schedulers (APScheduler, node-cron, node-schedule) stop when the process stops. RunVouch notices from outside.
+- [Temporal Schedules](https://runvouch.com/integrations/temporal): Temporal guarantees the workflow will eventually run. RunVouch tells you it did not run on time, and that it produced what it was supposed to.
+- [Windmill](https://runvouch.com/integrations/windmill): Windmill schedules scripts and flows and shows their runs. RunVouch adds an outside dead man's switch, evidence and an LLM cost cap.
+- [Make (Integromat)](https://runvouch.com/integrations/make): Make turns a scenario off after repeated errors and e-mails you once. RunVouch keeps watching: missed runs, empty runs, LLM cost per run.
+- [Zapier](https://runvouch.com/integrations/zapier): Zapier pauses a Zap after too many errors and can hold tasks. RunVouch alerts when a scheduled Zap stops running or completes without doing the work.
+- [Home Assistant automations](https://runvouch.com/integrations/home-assistant): Time-triggered Home Assistant automations that call scripts or LLM services can stop or no-op after an update. RunVouch notices from outside the house.
+- [LangGraph](https://runvouch.com/integrations/langgraph): A LangGraph graph on a schedule can loop on a tool, overspend, or finish without its artifact. Wrap the run and report each tool call for retry-storm and cost detection.
+- [CrewAI](https://runvouch.com/integrations/crewai): Wrap crew.kickoff() with RunVouch to cap cost per run, detect a crew looping on a tool and confirm the deliverable exists.
+- [AutoGen](https://runvouch.com/integrations/autogen): Multi-agent chats in AutoGen can run to max_turns without producing the result. RunVouch caps the run, detects loops and checks the output.
+- [OpenAI Agents SDK](https://runvouch.com/integrations/openai-agents-sdk): Wrap Runner.run() with RunVouch for a per-run cost cap, retry-storm detection on tool calls and a check that the agent produced its output.
+- [Pydantic AI and smolagents](https://runvouch.com/integrations/pydantic-ai): Lightweight agent libraries have no scheduler and no budget. Wrapping the script with rv run gives a nightly Pydantic AI or smolagents job both.
+- [Dify and Flowise](https://runvouch.com/integrations/dify-flowise): Dify and Flowise run workflows when something calls their API. Wrap the caller with rv run and report the run so a stopped scheduler or an empty answer gets an alert.
+- [Ollama and local LLM batch jobs](https://runvouch.com/integrations/ollama-local-llm): Local models cost no API money, which is why nobody notices when the nightly job stalls on a swapped-out model or writes an empty file. rv run does.
+
 ## Compare
-- [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)
+- [vs Healthchecks.io](https://runvouch.com/vs/healthchecks): Ping monitor vs outcome watchdog.
+- [vs Cronitor](https://runvouch.com/vs/cronitor): Ops monitoring vs agent monitoring.
+- [vs Langfuse](https://runvouch.com/vs/langfuse): Tracing vs watchdog, complementary.
+- [vs Dead Man's Snitch](https://runvouch.com/vs/dead-mans-snitch): Heartbeat vs heartbeat plus outcome.
+- [vs Sentry Crons](https://runvouch.com/vs/sentry-crons): Exceptions vs silent failures.
+- [vs Better Stack](https://runvouch.com/vs/better-stack): One vendor for uptime vs one job done well.
+- [vs Uptime Kuma](https://runvouch.com/vs/uptime-kuma): Self-hosted push monitor vs agent watchdog.
+- [vs Cronhub](https://runvouch.com/vs/cronhub): Cron monitor vs LLM job monitor.
+- [vs Helicone](https://runvouch.com/vs/helicone): LLM proxy vs outside watchdog.
+- [vs AgentOps](https://runvouch.com/vs/agentops): Session replay vs pager.
+- [vs LangSmith](https://runvouch.com/vs/langsmith): Tracing vs the alert that there is something to trace.
+
 
 ## Other
+- [RunVouch in numbers](https://runvouch.com/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing](https://runvouch.com/pricing) · [Security](https://runvouch.com/security) · [Privacy](https://runvouch.com/privacy) · [Changelog](https://runvouch.com/changelog)

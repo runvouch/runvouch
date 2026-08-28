@@ -166,7 +166,7 @@ def head(title, desc, path, jsonld=None, article=False):
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}{ANALYTICS}</head><body{(' class="roster-pad"' if path != '/' else '')}>
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig" data-mode="roster"></canvas></div>
-<header class="top"><div class="wrap nav"><a class="brand" href="/">{LOGO_SVG}RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header>'''
+<header class="top"><div class="wrap nav"><a class="brand" href="/">{LOGO_SVG}RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header>'''
 
 
 PH_BADGE = '<p style="margin:.8rem 0"><a class="ph-badge" href="https://www.producthunt.com/products/runvouch?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-runvouch" target="_blank" rel="noopener noreferrer"><img alt="RunVouch - Dead man\'s switch + cost cap for unattended AI agents | Product Hunt" width="250" height="54" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1232338&amp;theme=dark&amp;t=1787690858298"></a></p>' if datetime.date.today() >= datetime.date(2026, 9, 1) else ''
@@ -654,9 +654,61 @@ doc("/docs/api", "RunVouch HTTP API", "REST API reference for RunVouch: agents, 
      ("Alert webhook payload", '<pre>{"kind":"RETRY_STORM","agent":"repo-janitor","run_id":"9808c5af…","message":"tool \'Bash\' called 41x with identical input in one run.","ts":1787673506.3}</pre>')])
 
 page("/docs/", "RunVouch documentation", "Guides for monitoring Claude Code, cron jobs, OpenClaw, n8n and the MCP server with RunVouch.", '''<main><div class="wrap doc"><h1>Documentation</h1><p class="lead muted">Pick your runtime. Every guide is copy-paste and takes under five minutes.</p>
-<div class="grid g2"><a class="card" href="/docs/claude-code"><h3>Claude Code</h3><p>Routines, headless claude -p, hooks plugin, transcript cost.</p></a><a class="card" href="/docs/cron"><h3>Cron &amp; scripts</h3><p>rv run for anything: Python, Node, bash, GitHub Actions.</p></a><a class="card" href="/docs/github-actions"><h3>GitHub Actions</h3><p>One step: MISSED when the schedule stops, NO_EVIDENCE when it fakes it.</p></a><a class="card" href="/docs/openclaw"><h3>OpenClaw</h3><p>Heartbeats, per-task runs, daily caps.</p></a><a class="card" href="/docs/n8n"><h3>n8n</h3><p>Two HTTP nodes; catch the failures Error Workflows miss.</p></a><a class="card" href="/docs/python-node"><h3>Python &amp; Node</h3><p>LangGraph, OpenAI Agents SDK, CrewAI, any script.</p></a><a class="card" href="/docs/templates"><h3>Agent templates</h3><p>Nightly 13F digest, Form D raises, hiring watch: copy, set keys, monitored.</p></a><a class="card" href="/docs/proof"><h3>Verifiable runs</h3><p>Hash per run, Merkle root per day, anchored in Bitcoin. Verify offline. Need to show an auditor? Start at <span style="color:var(--acc2)">/verifiable-agent-runs</span>.</p></a><a class="card" href="/docs/alerts"><h3>Alert channels</h3><p>E-mail, Telegram, Slack, webhook, PagerDuty: one settings call each.</p></a><a class="card" href="/docs/mcp"><h3>MCP server</h3><p>Agents that check on agents.</p></a><a class="card" href="/docs/api"><h3>HTTP API</h3><p>Everything the CLI does, over REST.</p></a></div></div></main>''', [ORG_LD])
+<div class="grid g2"><a class="card" href="/docs/claude-code"><h3>Claude Code</h3><p>Routines, headless claude -p, hooks plugin, transcript cost.</p></a><a class="card" href="/docs/cron"><h3>Cron &amp; scripts</h3><p>rv run for anything: Python, Node, bash, GitHub Actions.</p></a><a class="card" href="/docs/github-actions"><h3>GitHub Actions</h3><p>One step: MISSED when the schedule stops, NO_EVIDENCE when it fakes it.</p></a><a class="card" href="/docs/openclaw"><h3>OpenClaw</h3><p>Heartbeats, per-task runs, daily caps.</p></a><a class="card" href="/docs/n8n"><h3>n8n</h3><p>Two HTTP nodes; catch the failures Error Workflows miss.</p></a><a class="card" href="/integrations/"><h3>All integrations</h3><p>Kubernetes, systemd, Airflow, Prefect, Lambda, Vercel, LangGraph, CrewAI and 25 more.</p></a><a class="card" href="/docs/python-node"><h3>Python &amp; Node</h3><p>LangGraph, OpenAI Agents SDK, CrewAI, any script.</p></a><a class="card" href="/docs/templates"><h3>Agent templates</h3><p>Nightly 13F digest, Form D raises, hiring watch: copy, set keys, monitored.</p></a><a class="card" href="/docs/proof"><h3>Verifiable runs</h3><p>Hash per run, Merkle root per day, anchored in Bitcoin. Verify offline. Need to show an auditor? Start at <span style="color:var(--acc2)">/verifiable-agent-runs</span>.</p></a><a class="card" href="/docs/alerts"><h3>Alert channels</h3><p>E-mail, Telegram, Slack, webhook, PagerDuty: one settings call each.</p></a><a class="card" href="/docs/mcp"><h3>MCP server</h3><p>Agents that check on agents.</p></a><a class="card" href="/docs/api"><h3>HTTP API</h3><p>Everything the CLI does, over REST.</p></a></div></div></main>''', [ORG_LD])
 
 
+
+# ───────────────────────── INTEGRATIONS (one page per scheduler / platform / framework) ─────────────────────────
+import sys as _sys
+_sys.path.insert(0, str(ROOT))
+from integrations import INTEGRATIONS, GROUPS
+
+DETECTS = ('<table><tr><th>Alert</th><th>What it means here</th></tr>'
+           '<tr><td><b>MISSED</b></td><td>cadence plus grace passed and no run started</td></tr>'
+           '<tr><td><b>FAILED</b></td><td>non-zero exit or a reported failure, with the stderr excerpt</td></tr>'
+           '<tr><td><b>NO_EVIDENCE</b></td><td>the run said ok but the file, URL or assertion you required is missing</td></tr>'
+           '<tr><td><b>STALLED</b></td><td>a run started and never ended within max runtime</td></tr>'
+           '<tr><td><b>RETRY_STORM</b></td><td>the same tool called with identical input many times in one run</td></tr>'
+           '<tr><td><b>BUDGET_RUN / BUDGET_DAY</b></td><td>cost cap crossed; the agent is paused until you resume it</td></tr>'
+           '<tr><td><b>DRIFT</b></td><td>duration or output size far off its 7-run baseline</td></tr></table>')
+
+def integration_page(i):
+    agent = "nightly-report"
+    cadence = (f'<pre>rv agent {agent} --cadence 24h --grace 30m --max-runtime 1h --evidence --cap-run-cost 2</pre>'
+               f'<p>Register the agent once, from anywhere with the key. Cadence is what turns a schedule that stopped into an alert; '
+               f'<code>--evidence</code> makes a run without evidence a failure; the caps pause the agent when it overspends.</p>')
+    how = "Wrap the job" if i["mode"] == "wrap" else "Report the run (two HTTP calls)"
+    sections = [("How it runs on " + i["name"], f'<p>{i["where"]}</p>'),
+                ("Store the key", f'<p>{i["key"]}</p>'),
+                (how, i["snippet"] + ('<p><code>rv</code> fails open: if RunVouch is unreachable the job still runs and you get one warning line.</p>' if i["mode"] == "wrap" else f'<p>The start call returns <code>run_id</code>; the end call takes <code>status</code> (ok or fail), optional <code>cost</code> and <code>tokens</code>, and <code>evidence</code> as a JSON object of booleans. Full reference on the <a href="/docs/api">API page</a>.</p>')),
+                ("Register the cadence and caps", cadence),
+                ("What goes silent on " + i["name"], i["silent"]),
+                ("What RunVouch detects", DETECTS)]
+    steps = [("Store RUNVOUCH_KEY as a secret", re.sub("<[^>]+>", "", i["key"])),
+             (how, "Add the snippet from this page to the scheduled job."),
+             ("Register the agent", f"rv agent {agent} --cadence 24h --grace 30m --evidence")]
+    doc(f"/integrations/{i['slug']}", i["title"], i["desc"], i["h1"] + " with RunVouch", i["intro"], sections, steps)
+
+for _i in INTEGRATIONS:
+    integration_page(_i)
+
+_cards = ""
+for _g in GROUPS:
+    _items = [i for i in INTEGRATIONS if i["group"] == _g]
+    _cards += f'<h2>{_g}</h2><div class="grid g3">' + "".join(
+        f'<a class="card" href="/integrations/{i["slug"]}"><h3>{i["name"]}</h3><p>{i["intro"].split(". ")[0].rstrip(".")[:120]}.</p></a>' for i in _items) + '</div>'
+_existing = ('<h2>Guides with their own page</h2><div class="grid g3">'
+             '<a class="card" href="/docs/claude-code"><h3>Claude Code</h3><p>Routines, headless claude -p, hooks plugin.</p></a>'
+             '<a class="card" href="/docs/cron"><h3>Cron and scripts</h3><p>rv run for anything on a schedule.</p></a>'
+             '<a class="card" href="/docs/github-actions"><h3>GitHub Actions</h3><p>Scheduled workflows that stop firing.</p></a>'
+             '<a class="card" href="/docs/openclaw"><h3>OpenClaw</h3><p>Heartbeats, per-task runs, daily caps.</p></a>'
+             '<a class="card" href="/docs/n8n"><h3>n8n</h3><p>Two HTTP nodes; Error Workflows miss the rest.</p></a>'
+             '<a class="card" href="/docs/python-node"><h3>Python and Node</h3><p>Single-file clients, any script.</p></a></div>')
+page("/integrations/", "RunVouch integrations: every scheduler, platform and agent framework",
+     f"How to give a scheduled job a dead man's switch, evidence check and cost cap on {len(INTEGRATIONS) + 6} runtimes: Kubernetes, systemd, Airflow, Prefect, Lambda, Vercel, LangGraph, CrewAI and more.",
+     f'<main><div class="wrap doc"><h1>Integrations</h1><p class="lead muted">RunVouch wraps a command or takes two HTTP calls, so it works wherever a job runs. Pick the runtime; each page lists where the job runs there, how to store the key, the snippet, and what fails silently on that platform in its own terms.</p>{_existing}{_cards}</div></main>', [ORG_LD])
+
+VS_LIST = [('healthchecks', 'Healthchecks.io', 'Ping monitor vs outcome watchdog.'), ('cronitor', 'Cronitor', 'Ops monitoring vs agent monitoring.'), ('langfuse', 'Langfuse', 'Tracing vs watchdog, complementary.'), ('dead-mans-snitch', "Dead Man's Snitch", 'Heartbeat vs heartbeat plus outcome.'), ('sentry-crons', 'Sentry Crons', 'Exceptions vs silent failures.'), ('better-stack', 'Better Stack', 'One vendor for uptime vs one job done well.'), ('uptime-kuma', 'Uptime Kuma', 'Self-hosted push monitor vs agent watchdog.'), ('cronhub', 'Cronhub', 'Cron monitor vs LLM job monitor.'), ('helicone', 'Helicone', 'LLM proxy vs outside watchdog.'), ('agentops', 'AgentOps', 'Session replay vs pager.'), ('langsmith', 'LangSmith', 'Tracing vs the alert that there is something to trace.')]
 # ───────────────────────── VS PAGES ─────────────────────────
 def vs(slug, name, tagline, rows, verdict):
     body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/vs/">Compare</a> › {name}</p><h1>RunVouch vs {name}</h1><p class="lead muted">{tagline}</p>
@@ -674,7 +726,83 @@ vs("cronitor", "Cronitor", "Cronitor is a mature cron, heartbeat and uptime moni
 vs("langfuse", "Langfuse", "Langfuse is excellent open-source LLM observability: traces, evals, prompt management. RunVouch is not a tracing tool; it's the watchdog that tells you a scheduled agent is broken or expensive, without instrumenting your code.",
    [("Traces, spans, prompt versions, evals", "yes", "no"), ("Requires SDK in your code", "yes", "no, wrap the command or install the plugin"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in traces", "automatic"), ("Hard cost cap + pause", "dashboards", "yes"), ("Pricing", "free self-host; cloud per unit", "free 3 agents; $9 / $29")],
    "<p>They're complementary. Langfuse answers \"why did this prompt produce that\"; RunVouch answers \"did last night's agent run, finish, prove it, and stay under budget\". If you only want the second, you don't need the first.</p>")
-page("/vs/", "RunVouch compared", "How RunVouch compares to Healthchecks.io, Cronitor and Langfuse for monitoring scheduled AI agents.", '<main><div class="wrap doc"><h1>Compare</h1><div class="grid g3"><a class="card" href="/vs/healthchecks"><h3>vs Healthchecks.io</h3><p>Ping monitor vs outcome watchdog.</p></a><a class="card" href="/vs/cronitor"><h3>vs Cronitor</h3><p>Ops monitoring vs agent monitoring.</p></a><a class="card" href="/vs/langfuse"><h3>vs Langfuse</h3><p>Tracing vs watchdog, complementary.</p></a></div></div></main>', [ORG_LD])
+
+vs("dead-mans-snitch", "Dead Man's Snitch", "Dead Man's Snitch is a heartbeat monitor: your job checks in, and you hear about it when it does not. RunVouch keeps the heartbeat and adds what the job did and what it cost.",
+   [("Missed check-in alerts", "yes", "yes"), ("Failure with stderr excerpt", "via the snitch CLI wrapper", "yes, automatic with rv run"), ("Evidence the task was done", "no", "yes, file / URL / assertion"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes, per run and per day"), ("Output/duration drift", "no", "yes"), ("Claude Code plugin / MCP server", "no", "yes"), ("Self-host", "no", "yes (MIT)"), ("Price", "free for one snitch; paid plans", "free 3 agents; $9 / $29")],
+   "<p>If all you need is \"did the cron check in\", Dead Man's Snitch has done that reliably for years. If the job is an agent, the check-in is the least interesting fact about it.</p>")
+vs("sentry-crons", "Sentry Crons", "Sentry Crons adds scheduled-job monitoring to Sentry error tracking. RunVouch is for jobs whose failure is not an exception: empty output, loops, overspend.",
+   [("Missed / late run alerts", "yes", "yes"), ("Exceptions with stack traces", "yes, with the Sentry SDK", "stderr excerpt only"), ("Evidence the task was done", "no", "yes"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes"), ("Output/duration drift", "no (duration thresholds only)", "yes"), ("Requires SDK in your code", "yes (or curl check-ins)", "no, wrap the command"), ("Self-host", "yes (Sentry self-hosted)", "yes (MIT)"), ("Price", "included in Sentry plans; per-monitor quota", "free 3 agents; $9 / $29")],
+   "<p>Already on Sentry and your jobs fail by throwing? Use Sentry Crons. Agents mostly fail without throwing; that is the case RunVouch is built for. They coexist fine.</p>")
+vs("better-stack", "Better Stack", "Better Stack combines uptime, heartbeat monitoring, logs and incident management. RunVouch is one narrow thing: is the scheduled agent alive, done, and under budget.",
+   [("Heartbeat (missed run) alerts", "yes", "yes"), ("Uptime / status pages / on-call", "yes", "no (we link to yours)"), ("Failure with stderr excerpt", "no (heartbeat only)", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("PagerDuty", "own on-call product", "yes (Team)"), ("Price", "free tier; paid plans", "free 3 agents; $9 / $29")],
+   "<p>Pick Better Stack when you want one vendor for uptime, logs and paging. Pick RunVouch when the thing you are worried about is a nightly agent, not a website.</p>")
+vs("uptime-kuma", "Uptime Kuma", "Uptime Kuma is the self-hosted uptime monitor everyone runs at home, and it has push monitors that work as a dead man's switch. RunVouch is the agent-specific layer on top of that idea.",
+   [("Push (heartbeat) monitors", "yes", "yes"), ("HTTP / TCP / DNS uptime checks", "yes", "no"), ("Failure with stderr excerpt", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Tamper-evident proof of each run", "no", "yes"), ("Self-host", "yes (MIT)", "yes (MIT)"), ("Price", "free", "free 3 agents; $9 / $29")],
+   "<p>Keep Uptime Kuma for everything with a URL. For scheduled agents, a push monitor tells you the script ran; RunVouch tells you whether it did the job and what it spent, and the self-hosted version is also MIT.</p>")
+vs("cronhub", "Cronhub", "Cronhub is a straightforward cron monitor with a clean UI. RunVouch shares the missed-run alert and adds outcome, loops and cost.",
+   [("Missed / late run alerts", "yes", "yes"), ("Failure with stderr excerpt", "via /fail ping", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Output/duration drift", "no", "yes"), ("Self-host", "no", "yes (MIT)"), ("Price", "free tier; paid plans", "free 3 agents; $9 / $29")],
+   "<p>For plain cron, either works. For an LLM job on cron, the questions change from \"did it run\" to \"did it finish the work and how much did it cost\", which is where the comparison ends.</p>")
+vs("helicone", "Helicone", "Helicone is an LLM gateway and observability layer: one proxy URL, then dashboards of requests and cost. RunVouch does not sit in the request path; it watches the scheduled job from outside.",
+   [("Per-request logs and cost dashboards", "yes", "no (cost per run and per day)"), ("Requires routing LLM calls through a proxy", "yes", "no"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "visible in logs", "automatic"), ("Hard cost cap that pauses the agent", "rate limits per key", "yes, per run and per day"), ("Self-host", "yes", "yes (MIT)")],
+   "<p>Helicone answers \"what did all my LLM calls look like\". RunVouch answers \"did last night's agent run, finish, prove it and stay under budget\". If you only need the second, you do not need a proxy in the path.</p>")
+vs("agentops", "AgentOps", "AgentOps is session replay and analytics for agent frameworks: every step, every LLM call, in a timeline. RunVouch is the pager: is the scheduled agent alive, done and under budget right now.",
+   [("Step-by-step session replay", "yes", "no"), ("Requires SDK in your code", "yes", "no, wrap the command or two HTTP calls"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "visible in the replay", "automatic, during the run"), ("Hard cost cap + pause", "no", "yes"), ("Tamper-evident proof per run", "no", "yes"), ("Self-host", "no", "yes (MIT)")],
+   "<p>Use AgentOps to understand why an agent did what it did. Use RunVouch to find out, within minutes, that it did not do it at all. Debugging tool and watchdog, not the same job.</p>")
+vs("langsmith", "LangSmith", "LangSmith is LangChain's tracing, evaluation and prompt platform. RunVouch is the outside watchdog for the scheduled run: missed, failed, empty, looping or over budget.",
+   [("Traces, evals, prompt hub, datasets", "yes", "no"), ("Requires SDK / callbacks", "yes", "no"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in the trace", "automatic"), ("Hard cost cap + pause", "no", "yes"), ("Works without LangChain", "partially", "yes, any command"), ("Self-host", "enterprise", "yes (MIT)")],
+   "<p>They are complementary and many LangGraph users will want both: LangSmith for the trace, RunVouch for the alert that there is something to trace.</p>")
+page("/vs/", "RunVouch compared", "How RunVouch compares to Healthchecks.io, Cronitor, Dead Man's Snitch, Sentry Crons, Better Stack, Uptime Kuma, Cronhub, Langfuse, Helicone, AgentOps and LangSmith for monitoring scheduled AI agents.", """<main><div class="wrap doc"><h1>Compare</h1><p class="lead muted">Feature tables, kept honest: where the other tool is better, it says so.</p><div class="grid g3"><a class="card" href="/vs/healthchecks"><h3>vs Healthchecks.io</h3><p>Ping monitor vs outcome watchdog.</p></a><a class="card" href="/vs/cronitor"><h3>vs Cronitor</h3><p>Ops monitoring vs agent monitoring.</p></a><a class="card" href="/vs/langfuse"><h3>vs Langfuse</h3><p>Tracing vs watchdog, complementary.</p></a><a class="card" href="/vs/dead-mans-snitch"><h3>vs Dead Man's Snitch</h3><p>Heartbeat vs heartbeat plus outcome.</p></a><a class="card" href="/vs/sentry-crons"><h3>vs Sentry Crons</h3><p>Exceptions vs silent failures.</p></a><a class="card" href="/vs/better-stack"><h3>vs Better Stack</h3><p>One vendor for uptime vs one job done well.</p></a><a class="card" href="/vs/uptime-kuma"><h3>vs Uptime Kuma</h3><p>Self-hosted push monitor vs agent watchdog.</p></a><a class="card" href="/vs/cronhub"><h3>vs Cronhub</h3><p>Cron monitor vs LLM job monitor.</p></a><a class="card" href="/vs/helicone"><h3>vs Helicone</h3><p>LLM proxy vs outside watchdog.</p></a><a class="card" href="/vs/agentops"><h3>vs AgentOps</h3><p>Session replay vs pager.</p></a><a class="card" href="/vs/langsmith"><h3>vs LangSmith</h3><p>Tracing vs the alert that there is something to trace.</p></a></div></div></main>""", [ORG_LD])
+
+
+# ───────────────────────── STATS (real numbers from our own fleet, rebuilt weekly) ─────────────────────────
+def _stats():
+    import sqlite3, statistics
+    db = ROOT.parent / "data" / "runvouch.db"
+    if not db.exists():
+        return None
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    d7, d30 = now - 7 * 86400, now - 30 * 86400
+    def one(q, *a): return c.execute(q, a).fetchone()[0]
+    runs30 = one("select count(*) from runs where ended is not null and ended > ?", d30)
+    if runs30 < 20:
+        return None
+    fails30 = one("select count(*) from runs where status='fail' and ended > ?", d30)
+    runs7 = one("select count(*) from runs where ended is not null and ended > ?", d7)
+    agents30 = one("select count(distinct agent_id) from runs where ended > ?", d30)
+    kinds = c.execute("select kind, count(*) from alerts where ts > ? and kind != 'TEST' group by kind order by 2 desc", (d30,)).fetchall()
+    noev = one("select count(*) from alerts where kind='NO_EVIDENCE' and ts > ?", d30)
+    ok30 = one("select count(*) from runs where status='ok' and ended > ?", d30)
+    # detection time: alert timestamp minus the end of the run it belongs to (FAILED and NO_EVIDENCE only)
+    lags = [r[0] for r in c.execute("select a.ts - r.ended from alerts a join runs r on r.id = a.run_id where a.kind in ('FAILED','NO_EVIDENCE') and a.ts > ? and r.ended is not null", (d30,)) if r[0] is not None and r[0] >= 0]
+    lag = statistics.median(lags) if lags else None
+    days = c.execute("select date, n_runs, ots_status from proof_days order by date").fetchall()
+    anchored = sum(1 for d in days if (d[2] or "").startswith("bitcoin:"))
+    return dict(runs30=runs30, fails30=fails30, runs7=runs7, agents30=agents30, kinds=kinds, noev=noev, ok30=ok30,
+                lag=lag, days=len(days), anchored=anchored, day_runs=sum(d[1] for d in days), first_day=days[0][0] if days else None)
+
+_st = _stats()
+if _st:
+    _rows = "".join(f"<tr><td><b>{k}</b></td><td>{n}</td></tr>" for k, n in _st["kinds"]) or "<tr><td colspan=2>none</td></tr>"
+    _lag = ("under 1 second" if _st["lag"] is not None and _st["lag"] < 1 else f"{_st['lag']:.0f} seconds" if _st["lag"] is not None and _st["lag"] < 120 else f"{_st['lag']/60:.0f} minutes" if _st["lag"] is not None else "n/a")
+    _pct = 100 * _st["fails30"] / _st["runs30"]
+    _noev_pct = 100 * _st["noev"] / max(_st["ok30"], 1)
+    _cards = (f'<div class="card"><div class="big grad">{_st["runs30"]:,}</div><h3>runs in 30 days</h3><p>{_st["runs7"]:,} in the last 7 days, across {_st["agents30"]} agents.</p></div>'
+              f'<div class="card"><div class="big grad">{_pct:.1f}%</div><h3>ended in failure</h3><p>{_st["fails30"]} runs exited non-zero or reported fail. Each one produced an alert with the stderr excerpt.</p></div>'
+              f'<div class="card"><div class="big grad">{_st["noev"]}</div><h3>green runs without evidence</h3><p>{_noev_pct:.1f}% of successful runs said ok while the required file, URL or assertion was missing. A ping monitor calls these successes.</p></div>'
+              f'<div class="card"><div class="big grad">{_lag}</div><h3>median time to alert</h3><p>From the end of a failed or evidence-less run to the alert being written: it happens in the same database transaction that ends the run. Delivery to Telegram, Slack or e-mail follows within seconds. Missed runs alert at cadence plus grace, by definition.</p></div>'
+              f'<div class="card"><div class="big grad">{_st["days"]}</div><h3>proof days sealed</h3><p>{_st["day_runs"]:,} run leaves in the public Merkle chain since {_st["first_day"]}; {_st["anchored"]} day roots anchored in Bitcoin via OpenTimestamps. <a href="{API}/proof/">See the chain.</a></p></div>')
+    _body = (f'<main><div class="wrap doc"><h1>RunVouch in numbers</h1>'
+             f'<p class="lead muted">These are not benchmarks. They are the last 30 days of the {_st["agents30"]} scheduled agents and cron jobs that run the RunVouch and DataSignals Lab businesses, monitored by RunVouch itself. Rebuilt every week; this build is from {TODAY}.</p>'
+             f'<div class="grid g3">{_cards}</div>'
+             f'<h2>Alerts by kind, last 30 days</h2><table><tr><th>Kind</th><th>Count</th></tr>{_rows}</table>'
+             f'<p class="muted">What the kinds mean is on the <a href="/docs/alerts">alerts page</a>. TEST alerts are excluded. Numbers come straight from the production database at build time; nothing is edited by hand.</p>'
+             f'<h2>How to read this</h2>'
+             f'<p>The failure rate is what you would expect from a fleet of scrapers and LLM jobs hitting external sources: most failures are an upstream 5xx or a rate limit, and the interesting number is not the rate but the time it took to know. The evidence figure is the one a heartbeat monitor cannot produce at all: those runs would have been green.</p>'
+             f'<p>If you publish your own numbers from RunVouch and want them linked here, <a href="/contact">say so</a>.</p></div></main>')
+    page("/stats", "RunVouch in numbers: our own agents, last 30 days",
+         f"Real figures from the fleet that runs RunVouch itself: {_st['runs30']} runs by {_st['agents30']} agents in 30 days, {_pct:.1f}% failed, {_st['noev']} green runs without evidence, median time to alert {_lag}. Updated weekly.",
+         _body, [ORG_LD])
 
 # ───────────────────────── misc pages ─────────────────────────
 page("/contact", "Contact | RunVouch", "Questions, bugs, security reports or partnership ideas, reach the RunVouch team.", '''<main><div class="wrap doc"><h1>Contact</h1><p class="lead muted">Support, billing, security or just an idea. Replies within one working day.</p>
@@ -768,10 +896,13 @@ API base: {API} (header X-API-Key).
 
 ## Field notes (blog)
 """ + "".join(f"- [{a['title']}]({BASE}/blog/{a['slug']}): {a['description']}\n" for a in ARTICLES) + f"""
+## Integrations (one page per runtime: where the job runs, key as secret, snippet, what fails silently there)
+""" + "".join(f"- [{i['name']}]({BASE}/integrations/{i['slug']}): {i['desc']}\n" for i in INTEGRATIONS) + f"""
 ## Compare
-- [vs Healthchecks.io]({BASE}/vs/healthchecks) · [vs Cronitor]({BASE}/vs/cronitor) · [vs Langfuse]({BASE}/vs/langfuse)
+""" + "".join(f"- [vs {b}]({BASE}/vs/{a}): {c}\n" for a, b, c in VS_LIST) + f"""
 
 ## Other
+- [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing]({BASE}/pricing) · [Security]({BASE}/security) · [Privacy]({BASE}/privacy) · [Changelog]({BASE}/changelog)
 """)
 (OUT / ".well-known").mkdir(exist_ok=True)
