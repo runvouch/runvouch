@@ -121,18 +121,37 @@ def thread(url: str) -> str:
 
 
 CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")  # same CLI the blog engine uses
-RULES = """You draft ONE Reddit comment for the account u/nightly_runs, a developer who runs about 50 unattended jobs
-(Claude Code routines, headless claude -p, cron'd Python) for a data product, and who built RunVouch, a watchdog for
-unattended AI agents. Rules, all hard:
-- Answer the poster's actual question or add one concrete, useful thing. Never sell. Do NOT mention RunVouch, any product,
-  any link. Do not say "I built". Speak from experience with unattended jobs only where it fits.
-- Plain ASCII, English, 60-140 words, no headings, no emoji, no em dashes, no "---" or other separator lines.
+STYLE = """- Plain ASCII, English, 60-140 words, no headings, no emoji, no em dashes, no "---" or other separator lines.
 - Write like a person typing a reply, not like a model: contractions (it's, don't), sentences of uneven length, one concrete
   experience beats three general points, at most one short list and only if it really helps. Avoid stock phrases such as
   "genuinely", "honestly", "two things", "it's worth noting", "let me push back", "great question", and never open with praise.
 - Be specific (flags, commands, file names, numbers you can defend). If you cannot add anything real, output exactly: SKIP
 - Never invent facts about the poster or about tools; if unsure, say what worked for you instead.
 Output only the comment text."""
+
+# Reddit: a person, never a company. Reddit readers downvote and mods remove anything that smells like a vendor,
+# so the account earns its place by being useful; the profile bio carries the RunVouch link, the comments do not.
+RULES_REDDIT = """You draft ONE Reddit comment for the account u/nightly_runs, a developer who runs about 50 unattended jobs
+(Claude Code routines, headless claude -p, cron'd Python) for a data product. Rules, all hard:
+- Answer the poster's actual question or add one concrete, useful thing. Never sell. Do NOT mention RunVouch, any product,
+  any link. Do not say "I built". Speak from experience with unattended jobs only where it fits.
+""" + STYLE
+
+# GitHub: the runvouch account, so the company voice. The account name already says who is talking; one plain sentence
+# naming RunVouch is allowed when the issue is about exactly what it does, never a link, never a pitch.
+RULES_GITHUB = """You draft ONE GitHub issue comment posted from the account "runvouch", the company behind RunVouch, a watchdog
+for unattended AI agents (missed runs, silent failures, runaway cost, verifiable run proofs). Rules, all hard:
+- Write as the company: "we", "at RunVouch", never "I". Answer the issue's actual question or add one concrete, useful thing
+  from running many unattended jobs on the platform in the issue.
+- Do not explain how to rebuild what RunVouch does; give the insight and the pitfall, not the implementation. If the issue is
+  about exactly what RunVouch does, you may say so in ONE plain sentence ("we run into this daily at RunVouch, ..."),
+  no link, no pricing, no call to action. If the issue is not about that, do not mention RunVouch at all.
+""" + STYLE
+
+FOLLOWUP = """
+THIS IS A FOLLOW-UP: our account already commented in this thread (see the thread and the earlier comment below). Someone
+replied to us. Write the reply to that newest response addressed to our account: answer what they asked or said, keep the
+same voice, shorter is fine (30-100 words). Do not repeat the earlier comment."""
 
 
 def recent_drafts(n: int = 12) -> list[dict]:
@@ -142,7 +161,7 @@ def recent_drafts(n: int = 12) -> list[dict]:
     return rows[-n:]
 
 
-def draft(thread_text: str) -> str:
+def draft(thread_text: str, bron: str = "reddit", followup=None) -> str:
     """Ask the local Claude Code CLI (same as the blog engine) for a comment draft; returns '' when it declines.
     The last twelve drafts go along so the new one does not reuse their openings, examples, numbers or structure:
     readers of these threads overlap, and the same anecdote twice reads as a campaign."""
@@ -154,7 +173,10 @@ def draft(thread_text: str) -> str:
                  "for example a short observation, a direct answer, a question back, or a one-line story):\n" +
                  "\n---\n".join(d["text"][:400] for d in prev))
     try:
-        r = subprocess.run([CLAUDE, "-p", RULES + avoid + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
+        rules = RULES_GITHUB if bron == "github" else RULES_REDDIT
+        # followup=None: a fresh comment; followup="" or text: a reply to a response we got (text = what the owner pasted)
+        extra = "" if followup is None else FOLLOWUP + "\n\nREPLY WE RECEIVED (as pasted by the owner, may be empty):\n" + followup
+        r = subprocess.run([CLAUDE, "-p", rules + avoid + extra + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
                            capture_output=True, text=True, timeout=240)
         out = json.loads(r.stdout or "{}").get("result", "").strip()
         return "" if (not out or out.upper().startswith("SKIP")) else out
@@ -213,7 +235,7 @@ def main() -> int:
         bron = "github" if p["sub"].startswith("github") else "reddit"
         if drafted < 2 and bron not in bronnen and "--no-draft" not in sys.argv:
             try:
-                text = draft(thread(p["url"]))
+                text = draft(thread(p["url"]), bron)
             except Exception as e:
                 print("thread:", e, file=sys.stderr)
         if text:
