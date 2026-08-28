@@ -15,7 +15,7 @@
 <tr><td>API (api.runvouch.com)<br><span class="small muted">accepts runs and serves the dashboard</span></td><td id="s-api">checking</td><td id="u-api-24h">-</td><td id="u-api-7d">-</td><td id="u-api-30d">-</td><td id="u-api-90d">-</td></tr>
 <tr><td>Detectors<br><span class="small muted">missed, stalled, failed, no evidence, budget</span></td><td id="s-det">checking</td><td id="u-det-24h">-</td><td id="u-det-7d">-</td><td id="u-det-30d">-</td><td id="u-det-90d">-</td></tr>
 <tr><td>Alert delivery<br><span class="small muted">Telegram, e-mail, webhook, PagerDuty</span></td><td id="s-alerts">checking</td><td id="u-al-24h">-</td><td id="u-al-7d">-</td><td id="u-al-30d">-</td><td id="u-al-90d">-</td></tr>
-<tr><td>Website and dashboard<br><span class="small muted">runvouch.com, /app</span></td><td id="s-app">checking</td><td colspan="4" class="small muted">static hosting, served from a CDN</td></tr></table>
+<tr><td>Website and dashboard<br><span class="small muted">runvouch.com, /app</span></td><td id="s-app">checking</td><td colspan="4" class="small muted">same host as the API, through Cloudflare; up whenever the API row is up</td></tr></table>
 <p class="small muted" id="s-meta">Loading the heartbeat record.</p>
 <h2>Outages</h2>
 <div id="s-incidents" class="small muted">Loading.</div>
