@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""reddit-scout.py — reads the public RSS feeds of a few subreddits (no API, no login) and lists
+"""reddit-scout.py — reads the public RSS feeds of a few subreddits and the open issues of two GitHub repos (no login) and lists
 threads worth a genuine comment: scheduled/unattended agents, cron, cost, silent failures, n8n errors.
 
   python3 reddit-scout.py            -> prints candidates, sends them to the owner's Telegram (from the RunVouch DB)
@@ -17,6 +17,11 @@ ROOT = os.path.dirname(HERE)
 STATE = os.path.join(ROOT, "data", "reddit-seen.json")
 UA = "nightly-runs-reader/0.1 (personal; reads public feeds; contact launch@runvouch.com)"
 SUBS = ["ClaudeAI", "ClaudeCode", "n8n", "selfhosted", "Anthropic", "claude"]
+# GitHub issues are where the pain is written down first (#37686: $1,800 in two nights; openclaw #16808: polling loop).
+# Same rules as Reddit: answer the question, never sell. Post from the runvouch account, never a personal one.
+GH_REPOS = ["anthropics/claude-code", "openclaw/openclaw"]
+GH_TERMS = 'scheduled OR routine OR cron OR headless OR loop'   # GitHub allows at most five OR/AND/NOT operators per search
+GH_DAYS = 3
 KEYWORDS = {  # weight per keyword (lower-case substring match)
     "routine": 3, "scheduled": 3, "schedule": 2, "cron": 3, "headless": 3, "claude -p": 3, "unattended": 4, "overnight": 3,
     "autonomous": 2, "agent": 1, "agents": 1, "loop": 2, "looping": 3, "stuck": 2, "retry": 2, "bill": 3, "cost": 2,
@@ -58,6 +63,35 @@ def feed(sub: str) -> list[dict]:
     return out
 
 
+def feed_github(repo: str) -> list[dict]:
+    """Open issues updated in the last GH_DAYS days that mention scheduling, cost or loops. Unauthenticated: 10 searches/min."""
+    since = time.strftime("%Y-%m-%d", time.gmtime(time.time() - GH_DAYS * 86400))
+    q = urllib.parse.quote(f"repo:{repo} is:issue is:open {GH_TERMS} updated:>={since}")
+    req = urllib.request.Request(f"https://api.github.com/search/issues?q={q}&sort=updated&per_page=30",
+                                 headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        items = json.load(r).get("items", [])
+    time.sleep(7)
+    return [{"sub": "github " + repo, "title": strip(i.get("title", "")), "url": i["html_url"],
+             "body": strip(i.get("body") or "")[:600], "published": i.get("updated_at", ""), "comments": i.get("comments", 0)}
+            for i in items if "pull_request" not in i]
+
+
+def thread_github(url: str) -> str:
+    owner_repo_num = re.search(r"github\.com/([^/]+/[^/]+)/issues/(\d+)", url)
+    if not owner_repo_num:
+        return ""
+    base = f"https://api.github.com/repos/{owner_repo_num.group(1)}/issues/{owner_repo_num.group(2)}"
+    h = {"User-Agent": UA, "Accept": "application/vnd.github+json"}
+    with urllib.request.urlopen(urllib.request.Request(base, headers=h), timeout=20) as r:
+        issue = json.load(r)
+    with urllib.request.urlopen(urllib.request.Request(base + "/comments?per_page=30", headers=h), timeout=20) as r:
+        comments = json.load(r)
+    parts = ["POST " + issue.get("user", {}).get("login", "?") + ": " + strip(issue.get("title", "")) + "\n" + strip(issue.get("body") or "")[:2500]]
+    parts += [f"COMMENT {c.get('user', {}).get('login', '?')}: " + strip(c.get("body") or "")[:1200] for c in comments]
+    return "\n\n".join(parts)
+
+
 def score(p: dict) -> int:
     t = (p["title"] + " " + p["body"]).lower()
     if not any(k in t for k, w in KEYWORDS.items() if w >= 3):
@@ -71,6 +105,8 @@ def score(p: dict) -> int:
 
 
 def thread(url: str) -> str:
+    if "github.com/" in url:
+        return thread_github(url)
     root = ET.fromstring(fetch(url.rstrip("/") + "/.rss?limit=40"))
     parts = []
     for i, e in enumerate(root.findall("a:entry", NS)):
@@ -133,6 +169,11 @@ def main() -> int:
             cands += feed(sub)
         except Exception as e:
             print(f"{sub}: {e}", file=sys.stderr)
+    for repo in GH_REPOS:
+        try:
+            cands += feed_github(repo)
+        except Exception as e:
+            print(f"github {repo}: {e}", file=sys.stderr)
     fresh = [p for p in cands if p["url"] not in seen]
     fresh.sort(key=score, reverse=True)
     top = [p for p in fresh if score(p) >= 6][:4]
@@ -144,12 +185,13 @@ def main() -> int:
                 text = draft(thread(p["url"]))
             except Exception as e:
                 print("thread:", e, file=sys.stderr)
+        waar = (f"{p['sub']} (plaats als het runvouch-account, niet je eigen)" if p["sub"].startswith("github") else f"r/{p['sub']}")
         if text:
             drafted += 1
-            blocks.append(f"r/{p['sub']}: {p['title'][:100]}\n{p['url']}\n\nKANT-EN-KLAAR (kopieer, plak onder de post, 'Comment'):\n{text}")
+            blocks.append(f"{waar}: {p['title'][:100]}\n{p['url']}\n\nKANT-EN-KLAAR (kopieer, plak onder de post, 'Comment'):\n{text}")
         else:
-            blocks.append(f"r/{p['sub']}: {p['title'][:100]}\n{p['url']}\n(geen concept: zeg 'reddit' + link als je hier wilt reageren)")
-    msg = ("Reddit vandaag - " + str(drafted) + " reactie(s) klaar om te plakken:\n\n" + "\n\n----\n\n".join(blocks)) if top else "Reddit vandaag: geen passende nieuwe threads."
+            blocks.append(f"{waar}: {p['title'][:100]}\n{p['url']}\n(geen concept: zeg 'reddit' + link als je hier wilt reageren)")
+    msg = ("Reddit en GitHub vandaag - " + str(drafted) + " reactie(s) klaar om te plakken:\n\n" + "\n\n----\n\n".join(blocks)) if top else "Reddit en GitHub vandaag: geen passende nieuwe threads."
     print(msg)
     if "--dry" not in sys.argv:
         for chunk in [msg[i:i + 3800] for i in range(0, len(msg), 3800)]:
