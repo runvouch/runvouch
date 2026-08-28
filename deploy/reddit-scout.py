@@ -95,7 +95,10 @@ def thread_github(url: str) -> str:
 
 def score(p: dict) -> int:
     t = (p["title"] + " " + p["body"]).lower()
-    if not any(k in t for k, w in KEYWORDS.items() if w >= 3):
+    # GitHub issue bodies are long and mention everything (logs, env, "headless" in passing): there the strong signal
+    # must be in the title, or the scout drafts for an issue that is not about scheduling or monitoring at all
+    sterk = p["title"].lower() if p["sub"].startswith("github") else t
+    if not any(k in sterk for k, w in KEYWORDS.items() if w >= 3):
         return 0                     # no strong signal (cron, routine, monitoring, bill...): skip, whatever the noise says
     s = sum(w for k, w in KEYWORDS.items() if k in t)
     if "?" in p["title"]:
