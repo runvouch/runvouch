@@ -16,7 +16,7 @@ def test_every_integration_is_complete_and_unique():
         assert i["group"] in I.GROUPS
         assert i["mode"] in ("wrap", "http")
         assert re.fullmatch(r"[a-z0-9-]+", i["slug"])
-        assert "rv run" in i["snippet"] or '"rv", "run"' in i["snippet"] or "/v1/runs/start" in i["snippet"] or "runvouch.vouch(" in i["snippet"], i["slug"]
+        assert "rv run" in i["snippet"] or '"rv", "run"' in i["snippet"] or "--command rv" in i["snippet"] or "/v1/runs/start" in i["snippet"] or "runvouch.vouch(" in i["snippet"], i["slug"]
         assert "<li>" in i["silent"], f"{i['slug']}: silent-failure list missing"
         assert "—" not in str(i), f"{i['slug']}: em dash"
 
