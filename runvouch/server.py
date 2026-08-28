@@ -43,7 +43,7 @@ from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from runvouch import proof as _pf
@@ -65,6 +65,9 @@ SIGNUP_PER_IP_PER_DAY = int(os.getenv("RUNVOUCH_SIGNUPS_PER_IP", "5"))
 CORS_ORIGINS = [o for o in os.getenv("RUNVOUCH_CORS", "").split(",") if o]
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 ALERT_FROM = os.getenv("ALERT_FROM", "RunVouch alerts <alerts@runvouch.com>")
+SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID", "")
+SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET", "")
+SLACK_STATE_TTL = 600  # seconds an Add to Slack link stays valid
 
 app = FastAPI(title="RunVouch", version="0.2.0")
 if CORS_ORIGINS:
@@ -1248,6 +1251,100 @@ def test_alert(acc=Depends(account_from_key)):
     return {"ok": True}
 
 
+# ── Slack "Add to Slack" (OAuth v2, scope incoming-webhook) ──
+SLACK_OAUTH_TOKEN_URL = "https://slack.com/api/oauth.v2.access"
+
+
+def _site_url() -> str:
+    return PUBLIC_URL.replace("api.", "", 1)
+
+
+def _slack_configured() -> bool:
+    return bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
+
+
+def _slack_redirect_uri() -> str:
+    return PUBLIC_URL + "/integrations/slack/callback"
+
+
+def slack_state_sign(account_id: int, now: Optional[float] = None) -> str:
+    """Signed, expiring state: <account_id>.<expiry>.<hmac>. Binds the callback to the account without putting the API key in a URL that Slack sees."""
+    exp = int((now or time.time()) + SLACK_STATE_TTL)
+    msg = f"{account_id}.{exp}"
+    sig = hmac.new(SLACK_CLIENT_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{msg}.{sig}"
+
+
+def slack_state_verify(state: str, now: Optional[float] = None) -> Optional[int]:
+    try:
+        acc_s, exp_s, sig = state.split(".")
+        msg = f"{acc_s}.{exp_s}"
+        expected = hmac.new(SLACK_CLIENT_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(expected, sig) or int(exp_s) < (now or time.time()):
+            return None
+        return int(acc_s)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _slack_oauth_exchange(code: str) -> dict:
+    """POST the code to oauth.v2.access; returns Slack's JSON. Tests replace this function."""
+    body = urllib.parse.urlencode({"client_id": SLACK_CLIENT_ID, "client_secret": SLACK_CLIENT_SECRET, "code": code,
+                                   "redirect_uri": _slack_redirect_uri()}).encode()
+    req = urllib.request.Request(SLACK_OAUTH_TOKEN_URL, body, {"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "runvouch-server/0.3"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read().decode())
+    except Exception as e:
+        return {"ok": False, "error": f"slack_unreachable: {e.__class__.__name__}"}
+
+
+@app.get("/integrations/slack/status")
+def slack_status():
+    return {"configured": _slack_configured(), "install_url": PUBLIC_URL + "/integrations/slack/install", "scope": "incoming-webhook"}
+
+
+@app.get("/integrations/slack/install", include_in_schema=False)
+def slack_install(token: str = Query(default=""), request: Request = None):
+    if not _slack_configured():
+        raise HTTPException(503, "Slack app not configured")
+    if not token:
+        raise HTTPException(401, "token (your RunVouch API key) is required")
+    acc = account_from_key(token, request)
+    if isinstance(acc, dict) and acc.get("viewer"):
+        raise HTTPException(403, "viewer key: read-only")
+    params = {"client_id": SLACK_CLIENT_ID, "scope": "incoming-webhook", "redirect_uri": _slack_redirect_uri(), "state": slack_state_sign(acc["id"])}
+    return RedirectResponse("https://slack.com/oauth/v2/authorize?" + urllib.parse.urlencode(params), status_code=302)
+
+
+@app.get("/integrations/slack/callback", include_in_schema=False)
+def slack_callback(code: str = Query(default=""), state: str = Query(default=""), error: str = Query(default="")):
+    if not _slack_configured():
+        raise HTTPException(503, "Slack app not configured")
+    done = _site_url() + "/integrations/slack/installed"
+    if error:
+        return RedirectResponse(done + "?" + urllib.parse.urlencode({"error": error[:80]}), status_code=302)
+    account_id = slack_state_verify(state)
+    if account_id is None:
+        raise HTTPException(400, "state is invalid or expired; start again from Add to Slack")
+    if not code:
+        raise HTTPException(400, "code is required")
+    acc = q1("SELECT * FROM accounts WHERE id=?", account_id)
+    if not acc:
+        raise HTTPException(400, "account not found")
+    res = _slack_oauth_exchange(code)
+    hook = (res.get("incoming_webhook") or {}) if isinstance(res, dict) else {}
+    url = hook.get("url") or ""
+    if not res.get("ok") or not url.startswith("https://hooks.slack.com/"):
+        return RedirectResponse(done + "?" + urllib.parse.urlencode({"error": str(res.get("error") or "no_webhook")[:80]}), status_code=302)
+    with tx() as db:
+        db.execute("UPDATE accounts SET slack_webhook_url=? WHERE id=?", (url, account_id))
+    channel = str(hook.get("channel") or "")
+    _slack(url, "RunVouch is connected to this channel.", "CONNECTED", acc["name"] or "your account",
+           "Alerts (MISSED, FAILED, NO_EVIDENCE, STALLED, RETRY_STORM, BUDGET, DRIFT) and the weekly digest will be posted here.")
+    return RedirectResponse(done + "?" + urllib.parse.urlencode({"channel": channel[:80]}), status_code=302)
+
+
 @app.post("/v1/agents")
 def upsert_agent(a: AgentIn, acc=Depends(account_from_key)):
     n = q1("SELECT COUNT(*) n FROM agents WHERE account_id=?", acc["id"])["n"]
@@ -1624,7 +1721,7 @@ let f='<h2>Alert channels</h2><p><small>Every alert goes to every channel you fi
 f+='<p>E-mail'+st('email')+'<br><input id=s_alert_email type=email placeholder="you@company.com" autocomplete="off"></p>';
 f+='<p>Telegram'+st('telegram')+'<br><input id=s_telegram_token placeholder="bot token (from @BotFather)" autocomplete="off"> <input id=s_telegram_chat placeholder="chat id" style="width:12rem" autocomplete="off"></p>';
 f+='<p>Webhook (JSON POST)'+st('webhook')+'<br><input id=s_webhook_url type=url placeholder="https://..." autocomplete="off"></p>';
-f+='<p>Slack incoming webhook'+st('slack')+'<br><input id=s_slack_webhook_url type=url placeholder="https://hooks.slack.com/services/..." autocomplete="off"></p>';
+f+='<p>Slack incoming webhook'+st('slack')+'<br><input id=s_slack_webhook_url type=url placeholder="https://hooks.slack.com/services/..." autocomplete="off"> <a href="/integrations/slack/install?token='+encodeURIComponent(key())+'" style="white-space:nowrap">Add to Slack</a></p>';
 f+='<p>PagerDuty (Events API v2 routing key)'+(team?st('pagerduty'):' <span class="pill waiting">team plan</span>')+'<br><input id=s_pagerduty_routing_key placeholder="32-character integration key" autocomplete="off"'+(team?'':' disabled')+'>'+(team?'':' <small>MISSED, FAILED, STALLED and BUDGET alerts open an incident; ack here resolves it. <a href="https://runvouch.com/pricing">Team plan</a>.</small>')+'</p>';
 f+='<p><button onclick="saveSettings()">Save channels</button> <button onclick="testAlert()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Send test alert</button> <small id=cfgmsg></small></p>';
 if(team){f+='<h2>Shared dashboard</h2><p><small>Viewer keys (rvv_) open this dashboard read-only: agents, runs, alerts, export and alert ack. No settings, no run reporting. Hand one to a teammate or paste it in a wall display.</small></p><div id=vk></div><p><input id=vkname placeholder="name (e.g. ops wall)" style="width:14rem"> <button onclick="newViewerKey()">Create viewer key</button> <small id=vkmsg></small></p>'}

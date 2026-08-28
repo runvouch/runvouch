@@ -617,3 +617,58 @@ def test_public_fleet_only_shows_opted_in_agents():
     assert names == ["nightly-build"] and "secret-job" not in json.dumps(j)
     assert j["agents"][0]["last_run"]["status"] == "ok" and j["agents"][0]["rates"]["7d"]["ok"] == 1
     assert c.get("/public/fleet/nope.json").status_code == 404
+
+
+# ───────────────────────────── Slack: Add to Slack (OAuth v2, incoming-webhook) ─────────────────────────────
+def test_slack_install_unconfigured_is_503(monkeypatch):
+    monkeypatch.setattr(server, "SLACK_CLIENT_ID", "")
+    monkeypatch.setattr(server, "SLACK_CLIENT_SECRET", "")
+    r = c.get("/integrations/slack/install", params={"token": KEY}, follow_redirects=False)
+    assert r.status_code == 503 and "Slack app not configured" in r.json()["detail"]
+    r = c.get("/integrations/slack/callback", params={"code": "x", "state": "y"}, follow_redirects=False)
+    assert r.status_code == 503
+    assert c.get("/integrations/slack/status").json()["configured"] is False
+
+
+def test_slack_install_redirects_without_api_key_in_url(monkeypatch):
+    monkeypatch.setattr(server, "SLACK_CLIENT_ID", "cid123")
+    monkeypatch.setattr(server, "SLACK_CLIENT_SECRET", "csecret")
+    assert c.get("/integrations/slack/install", follow_redirects=False).status_code == 401
+    assert c.get("/integrations/slack/install", params={"token": "rv_nope"}, follow_redirects=False).status_code == 401
+    r = c.get("/integrations/slack/install", params={"token": KEY}, follow_redirects=False)
+    assert r.status_code == 302
+    loc = r.headers["location"]
+    assert loc.startswith("https://slack.com/oauth/v2/authorize?")
+    qs = dict(x.split("=", 1) for x in loc.split("?", 1)[1].split("&"))
+    assert qs["client_id"] == "cid123" and qs["scope"] == "incoming-webhook"
+    assert KEY not in loc and server.key_hash(KEY) not in loc
+    acc_id = server.q1("SELECT id FROM accounts WHERE api_key=?", server.key_hash(KEY))["id"]
+    assert server.slack_state_verify(qs["state"]) == acc_id
+    assert server.slack_state_verify(qs["state"], now=time.time() + 601) is None, "state must expire"
+    assert server.slack_state_verify(qs["state"][:-1] + ("0" if qs["state"][-1] != "0" else "1")) is None, "tampered state"
+
+
+def test_slack_callback_stores_webhook_and_posts_test(monkeypatch):
+    monkeypatch.setattr(server, "SLACK_CLIENT_ID", "cid123")
+    monkeypatch.setattr(server, "SLACK_CLIENT_SECRET", "csecret")
+    sent, asked = [], []
+    monkeypatch.setattr(server, "_webhook", lambda url, payload: sent.append((url, payload)) or True)
+    monkeypatch.setattr(server, "_slack_oauth_exchange", lambda code: asked.append(code) or
+                        {"ok": True, "incoming_webhook": {"url": "https://hooks.slack.com/services/T1/B1/oauth", "channel": "#agents"}})
+    acc_id = server.q1("SELECT id FROM accounts WHERE api_key=?", server.key_hash(KEY))["id"]
+    state = server.slack_state_sign(acc_id)
+    r = c.get("/integrations/slack/callback", params={"code": "c0de", "state": state}, follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"].endswith("/integrations/slack/installed?channel=%23agents")
+    assert asked == ["c0de"]
+    assert server.q1("SELECT slack_webhook_url FROM accounts WHERE id=?", acc_id)["slack_webhook_url"] == "https://hooks.slack.com/services/T1/B1/oauth"
+    assert sent and sent[0][0] == "https://hooks.slack.com/services/T1/B1/oauth" and "CONNECTED" in sent[0][1]["blocks"][0]["text"]["text"]
+    # bad state and Slack-side errors never crash and never store anything
+    assert c.get("/integrations/slack/callback", params={"code": "c", "state": "1.2.3"}, follow_redirects=False).status_code == 400
+    monkeypatch.setattr(server, "_slack_oauth_exchange", lambda code: {"ok": False, "error": "invalid_code"})
+    r = c.get("/integrations/slack/callback", params={"code": "bad", "state": server.slack_state_sign(acc_id)}, follow_redirects=False)
+    assert r.status_code == 302 and "error=invalid_code" in r.headers["location"]
+    r = c.get("/integrations/slack/callback", params={"error": "access_denied", "state": state}, follow_redirects=False)
+    assert r.status_code == 302 and "error=access_denied" in r.headers["location"]
+    assert server.q1("SELECT slack_webhook_url FROM accounts WHERE id=?", acc_id)["slack_webhook_url"] == "https://hooks.slack.com/services/T1/B1/oauth"
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET slack_webhook_url=NULL WHERE id=?", (acc_id,))
