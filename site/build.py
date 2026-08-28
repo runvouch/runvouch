@@ -14,6 +14,13 @@ OUT = ROOT / "public"
 BASE = "https://runvouch.com"
 API = "https://api.runvouch.com"
 TODAY = datetime.date.today().isoformat()
+# Bezoekteller (GoatCounter, zonder cookies). Code staat in site/analytics.json; leeg = geen tag.
+try:
+    _GC = (json.loads((ROOT / "analytics.json").read_text()).get("goatcounter_code") or "").strip()
+except Exception:
+    _GC = ""
+ANALYTICS = (f'<script data-goatcounter="https://{_GC}.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>'
+             if _GC else "")
 _ENV = {l.split("=",1)[0]: l.split("=",1)[1].strip() for l in open(ROOT.parent / ".env") if "=" in l and not l.startswith("#")} if (ROOT.parent / ".env").exists() else {}
 LS_LIVE = _ENV.get("LS_LIVE") == "1"
 STRIPE_LIVE = _ENV.get("STRIPE_LIVE") == "1" and _ENV.get("STRIPE_SOLO_URL") and _ENV.get("STRIPE_TEAM_URL")
@@ -157,7 +164,7 @@ def head(title, desc, path, jsonld=None, article=False):
 <meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:url" content="{BASE}{path}"><meta property="og:image" content="{BASE}/og.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/logo.svg?v={CSS_HASH}" type="image/svg+xml"><link rel="icon" href="/favicon.png?v={CSS_HASH}" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v={CSS_HASH}"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}</head><body{(' class="roster-pad"' if path != '/' else '')}>
+<link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}{ANALYTICS}</head><body{(' class="roster-pad"' if path != '/' else '')}>
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig" data-mode="roster"></canvas></div>
 <header class="top"><div class="wrap nav"><a class="brand" href="/">{LOGO_SVG}RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header>'''
 
