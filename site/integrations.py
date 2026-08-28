@@ -980,7 +980,7 @@ public class RunVouchListener implements JobListener {
   dict(slug="grafana", name="Grafana dashboard", group="Dashboards",
     title="Grafana dashboard for RunVouch: agent status, open alerts and API uptime from JSON endpoints | RunVouch",
     desc="Show RunVouch agent state in Grafana with the Infinity or JSON API datasource: one dashboard JSON reads the public status.json, a public fleet summary, and (with your key) /v1/agents and /v1/alerts. Import, set two variables, done.",
-    h1="Grafana dashboard for RunVouch agents", mode="http",
+    h1="Grafana dashboards", mode="http",
     intro="Put RunVouch next to the rest of your monitoring: a ready-made dashboard JSON reads RunVouch's public <code>status.json</code> (API uptime, incidents, sealed proof days), an opted-in public fleet (<code>/public/fleet/&lt;slug&gt;.json</code>), and, with your key, your own <code>/v1/agents</code> and <code>/v1/alerts</code>. The package with the dashboard, a README and the datasource settings is at <a href=\"https://github.com/runvouch/runvouch/tree/main/integrations/grafana\">integrations/grafana</a>.",
     where="Grafana 10 or 11 with the <a href=\"https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/\">Infinity datasource</a> plugin (or the JSON API datasource; the panels use plain JSON paths, no JSONata). The datasource queries the API from the Grafana server, so browser CORS does not apply.",
     key="Create the Infinity datasource with an HTTP header <code>X-API-Key</code> holding your RunVouch key (stored encrypted in Grafana). The public endpoints need no key; the <code>/v1/</code> panels use the datasource header.",
