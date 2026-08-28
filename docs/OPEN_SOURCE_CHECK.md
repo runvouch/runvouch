@@ -42,6 +42,7 @@ Status column: `done` = fixed during this check, `keep` = intentional and fine t
 | 16 | Token-shaped strings | `whsec_test`, `polar-test-secret`, `R0123456789ABCDEF...` (PagerDuty example key), `sk_live_...` and `polar_oat_...` as documentation placeholders | Test fixtures and documentation. The hygiene test's minimum lengths are set so these pass and real keys fail | keep |
 | 17 | `shot.py`, `site/public/ph/` (untracked, gitignored) | screenshot helper with a machine-specific library path; Product Hunt screenshots | Were tracked in `5c783ec`, ignored since `425bd1a`. Historic version has the home path (item 9) | keep |
 | 18 | `deploy/cloudflared-config.yml` | tunnel name `runvouch` and `~/.cloudflared/runvouch.json` | The credentials file itself is outside the repo; the config is harmless | keep |
+| 19 | `.git/config`, remote `origin` | the GitHub fine-grained personal access token is embedded in the remote URL (`https://runvouch:github_pat_...@github.com/...`) | Not part of the tree and never published with a push, but it sits in plain text in a file many tools read, and a `git remote -v` in a shared terminal or log shows it. Fix: `git remote set-url origin https://github.com/runvouch/runvouch.git` and let a credential helper or `gh auth` supply the token. Not changed here because pushing is off limits in this session and the token also lives in `.env` as `GITHUB_TOKEN` | decide |
 
 ## What is now in place
 
@@ -97,5 +98,6 @@ README badge text and `packaging/pypi/pyproject.toml` `license` field need the s
 3. MCP registry signing key (item 5): move to `~/runvouch-private/` or leave.
 4. License (above): confirm MIT.
 5. Run `docker build .` once on a machine with Docker before calling the Docker path tested.
-6. Which GitHub repository: `runvouch/runvouch` is already the URL in the README, the PyPI
+6. Token in the remote URL (item 19): switch to a credential helper before anyone else touches this clone.
+7. Which GitHub repository: `runvouch/runvouch` is already the URL in the README, the PyPI
    metadata and the docs, so that name is taken by this decision.
