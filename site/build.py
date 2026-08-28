@@ -791,3 +791,11 @@ print(f"built {len(PAGES)} pages → {OUT}")
 
 # ───────────────────────── 404 (served by the API for unknown paths; not in the sitemap) ─────────────────────────
 (OUT / "404.html").write_text(head("Page not found | RunVouch", "That page does not exist. Try the docs, the dashboard or the home page.", "/404") + '''<main><div class="wrap doc" style="text-align:center;padding-top:5rem"><p class="small muted" style="font-family:'Geist Mono';letter-spacing:.12em">404</p><h1>Nothing runs here.</h1><p class="lead muted">The address does not exist, or it did and moved. These do:</p><p class="cta" style="justify-content:center"><a class="btn" href="/">Home</a><a class="btn ghost" href="/docs/">Docs</a><a class="btn ghost" href="/app">Dashboard</a><a class="btn ghost" href="/blog/">Blog</a></p></div></main>''' + FOOTER, encoding="utf-8")
+
+# Schrijfregel: geen gedachtestreepjes in wat de klant ziet (leest als AI-tekst). Het enige
+# toegestane streepje is het letterlijke citaat uit de Claude Code-documentatie.
+_TOEGESTAAN = 'the routine ran — it does not mean'
+for _f in OUT.rglob("*.html"):
+    _t = _f.read_text(encoding="utf-8")
+    if _t.replace(_TOEGESTAAN, "").count("—"):
+        raise SystemExit(f"gedachtestreepje in {_f.relative_to(OUT)}; herschrijf de zin (komma, dubbele punt of punt)")
