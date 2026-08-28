@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-blogmotor.py — writes ONE new RunVouch field-notes article per run from site/topics.json,
+blogmotor.py, writes ONE new RunVouch field-notes article per run from site/topics.json,
 verifies every source link, publishes (build + restart + IndexNow) and notifies via Telegram.
 Runs weekly under RunVouch itself:  rv run blogmotor --cap-run-cost 3 --evidence-file site/articles.json -- python3 site/blogmotor.py
 Safety: never publishes without >=2 working source links; never repeats a slug; one article per run.
@@ -32,11 +32,11 @@ topics = json.load(open(TOPICS)); arts = json.load(open(ARTICLES))
 done = {a["slug"] for a in arts["articles"]}
 todo = [t for t in topics if t["slug"] not in done and not t.get("skip")]
 if not todo:
-    print("no topics left"); tg("📝 blogmotor: topic queue empty — add topics to site/topics.json"); sys.exit(0)
+    print("no topics left"); tg("📝 blogmotor: topic queue empty: add topics to site/topics.json"); sys.exit(0)
 t = todo[0]
 prompt = f"""Write one blog article for RunVouch (runvouch.com), a dead man's switch, cost cap and outcome check for unattended AI agents (Claude Code Routines, headless claude -p, OpenClaw, n8n, cron).
-Product facts: CLI `rv` (`rv agent NAME --cadence 24h --cap-run-cost 2 --evidence`, `rv run NAME --evidence-file out.html -- cmd`, fails open), Claude Code plugin via hooks (tokens+cost from transcript), MCP server (official registry com.runvouch/runvouch), Python/Node clients, detectors MISSED/FAILED/NO_EVIDENCE/RETRY_STORM(same tool+identical input >=8x)/BUDGET_RUN/BUDGET_DAY/DRIFT(7-run MAD)/STALLED; alerts Telegram/Slack/webhook; RunVouch alerts and can pause an agent via webhook — it never kills a running process; free 3 agents, $9 Solo, $29 Team; MIT self-host; EU hosting.
-Voice: first person, a builder who ran agents and a crypto trading bot unattended for two years. Byline "RunVouch", never a personal name. Honest, specific, no hype, no emoji. ~900-1200 words. H2s phrased close to the target query. One-sentence definition of RunVouch early. Short FAQ (3 Q&As) at the end. Every factual claim about incidents, docs or competitors must link to a real source you verified with WebFetch/WebSearch — never invent sources or numbers.
+Product facts: CLI `rv` (`rv agent NAME --cadence 24h --cap-run-cost 2 --evidence`, `rv run NAME --evidence-file out.html -- cmd`, fails open), Claude Code plugin via hooks (tokens+cost from transcript), MCP server (official registry com.runvouch/runvouch), Python/Node clients, detectors MISSED/FAILED/NO_EVIDENCE/RETRY_STORM(same tool+identical input >=8x)/BUDGET_RUN/BUDGET_DAY/DRIFT(7-run MAD)/STALLED; alerts Telegram/Slack/webhook; RunVouch alerts and can pause an agent via webhook, it never kills a running process; free 3 agents, $9 Solo, $29 Team; MIT self-host; EU hosting.
+Voice: first person, a builder who ran agents and a crypto trading bot unattended for two years. Byline "RunVouch", never a personal name. Honest, specific, no hype, no emoji. ~900-1200 words. H2s phrased close to the target query. One-sentence definition of RunVouch early. Short FAQ (3 Q&As) at the end. Every factual claim about incidents, docs or competitors must link to a real source you verified with WebFetch/WebSearch, never invent sources or numbers.
 Title: {t['title']}
 Target query: {t['query']}
 Angle: {t['angle']}
@@ -52,7 +52,7 @@ art = json.loads(m.group(0))
 links = re.findall(r'href="(https?://[^"]+)"', art["html"]); ext = [u for u in links if "runvouch.com" not in u]
 bad = [u for u in ext if not link_ok(u)]
 if len(ext) - len(bad) < 2 or bad:
-    tg(f"📝 blogmotor HELD '{art['title']}': {len(ext)} sources, broken: {bad[:3]} — not published"); print("held", bad); sys.exit(2)
+    tg(f"📝 blogmotor HELD '{art['title']}': {len(ext)} sources, broken: {bad[:3]}, not published"); print("held", bad); sys.exit(2)
 art["html"] = art["html"].replace("<pre><code>", "<pre>").replace("</code></pre>", "</pre>")
 arts["articles"].append({k: art[k] for k in ("slug", "title", "description", "html")}); json.dump(arts, open(ARTICLES, "w"), indent=1)
 subprocess.run([os.path.join(REPO, ".venv/bin/python"), os.path.join(ROOT, "build.py")], check=True)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rv — RunVouch client CLI. Zero dependencies (stdlib only) so it runs in any cron/agent environment.
+rv: RunVouch client CLI. Zero dependencies (stdlib only) so it runs in any cron/agent environment.
 
   rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence]
   rv run    NAME [--evidence-file PATH] [--evidence-url URL] [--source cron] -- CMD ARGS...
@@ -112,7 +112,7 @@ def main(argv=None):
     elif args.cmd == "status":
         for ag in api("GET", "/v1/agents"):
             l = ag["last_run"]
-            print(f"{ag['name']:24s} {ag['state']:9s} last={time.strftime('%m-%d %H:%M', time.localtime(l['started'])) if l else '—':12s} "
+            print(f"{ag['name']:24s} {ag['state']:9s} last={time.strftime('%m-%d %H:%M', time.localtime(l['started'])) if l else '-':12s} "
                   f"cost24h={ag['cost_24h']:<8} alerts={ag['open_alerts']}")
     elif args.cmd == "alerts":
         if args.ack:

@@ -1,5 +1,5 @@
 """
-RunVouch — reliability + cost watchdog for autonomous / scheduled AI agents.
+RunVouch: reliability + cost watchdog for autonomous / scheduled AI agents.
 
 Single-file FastAPI service. SQLite storage. No external deps beyond fastapi/uvicorn.
 
@@ -319,7 +319,7 @@ PRIORITY_KINDS = {"MISSED", "FAILED"}  # paid plans: delivered immediately, no c
 
 
 def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str) -> None:
-    """Persist the alert and hand delivery to a background thread — never block a request on Telegram/email."""
+    """Persist the alert and hand delivery to a background thread, never block a request on Telegram/email."""
     if kind == "TEST":
         dup = None
     elif run_id:
@@ -398,7 +398,7 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
         if cur is None or len(series) < 4:
             continue
         med = _median(series)
-        # robust MAD with an absolute floor: 5 s / 512 bytes, or 10% of the median — a 1-second job
+        # robust MAD with an absolute floor: 5 s / 512 bytes, or 10% of the median, a 1-second job
         # that takes 2 seconds, or a log line that is 60 bytes longer, is noise, not drift
         floor = 5.0 if label == "duration" else 512.0
         mad = max(_median([abs(x - med) for x in series]), med * 0.1, floor)
@@ -492,7 +492,7 @@ def weekly_report(now: Optional[float] = None) -> int:
         total_cost = sum(r["c"] for r in rows); total_runs = sum(r["n"] for r in rows); fails = sum(r["f"] or 0 for r in rows)
         top = ", ".join(f"{r['name']} ${r['c']:.2f}" for r in rows[:3] if r["c"] > 0) or "none"
         al = ", ".join(f"{a['kind']} {a['n']}" for a in alerts) or "none"
-        text = (f"📊 RunVouch weekly — {week}\n{len(rows)} agents · {total_runs} runs · {fails} failed\n"
+        text = (f"📊 RunVouch weekly, {week}\n{len(rows)} agents · {total_runs} runs · {fails} failed\n"
                 f"Cost 7d: ${total_cost:.2f} · top: {top}\nAlerts: {al}\nhttps://runvouch.com/app")
         ok = False
         if acc["telegram_token"] and acc["telegram_chat"]:
@@ -1498,7 +1498,7 @@ table{border-collapse:collapse;width:100%;background:var(--bg3);border:1px solid
 .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin:1rem 0}.kpi div{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem}.kpi b{display:block;font-family:"Instrument Sans";font-size:1.6rem}.kpi span{color:var(--fg2);font-size:.85rem}
 small{color:var(--fg3)}.err{color:#FF7A7A}@media(max-width:800px){.kpi{grid-template-columns:1fr 1fr}}</style></head><body>
 <div class=top><b>RunVouch</b> <small>dashboard</small><a href="https://runvouch.com/docs/">Docs</a></div><div class=wrap>
-<div id=upg style="display:none;border:1px solid #2f6b3a;background:rgba(46,160,67,.12);border-radius:10px;padding:.8rem 1rem;margin:0 0 1rem"><b>Thanks — your upgrade is in.</b> Paste the API key you got at signup to see the new agent limit. Lost it? Use <a href="/contact?topic=billing">contact</a> with the email you paid with and we will rotate it for you.</div><p><input id=k type=password placeholder="paste your API key (rv_…)" autocomplete="off"> <button onclick="load()">Load</button> <button onclick="signout()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Sign out</button> <small id=me></small></p><p><small>Your key is kept only in this browser (local storage). Sign out removes it. Nobody else can see your agents without your key.</small></p>
+<div id=upg style="display:none;border:1px solid #2f6b3a;background:rgba(46,160,67,.12);border-radius:10px;padding:.8rem 1rem;margin:0 0 1rem"><b>Thanks, your upgrade is in.</b> Paste the API key you got at signup to see the new agent limit. Lost it? Use <a href="/contact?topic=billing">contact</a> with the email you paid with and we will rotate it for you.</div><p><input id=k type=password placeholder="paste your API key (rv_…)" autocomplete="off"> <button onclick="load()">Load</button> <button onclick="signout()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Sign out</button> <small id=me></small></p><p><small>Your key is kept only in this browser (local storage). Sign out removes it. Nobody else can see your agents without your key.</small></p>
 <div id=out></div><div id=cfg></div></div><script>
 const API=location.hostname.startsWith('api.')||location.hostname==='localhost'||location.hostname==='127.0.0.1'?'':'https://api.runvouch.com';
 const qk=new URLSearchParams(location.search).get('key');if(qk){try{localStorage.setItem('rvk',qk)}catch(e){}history.replaceState({},'',location.pathname)}
@@ -1513,7 +1513,7 @@ document.getElementById('me').textContent=(me.email||me.name)+' · plan '+me.pla
 const cost=ag.reduce((a,x)=>a+(x.cost_24h||0),0);const bad=ag.filter(a=>['alert','failed','unproven'].includes(a.state)).length;
 let s='<div class=kpi><div><b>'+ag.length+'</b><span>agents</span></div><div><b>'+ag.filter(a=>a.state==='ok').length+'</b><span>vouched</span></div><div><b>'+bad+'</b><span>need attention</span></div><div><b>$'+cost.toFixed(2)+'</b><span>cost 24h</span></div></div>';
 s+='<h2>Agents</h2><table><tr><th>agent</th><th>state</th><th>last run</th><th>status</th><th>evidence</th><th>cost 24h</th><th>alerts</th><th>proof</th></tr>';
-for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${esc(a.name)}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'—'}</td><td>${l?l.status:'—'}</td><td>${l?(l.evidence_ok===null?'—':l.evidence_ok?'✓':'✗'):'—'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td><td>${l&&l.ended?`<a href="#" onclick="proof('${l.id}');return false">proof</a>`:'—'}</td></tr>`}
+for(const a of ag.sort((x,y)=>(x.state==='ok')-(y.state==='ok'))){const l=a.last_run;s+=`<tr><td>${esc(a.name)}</td><td><span class="pill ${a.state}">${a.state}</span></td><td>${l?new Date(l.started*1000).toLocaleString():'-'}</td><td>${l?l.status:'-'}</td><td>${l?(l.evidence_ok===null?'-':l.evidence_ok?'✓':'✗'):'-'}</td><td>$${(a.cost_24h||0).toFixed(3)}</td><td>${a.open_alerts}</td><td>${l&&l.ended?`<a href="#" onclick="proof('${l.id}');return false">proof</a>`:'-'}</td></tr>`}
 s+='</table><h2>Open alerts</h2>';if(!al.length)s+='<p><small>None. Quiet night.</small></p>';else{s+='<table><tr><th>when</th><th>agent</th><th>kind</th><th>message</th><th></th></tr>';for(const x of al){s+=`<tr><td><small>${new Date(x.ts*1000).toLocaleString()}</small></td><td>${esc(x.agent)}</td><td><span class="pill alert">${x.kind}</span></td><td>${esc(x.message)}</td><td><button onclick="ack(${x.id})">ack</button></td></tr>`}s+='</table>'}
 document.getElementById('out').innerHTML=s;
 if(me.viewer){document.getElementById('cfg').innerHTML='<p><small>Viewer key: you can read everything and ack alerts. Settings are managed with the account key.</small></p>';return}
@@ -1571,7 +1571,7 @@ def _serve_site(path: str):
     nf = SITE_DIR / "404.html"
     if nf.exists():
         return HTMLResponse(nf.read_text(encoding="utf-8"), status_code=404, headers={"X-Robots-Tag": "noindex"})
-    return HTMLResponse('<!doctype html><meta charset=utf-8><title>Not found — RunVouch</title><body style="font:16px system-ui;margin:4rem auto;max-width:40rem"><h1>404</h1><p>Nothing here. Try the <a href="/">home page</a>, <a href="/docs/">docs</a> or <a href="/app">dashboard</a>.</p>', status_code=404)
+    return HTMLResponse('<!doctype html><meta charset=utf-8><title>Not found | RunVouch</title><body style="font:16px system-ui;margin:4rem auto;max-width:40rem"><h1>404</h1><p>Nothing here. Try the <a href="/">home page</a>, <a href="/docs/">docs</a> or <a href="/app">dashboard</a>.</p>', status_code=404)
 
 
 @app.get("/", response_class=HTMLResponse)
