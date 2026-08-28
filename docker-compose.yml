@@ -1,0 +1,20 @@
+# Self-hosted RunVouch. See docs/SELF_HOSTING.md.
+#   cp .env.example .env   # set RUNVOUCH_ADMIN_TOKEN at least
+#   docker compose up -d
+services:
+  runvouch:
+    build: .
+    image: runvouch/runvouch:local
+    container_name: runvouch
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RUNVOUCH_DB: /data/runvouch.db
+      RUNVOUCH_PROOF_DIR: /data/proof/days
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - runvouch-data:/data
+
+volumes:
+  runvouch-data:

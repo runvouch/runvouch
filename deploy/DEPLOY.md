@@ -18,7 +18,7 @@ Cloudflare Tunnel: gratis HTTPS + DNS zonder poorten te openen, draait als gewon
 Binary: `curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/bin/cloudflared && chmod +x ~/bin/cloudflared`.
 
 ## Route B — met sudo
-`deploy/nginx-runvouch.conf` → `/etc/nginx/sites-available/`, symlink, `sudo certbot --nginx -d api.runvouch.com`. DNS A-record api → 93.119.13.190.
+`deploy/nginx-runvouch.conf` → `/etc/nginx/sites-available/`, symlink, `sudo certbot --nginx -d api.runvouch.com`. DNS A-record api → <server IP>.
 
 ## .env op de server (na domein)
 ```

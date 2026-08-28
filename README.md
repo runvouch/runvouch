@@ -41,15 +41,14 @@ integrations/claude-code-plugin Claude Code plugin: SessionStart/PostToolUse/Sto
 integrations/mcp                MCP server (stdio): runvouch_status/alerts/ack/runs/run_start/run_end
 site/index.html                 landing page
 tests/                          7 detector tests (pytest)
-docs/BUSINESS.md                what it does, what it can earn, go-to-market
+docs/SELF_HOSTING.md            run it yourself: Docker or venv, what differs from hosted
 ```
 
-## Run (self-host)
+## Self-hosting
+One process, one SQLite file, Docker or a venv. Full guide in [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) (ten minutes, what differs from the hosted service, how to move later).
 ```
-python3 -m venv .venv && .venv/bin/pip install fastapi "uvicorn[standard]"
-cp .env.example .env   # set RUNVOUCH_ADMIN_TOKEN
-./run.sh               # http://127.0.0.1:8787   (systemd unit: ~/.config/systemd/user/runvouch.service)
-curl -X POST "localhost:8787/admin/accounts?name=me&plan=team" -H "X-Admin-Token: $ADMIN"   # → api_key
+cp .env.example .env && docker compose up -d          # or: pip install -r requirements.txt && ./run.sh
+curl -X POST "localhost:8787/admin/accounts?name=me&plan=team" -H "X-Admin-Token: $RUNVOUCH_ADMIN_TOKEN"   # -> api_key
 ```
 
 ## Use
@@ -62,10 +61,11 @@ rv status ; rv alerts
 Claude Code plugin: see `integrations/claude-code-plugin/README.md`.
 MCP: `claude mcp add runvouch -e RUNVOUCH_KEY=... -- python3 integrations/mcp/runvouch_mcp.py`
 
-## Test
+## Test and contribute
 ```
-.venv/bin/python -m pytest -q tests
+.venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q tests
 ```
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Hosted vs self-host
 Hosted at [runvouch.com](https://runvouch.com): free for 3 agents, $9 Solo, $29 Team, alerts, dashboard, backups, EU hosting. Self-host: this repo, MIT. Same code.
