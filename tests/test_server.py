@@ -584,3 +584,18 @@ def test_remediator_retry_failure_is_stored_but_not_sent():
     c.post("/v1/runs/end", json={"run_id": rid, "status": "fail"}, headers=sh)
     row = server.q1("SELECT delivered FROM alerts WHERE run_id=? AND kind='FAILED'", rid)
     assert row["delivered"] == -1  # the remediator reports the outcome itself; the alert is only on the dashboard
+
+
+def test_status_json_is_public_and_counts_heartbeats():
+    now = time.time()
+    for m in range(0, 30):
+        if m in (10, 11, 12, 13, 14, 15, 16):
+            continue  # a 7-minute hole: one incident
+        server.record_heartbeat(now - (29 - m) * 60)
+    r = c.get("/status.json")  # no key needed
+    assert r.status_code == 200
+    j = r.json()
+    assert j["measured_since"] and "windows" in j and "24h" in j["windows"]
+    assert 70 < j["windows"]["24h"]["detectors"] < 100
+    assert any(i["minutes"] >= 6 for i in j["incidents"])
+    assert "accounts" not in json.dumps(j)

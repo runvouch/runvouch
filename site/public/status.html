@@ -1,15 +1,52 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0B1020">
-<title>Status | RunVouch</title><meta name="description" content="Live status of the RunVouch API, dashboard and alert delivery, checked from your browser against the production API."><link rel="canonical" href="https://runvouch.com/status">
-<meta property="og:type" content="website"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="Status | RunVouch"><meta property="og:description" content="Live status of the RunVouch API, dashboard and alert delivery, checked from your browser against the production API."><meta property="og:url" content="https://runvouch.com/status"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
+<title>Status | RunVouch</title><meta name="description" content="Is RunVouch itself up? Live checks from your browser, uptime per component over 24 hours to 90 days, and every outage since measurement began."><link rel="canonical" href="https://runvouch.com/status">
+<meta property="og:type" content="website"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="Status | RunVouch"><meta property="og:description" content="Is RunVouch itself up? Live checks from your browser, uptime per component over 24 hours to 90 days, and every outage since measurement began."><meta property="og:url" content="https://runvouch.com/status"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/logo.svg?v=2e9386af" type="image/svg+xml"><link rel="icon" href="/favicon.png?v=2e9386af" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v=2e9386af"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.2e9386af.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}]</script><script data-goatcounter="https://runvouch.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script></head><body class="roster-pad">
+<link rel="stylesheet" href="/assets/style.2e9386af.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script data-goatcounter="https://runvouch.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script></head><body class="roster-pad">
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig" data-mode="roster"></canvas></div>
 <header class="top"><div class="wrap nav"><a class="brand" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RunVouch">
 <circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
 <path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><h1>Status</h1><p class="lead muted">Checked live from your browser against the API.</p><table><tr><th>Component</th><th>Status</th></tr><tr><td>API (api.runvouch.com)</td><td id="s-api">checking…</td></tr><tr><td>Dashboard</td><td id="s-app">checking…</td></tr><tr><td>Alert delivery (Telegram / e-mail / webhook)</td><td id="s-alerts">checking…</td></tr></table><p class="small muted" style="margin-top:1rem">Incidents are posted here and in the <a href="/changelog">changelog</a>.</p>
-<script>fetch(API+'/health').then(async r=>{document.getElementById('s-api').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>';try{const j=await r.json();const a=(j.checks||{}).alert_delivery;document.getElementById('s-alerts').innerHTML=a==='ok'?'<span class="pill ok">operational</span>':a==='idle'?'<span class="pill ok">idle (no alerts due)</span>':'<span class="pill bad">'+(a||'unknown')+'</span>'}catch(e){document.getElementById('s-alerts').textContent='unknown'}}).catch(()=>{document.getElementById('s-api').innerHTML='<span class="pill bad">unreachable</span>'});fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'})</script></div></main><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
+</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><h1>Status</h1>
+<p class="lead muted">Is RunVouch itself up right now, and has it been? This page is for anyone who depends on our alerts: if an alert did not arrive, start here.</p>
+<p class="small muted">The "now" column is checked live from your browser against the production API. The uptime columns come from the API's own heartbeat: one row per minute the detector loop ran, published at <a href="https://api.runvouch.com/status.json">status.json</a>. A gap longer than 5 minutes counts as an outage. Nothing on this page is account-specific.</p>
+<table><tr><th>Component</th><th>Now</th><th>24 h</th><th>7 d</th><th>30 d</th><th>90 d</th></tr>
+<tr><td>API (api.runvouch.com)<br><span class="small muted">accepts runs and serves the dashboard</span></td><td id="s-api">checking</td><td id="u-api-24h">-</td><td id="u-api-7d">-</td><td id="u-api-30d">-</td><td id="u-api-90d">-</td></tr>
+<tr><td>Detectors<br><span class="small muted">missed, stalled, failed, no evidence, budget</span></td><td id="s-det">checking</td><td id="u-det-24h">-</td><td id="u-det-7d">-</td><td id="u-det-30d">-</td><td id="u-det-90d">-</td></tr>
+<tr><td>Alert delivery<br><span class="small muted">Telegram, e-mail, webhook, PagerDuty</span></td><td id="s-alerts">checking</td><td id="u-al-24h">-</td><td id="u-al-7d">-</td><td id="u-al-30d">-</td><td id="u-al-90d">-</td></tr>
+<tr><td>Website and dashboard<br><span class="small muted">runvouch.com, /app</span></td><td id="s-app">checking</td><td colspan="4" class="small muted">static hosting, served from a CDN</td></tr></table>
+<p class="small muted" id="s-meta">Loading the heartbeat record.</p>
+<h2>Outages</h2>
+<div id="s-incidents" class="small muted">Loading.</div>
+<h2>Proof the service ran</h2>
+<p class="small muted" id="s-proof">Every UTC day the API seals a Merkle root over all runs and anchors it in Bitcoin via OpenTimestamps. A sealed day is independent evidence the service was up that day; see <a href="https://api.runvouch.com/proof/">proof/</a> and <a href="/verifiable-agent-runs">how verification works</a>.</p>
+<p class="small muted">Check it yourself, without this page: <a href="https://api.runvouch.com/health">https://api.runvouch.com/health</a> answers with <code>"status":"ok"</code> when the API and its database are fine. Incidents are also written up in the <a href="/changelog">changelog</a>.</p>
+</div></main>
+<script>
+const SAPI="https://api.runvouch.com";
+const pill=(cls,txt)=>'<span class="pill '+cls+'">'+txt+'</span>';
+const pct=v=>v==null?'-':(v>=99.95?'100%':v.toFixed(2)+'%');
+fetch(SAPI+'/health').then(async r=>{
+  document.getElementById('s-api').innerHTML=r.ok?pill('ok','operational'):pill('bad','degraded');
+  try{const j=await r.json();const c=j.checks||{};
+    document.getElementById('s-det').innerHTML=c.detectors==='running'?pill('ok','running'):pill('bad',c.detectors||'unknown');
+    const a=c.alert_delivery;document.getElementById('s-alerts').innerHTML=a==='ok'?pill('ok','operational'):a==='idle'?pill('ok','idle, nothing due'):pill('bad',a||'unknown');
+  }catch(e){document.getElementById('s-alerts').textContent='unknown'}
+}).catch(()=>{['s-api','s-det','s-alerts'].forEach(i=>document.getElementById(i).innerHTML=pill('bad','unreachable'))});
+fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?pill('ok','operational'):pill('bad','degraded')}).catch(()=>{document.getElementById('s-app').innerHTML=pill('bad','unreachable')});
+fetch(SAPI+'/status.json').then(r=>r.json()).then(j=>{
+  const w=j.windows||{};
+  for(const k of ['24h','7d','30d','90d']){const x=w[k]||{};
+    document.getElementById('u-api-'+k).textContent=pct(x.detectors);document.getElementById('u-det-'+k).textContent=pct(x.detectors);document.getElementById('u-al-'+k).textContent=pct(x.alerts);}
+  const t=(j.time||'').replace('T',' ').replace('Z',' UTC');
+  document.getElementById('s-meta').textContent=j.measured_since?('Last heartbeat '+(j.last_heartbeat_age_s==null?'unknown':j.last_heartbeat_age_s+' s ago')+', checked '+t+'. Measured since '+j.measured_since+'; windows that start before that date are measured from it.'):'No heartbeat record yet.';
+  const inc=j.incidents||[];
+  document.getElementById('s-incidents').innerHTML=inc.length?'<table><tr><th>Started (UTC)</th><th>Component</th><th>Duration</th></tr>'+inc.slice().reverse().map(i=>'<tr><td>'+i.start.replace('T',' ').replace('Z','')+'</td><td>'+i.component+'</td><td>'+i.minutes+' min'+(i.ongoing?' (ongoing)':'')+'</td></tr>').join('')+'</table>':'No outages since measurement began on '+(j.measured_since||'-')+'.';
+  const p=j.sealed_days||{};if(p.count){document.getElementById('s-proof').insertAdjacentHTML('afterbegin',p.count+' sealed days so far, the latest '+p.last+'. ')}
+}).catch(()=>{document.getElementById('s-meta').textContent='The heartbeat record could not be loaded.';document.getElementById('s-incidents').textContent='Unknown: the heartbeat record could not be loaded.'});
+</script>
+<footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
 <circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
 <path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>RunVouch</div>

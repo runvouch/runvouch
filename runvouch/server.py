@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS ls_events(id TEXT PRIMARY KEY, ts REAL, name TEXT, pa
 CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY KEY(account_id, week));
 CREATE TABLE IF NOT EXISTS proof_days(date TEXT PRIMARY KEY, root TEXT, prev TEXT, chain_hash TEXT, n_runs INTEGER, sealed_at REAL, ots_status TEXT, ots_path TEXT);
 CREATE TABLE IF NOT EXISTS run_leaves(id TEXT PRIMARY KEY, agent_id INTEGER, ended REAL, leaf_hash TEXT);
+CREATE TABLE IF NOT EXISTS heartbeats(minute INTEGER PRIMARY KEY, alerts_ok INTEGER);
 CREATE INDEX IF NOT EXISTS ix_run_leaves_ended ON run_leaves(ended);
 CREATE TABLE IF NOT EXISTS viewer_keys(id INTEGER PRIMARY KEY, account_id INTEGER, key_hash TEXT UNIQUE, name TEXT, created REAL, last_used REAL);
 """
@@ -730,11 +731,55 @@ def purged_proof(leaf: sqlite3.Row) -> dict:
             "docs": "https://runvouch.com/docs/proof"}
 
 
+HEARTBEAT_KEEP_DAYS = 100
+INCIDENT_GAP_MIN = 5  # minutes without a heartbeat that count as an outage on the public status page
+
+
+def record_heartbeat(now: Optional[float] = None) -> None:
+    """One row per minute the detector loop actually ran; the public status page derives uptime and incidents from it."""
+    now = now or time.time()
+    ok = 1 if _alert_delivery_status() in ("ok", "idle") else 0
+    with tx() as db:
+        db.execute("INSERT OR REPLACE INTO heartbeats(minute, alerts_ok) VALUES(?, ?)", (int(now // 60), ok))
+        if int(now) % 3600 < SWEEP_SECONDS:
+            db.execute("DELETE FROM heartbeats WHERE minute < ?", (int(now // 60) - HEARTBEAT_KEEP_DAYS * 1440,))
+
+
+def status_summary(now: Optional[float] = None) -> dict:
+    """Uptime per window and the outages, computed from heartbeats. Public: no account data in here."""
+    now = now or time.time()
+    cur = int(now // 60)
+    first = q1("SELECT MIN(minute) m FROM heartbeats")["m"]
+    if first is None:
+        return {"time": datetime.utcfromtimestamp(now).isoformat(timespec="seconds") + "Z", "measured_since": None, "windows": {}, "incidents": [], "last_heartbeat_age_s": None}
+    rows = qa("SELECT minute, alerts_ok FROM heartbeats WHERE minute >= ? ORDER BY minute", cur - 90 * 1440)
+    windows = {}
+    for label, days in (("24h", 1), ("7d", 7), ("30d", 30), ("90d", 90)):
+        start = max(cur - days * 1440, first)
+        expected = max(cur - start, 1)
+        got = [r for r in rows if r["minute"] >= start]
+        windows[label] = {"detectors": round(100 * min(len(got), expected) / expected, 2),
+                          "alerts": round(100 * min(sum(r["alerts_ok"] for r in got), expected) / expected, 2), "minutes": expected}
+    incidents, prev = [], None
+    for r in rows:
+        if prev is not None and r["minute"] - prev > INCIDENT_GAP_MIN:
+            incidents.append({"start": datetime.utcfromtimestamp(prev * 60).isoformat(timespec="minutes") + "Z", "minutes": r["minute"] - prev - 1, "component": "detectors"})
+        prev = r["minute"]
+    if prev is not None and cur - prev > INCIDENT_GAP_MIN:
+        incidents.append({"start": datetime.utcfromtimestamp(prev * 60).isoformat(timespec="minutes") + "Z", "minutes": cur - prev - 1, "component": "detectors", "ongoing": True})
+    sealed = q1("SELECT COUNT(*) n, MAX(date) d FROM proof_days")
+    return {"time": datetime.utcfromtimestamp(now).isoformat(timespec="seconds") + "Z",
+            "measured_since": datetime.utcfromtimestamp(first * 60).strftime("%Y-%m-%d"),
+            "windows": windows, "incidents": incidents[-10:], "last_heartbeat_age_s": int(now - prev * 60),
+            "sealed_days": {"count": sealed["n"], "last": sealed["d"]}}
+
+
 def _sweeper():
     n = 0
     while True:
         try:
             sweep_once()
+            record_heartbeat()
             owner_digest()
             proof_maintenance()
             purge_daily()
@@ -829,6 +874,12 @@ def health():
             "checks": {"database": "ok" if db_ok else "error", "detectors": "running" if not os.getenv("RUNVOUCH_NO_SWEEP") else "disabled", "alert_delivery": _alert_delivery_status()},
             "docs": "https://runvouch.com/docs", "status_page": "https://runvouch.com/status"}
     return JSONResponse(body, status_code=200 if db_ok else 503)
+
+
+@app.get("/status.json")
+def status_json():
+    """Public numbers behind runvouch.com/status: uptime per window, outages, sealed proof days. Nothing account-specific."""
+    return status_summary()
 
 
 @app.post("/admin/accounts", dependencies=[Depends(require_admin)])

@@ -195,8 +195,8 @@ def _colour_tables(body):
     Competitor cells stay neutral: honest, but the eye lands on our column."""
     def row(m):
         cells = re.findall(r'<td[^>]*>.*?</td>', m.group(0), re.S)
-        if len(cells) < 3:
-            return m.group(0)
+        if len(cells) < 3 or ' id="' in m.group(0):
+            return m.group(0)  # live tables (status page) keep their ids; only comparison tables get coloured
         out = []
         for i, c in enumerate(cells):
             txt = re.sub(r'<[^>]+>', '', c).strip().lower()
@@ -814,8 +814,45 @@ page("/contact", "Contact | RunVouch", "Questions, bugs, security reports or par
 async function sendContact(e){e.preventDefault();const s=document.getElementById('cs');s.textContent='Sending…';
 try{const r=await fetch(API+'/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('ce').value,message:document.getElementById('cm').value,topic:document.getElementById('ct').value})});
 s.textContent=r.ok?'Sent. We reply by email within one working day.':'Could not send ('+r.status+'). Try again later.';if(r.ok)document.getElementById('cf').reset()}catch(err){s.textContent='Network error.'}return false}</script></div></main>''', [ORG_LD])
-page("/status", "Status | RunVouch", "Live status of the RunVouch API, dashboard and alert delivery, checked from your browser against the production API.", '''<main><div class="wrap doc"><h1>Status</h1><p class="lead muted">Checked live from your browser against the API.</p><table><tr><th>Component</th><th>Status</th></tr><tr><td>API (api.runvouch.com)</td><td id="s-api">checking…</td></tr><tr><td>Dashboard</td><td id="s-app">checking…</td></tr><tr><td>Alert delivery (Telegram / e-mail / webhook)</td><td id="s-alerts">checking…</td></tr></table><p class="small muted" style="margin-top:1rem">Incidents are posted here and in the <a href="/changelog">changelog</a>.</p>
-<script>fetch(API+'/health').then(async r=>{document.getElementById('s-api').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>';try{const j=await r.json();const a=(j.checks||{}).alert_delivery;document.getElementById('s-alerts').innerHTML=a==='ok'?'<span class="pill ok">operational</span>':a==='idle'?'<span class="pill ok">idle (no alerts due)</span>':'<span class="pill bad">'+(a||'unknown')+'</span>'}catch(e){document.getElementById('s-alerts').textContent='unknown'}}).catch(()=>{document.getElementById('s-api').innerHTML='<span class="pill bad">unreachable</span>'});fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?'<span class="pill ok">operational</span>':'<span class="pill bad">degraded</span>'})</script></div></main>''', [ORG_LD])
+page("/status", "Status | RunVouch", "Is RunVouch itself up? Live checks from your browser, uptime per component over 24 hours to 90 days, and every outage since measurement began.", """<main><div class="wrap doc"><h1>Status</h1>
+<p class="lead muted">Is RunVouch itself up right now, and has it been? This page is for anyone who depends on our alerts: if an alert did not arrive, start here.</p>
+<p class="small muted">The "now" column is checked live from your browser against the production API. The uptime columns come from the API's own heartbeat: one row per minute the detector loop ran, published at <a href="__API__/status.json">status.json</a>. A gap longer than 5 minutes counts as an outage. Nothing on this page is account-specific.</p>
+<table><tr><th>Component</th><th>Now</th><th>24 h</th><th>7 d</th><th>30 d</th><th>90 d</th></tr>
+<tr><td>API (api.runvouch.com)<br><span class="small muted">accepts runs and serves the dashboard</span></td><td id="s-api">checking</td><td id="u-api-24h">-</td><td id="u-api-7d">-</td><td id="u-api-30d">-</td><td id="u-api-90d">-</td></tr>
+<tr><td>Detectors<br><span class="small muted">missed, stalled, failed, no evidence, budget</span></td><td id="s-det">checking</td><td id="u-det-24h">-</td><td id="u-det-7d">-</td><td id="u-det-30d">-</td><td id="u-det-90d">-</td></tr>
+<tr><td>Alert delivery<br><span class="small muted">Telegram, e-mail, webhook, PagerDuty</span></td><td id="s-alerts">checking</td><td id="u-al-24h">-</td><td id="u-al-7d">-</td><td id="u-al-30d">-</td><td id="u-al-90d">-</td></tr>
+<tr><td>Website and dashboard<br><span class="small muted">runvouch.com, /app</span></td><td id="s-app">checking</td><td colspan="4" class="small muted">static hosting, served from a CDN</td></tr></table>
+<p class="small muted" id="s-meta">Loading the heartbeat record.</p>
+<h2>Outages</h2>
+<div id="s-incidents" class="small muted">Loading.</div>
+<h2>Proof the service ran</h2>
+<p class="small muted" id="s-proof">Every UTC day the API seals a Merkle root over all runs and anchors it in Bitcoin via OpenTimestamps. A sealed day is independent evidence the service was up that day; see <a href="__API__/proof/">proof/</a> and <a href="/verifiable-agent-runs">how verification works</a>.</p>
+<p class="small muted">Check it yourself, without this page: <a href="__API__/health">__API__/health</a> answers with <code>"status":"ok"</code> when the API and its database are fine. Incidents are also written up in the <a href="/changelog">changelog</a>.</p>
+</div></main>
+<script>
+const SAPI="__API__";
+const pill=(cls,txt)=>'<span class="pill '+cls+'">'+txt+'</span>';
+const pct=v=>v==null?'-':(v>=99.95?'100%':v.toFixed(2)+'%');
+fetch(SAPI+'/health').then(async r=>{
+  document.getElementById('s-api').innerHTML=r.ok?pill('ok','operational'):pill('bad','degraded');
+  try{const j=await r.json();const c=j.checks||{};
+    document.getElementById('s-det').innerHTML=c.detectors==='running'?pill('ok','running'):pill('bad',c.detectors||'unknown');
+    const a=c.alert_delivery;document.getElementById('s-alerts').innerHTML=a==='ok'?pill('ok','operational'):a==='idle'?pill('ok','idle, nothing due'):pill('bad',a||'unknown');
+  }catch(e){document.getElementById('s-alerts').textContent='unknown'}
+}).catch(()=>{['s-api','s-det','s-alerts'].forEach(i=>document.getElementById(i).innerHTML=pill('bad','unreachable'))});
+fetch('/app').then(r=>{document.getElementById('s-app').innerHTML=r.ok?pill('ok','operational'):pill('bad','degraded')}).catch(()=>{document.getElementById('s-app').innerHTML=pill('bad','unreachable')});
+fetch(SAPI+'/status.json').then(r=>r.json()).then(j=>{
+  const w=j.windows||{};
+  for(const k of ['24h','7d','30d','90d']){const x=w[k]||{};
+    document.getElementById('u-api-'+k).textContent=pct(x.detectors);document.getElementById('u-det-'+k).textContent=pct(x.detectors);document.getElementById('u-al-'+k).textContent=pct(x.alerts);}
+  const t=(j.time||'').replace('T',' ').replace('Z',' UTC');
+  document.getElementById('s-meta').textContent=j.measured_since?('Last heartbeat '+(j.last_heartbeat_age_s==null?'unknown':j.last_heartbeat_age_s+' s ago')+', checked '+t+'. Measured since '+j.measured_since+'; windows that start before that date are measured from it.'):'No heartbeat record yet.';
+  const inc=j.incidents||[];
+  document.getElementById('s-incidents').innerHTML=inc.length?'<table><tr><th>Started (UTC)</th><th>Component</th><th>Duration</th></tr>'+inc.slice().reverse().map(i=>'<tr><td>'+i.start.replace('T',' ').replace('Z','')+'</td><td>'+i.component+'</td><td>'+i.minutes+' min'+(i.ongoing?' (ongoing)':'')+'</td></tr>').join('')+'</table>':'No outages since measurement began on '+(j.measured_since||'-')+'.';
+  const p=j.sealed_days||{};if(p.count){document.getElementById('s-proof').insertAdjacentHTML('afterbegin',p.count+' sealed days so far, the latest '+p.last+'. ')}
+}).catch(()=>{document.getElementById('s-meta').textContent='The heartbeat record could not be loaded.';document.getElementById('s-incidents').textContent='Unknown: the heartbeat record could not be loaded.'});
+</script>
+""".replace("__API__", API))
 page("/security", "Security | RunVouch", "What RunVouch stores, how keys are handled, and how to report a vulnerability.", '''<main><div class="wrap doc"><h1>Security</h1>
 <ul><li>API keys are stored as SHA-256 hashes; the plaintext key is shown once.</li><li>Tool inputs are hashed on the client or server for loop detection; prompts and outputs are never stored.</li><li>Evidence file checks run on your machine; only a boolean is transmitted.</li><li>Every finished run gets a hash that is chained per day and anchored in Bitcoin via OpenTimestamps, so a record cannot be altered afterwards without it showing; see <a href="/docs/proof">verifiable runs</a>. An auditor can verify a run with a standalone script and <code>ots verify</code>, without trusting us: <a href="/verifiable-agent-runs">how</a>.</li><li>All traffic is TLS via Cloudflare; infrastructure in the EU (Netherlands).</li><li>Per-key rate limits; alert credentials (Telegram token, webhook URL) are stored per account and used only to deliver your alerts.</li><li>Report vulnerabilities via the <a href="/contact?topic=security">contact form</a> (topic: security), see <a href="/.well-known/security.txt">security.txt</a>.</li></ul></div></main>''', [ORG_LD])
 page("/privacy", "Privacy | RunVouch", "RunVouch privacy policy: the run metadata and account data we process, what we never store (prompts, outputs), retention, and how to delete your data.", f'''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. Runs, tool events and acknowledged alerts are purged after the history window of your plan (7 days on Free, 90 days on Solo and Team); the per-run leaf hash stays in the public proof chain. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by {PROCESSOR}; card details never touch our servers. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
