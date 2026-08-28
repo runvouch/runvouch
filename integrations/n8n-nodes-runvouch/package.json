@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/runvouch/runvouch.git",
+    "url": "git+https://github.com/runvouch/runvouch.git",
     "directory": "integrations/n8n-nodes-runvouch"
   },
   "engines": {
