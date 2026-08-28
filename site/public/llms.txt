@@ -59,6 +59,8 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [Pydantic AI and smolagents](https://runvouch.com/integrations/pydantic-ai): Lightweight agent libraries have no scheduler and no budget. Wrapping the script with rv run gives a nightly Pydantic AI or smolagents job both.
 - [Dify and Flowise](https://runvouch.com/integrations/dify-flowise): Dify and Flowise run workflows when something calls their API. Wrap the caller with rv run and report the run so a stopped scheduler or an empty answer gets an alert.
 - [Ollama and local LLM batch jobs](https://runvouch.com/integrations/ollama-local-llm): Local models cost no API money, which is why nobody notices when the nightly job stalls on a swapped-out model or writes an empty file. rv run does.
+- [n8n (community node)](https://runvouch.com/integrations/n8n): Install n8n-nodes-runvouch from Settings, Community Nodes. Start Run and End Run with evidence, or one Heartbeat node; alerts when the Schedule Trigger stops or the workflow runs and does nothing.
+- [OpenClaw (verified-run skill)](https://runvouch.com/integrations/openclaw): Install the verified-run skill from integrations/openclaw. It wraps a scheduled OpenClaw task in a RunVouch run and reports the output file as evidence; missed, failed or empty runs alert you.
 
 ## Compare
 - [vs Healthchecks.io](https://runvouch.com/vs/healthchecks): Ping monitor vs outcome watchdog.

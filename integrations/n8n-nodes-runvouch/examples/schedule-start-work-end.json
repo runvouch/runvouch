@@ -1,0 +1,82 @@
+{
+  "name": "Monitored scheduled workflow (RunVouch)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "start",
+        "agent": "lead-enricher",
+        "cadenceMinutes": 60,
+        "graceMinutes": 15
+      },
+      "name": "RunVouch Start",
+      "type": "n8n-nodes-runvouch.runVouch",
+      "typeVersion": 1,
+      "position": [220, 0],
+      "credentials": {
+        "runVouchApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "RunVouch API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://example.com/api/leads?since=1h",
+        "options": {}
+      },
+      "name": "Do the work",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "operation": "end",
+        "runId": "={{ $('RunVouch Start').item.json.run_id }}",
+        "status": "ok",
+        "evidence": "={{ { \"leads_fetched\": $json.count > 0 } }}",
+        "additionalFields": {}
+      },
+      "name": "RunVouch End",
+      "type": "n8n-nodes-runvouch.runVouch",
+      "typeVersion": 1,
+      "position": [660, 0],
+      "credentials": {
+        "runVouchApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "RunVouch API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{ "node": "RunVouch Start", "type": "main", "index": 0 }]]
+    },
+    "RunVouch Start": {
+      "main": [[{ "node": "Do the work", "type": "main", "index": 0 }]]
+    },
+    "Do the work": {
+      "main": [[{ "node": "RunVouch End", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

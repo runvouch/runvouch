@@ -1,0 +1,12 @@
+{
+  "id": "runvouch",
+  "name": "RunVouch",
+  "description": "Watchdog for scheduled OpenClaw tasks: start and end runs with evidence, alerts when a task is missed, fails or ends without its output file.",
+  "version": "0.2.0",
+  "skills": ["."],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

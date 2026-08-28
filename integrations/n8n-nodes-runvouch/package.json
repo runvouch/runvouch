@@ -1,0 +1,61 @@
+{
+  "name": "n8n-nodes-runvouch",
+  "version": "0.1.0",
+  "description": "n8n community node for RunVouch: heartbeat and dead man's switch monitoring for scheduled workflows. Start run, end run with evidence, or both in one step. Alerts when a Schedule Trigger stops firing or a workflow finishes green without doing the work.",
+  "keywords": [
+    "n8n-community-node-package",
+    "runvouch",
+    "monitoring",
+    "heartbeat",
+    "cron",
+    "dead-mans-switch",
+    "schedule",
+    "ai-agents",
+    "observability"
+  ],
+  "license": "MIT",
+  "homepage": "https://runvouch.com/docs/n8n",
+  "author": {
+    "name": "RunVouch",
+    "email": "support@runvouch.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runvouch/runvouch.git",
+    "directory": "integrations/n8n-nodes-runvouch"
+  },
+  "engines": {
+    "node": ">=18.10"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && node scripts/copy-icons.js",
+    "dev": "tsc --watch",
+    "lint": "eslint nodes credentials package.json",
+    "lintfix": "eslint nodes credentials package.json --fix",
+    "prepublishOnly": "npm run build && npm run lint"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/RunVouchApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/RunVouch/RunVouch.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-n8n-nodes-base": "^1.16.3",
+    "n8n-workflow": "^1.82.0",
+    "typescript": "^5.5.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
