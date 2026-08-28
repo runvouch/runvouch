@@ -122,3 +122,12 @@ These steps are done by the RunVouch maintainer, not by users:
 ## License
 
 MIT. RunVouch is a product of RunVouch, https://runvouch.com, support@runvouch.com.
+
+## Releasing (maintainers)
+
+Verified community nodes must be published from GitHub Actions with provenance.
+Bump `version` in package.json, commit, then push a matching tag:
+
+    git tag n8n-nodes-runvouch-0.1.1 && git push origin n8n-nodes-runvouch-0.1.1
+
+The workflow `.github/workflows/publish-n8n-node.yml` builds, lints and publishes.

@@ -1,0 +1,36 @@
+# Publishes integrations/n8n-nodes-runvouch to npm with a provenance statement.
+# n8n requires this (since May 1 2026) for verified community nodes.
+# Trigger: push a tag like n8n-nodes-runvouch-0.1.1 (the version must match package.json).
+# Auth: npm Trusted Publisher (OIDC) for repo runvouch/runvouch, workflow publish-n8n-node.yml.
+
+name: Publish n8n node
+
+on:
+  push:
+    tags:
+      - 'n8n-nodes-runvouch-*.*.*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: integrations/n8n-nodes-runvouch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Check tag matches package version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "${GITHUB_REF_NAME#n8n-nodes-runvouch-}" = "$v" ] || { echo "tag $GITHUB_REF_NAME != version $v"; exit 1; }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run lint
+      - run: npm publish --provenance --access public
