@@ -41,13 +41,43 @@ def send(tok: str, chat: str, text: str) -> None:
         urllib.request.urlopen(urllib.request.Request(f"https://api.telegram.org/bot{tok}/sendMessage", data, {"User-Agent": UA}), timeout=15)
 
 
+MAIL_RE = re.compile(r"(^|\n)\s*(from|van|subject|onderwerp|to|aan)\s*:", re.I)
+
+
+def looks_like_mail(text: str) -> bool:
+    """Only call it a mail when it carries mail headers or an e-mail address; pasted Reddit/GitHub text has neither."""
+    return bool(MAIL_RE.search(text)) or bool(re.search(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", text, re.I))
+
+
+def pasted_reply(text: str, bron: str) -> list[str]:
+    """Pasted thread text without a link: draft as the same persona as with a link, and say where it goes."""
+    draft = S.draft(text, bron)
+    if not draft:
+        return ["Geen reactie geschreven: er valt niets echts toe te voegen aan deze tekst."]
+    with open(S.HISTORY, "a") as f:
+        f.write(json.dumps({"ts": time.time(), "sub": bron + " reply (geplakt)", "url": "", "text": draft}) + "\n")
+    kop = "GITHUB - reageer als account runvouch (niet je eigen)" if bron == "github" else "REDDIT - reageer als u/nightly_runs, nooit RunVouch noemen"
+    return [draft, f"^ {kop}\nKopieer het bericht hierboven en plak het als reply in de thread. (Volgende keer de link meesturen, dan lees ik de hele thread.)"]
+
+
 def handle(text: str) -> list[str]:
     """One incoming message -> the messages to send back. Pure: no Telegram inside, so it is testable."""
-    m = URL_RE.search(text or "")
+    text = text or ""
+    forced = None
+    low = text.lstrip().lower()
+    for pre in ("mail:", "reddit:", "github:"):
+        if low.startswith(pre):
+            forced = pre[:-1]
+            text = text.lstrip()[len(pre):].strip()
+            break
+    m = URL_RE.search(text)
     if not m:
-        if len((text or "").split()) < 12:
-            return ["Stuur een Reddit- of GitHub-link (met daaronder het antwoord dat je kreeg), of plak de tekst van een mail of platformbericht. Je krijgt een antwoordconcept terug: eerst de tekst, dan waar je hem plaatst."]
-        return mail_reply(text)
+        if len(text.split()) < 12:
+            return ["Stuur een Reddit- of GitHub-link (met daaronder het antwoord dat je kreeg), of plak de tekst zelf. Zonder link: begin met reddit:, github: of mail: om te zeggen wat het is; zonder voorvoegsel is het Reddit, tenzij het er als een mail uitziet."]
+        kind = forced or ("mail" if looks_like_mail(text) else "reddit")
+        if kind == "mail":
+            return mail_reply(text)
+        return pasted_reply(text, kind)
     url = m.group(0).rstrip(").,")
     rest = (text[:m.start()] + text[m.end():]).strip()
     bron = "github" if "github.com" in url else "reddit"
