@@ -89,9 +89,9 @@ catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}retu
 (function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
 document.querySelectorAll('main section > .wrap > h2, main section .card, main .doc h2, main .doc table, main .doc pre, main .doc .card, main .price .card').forEach(el=>el.classList.add('reveal'));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});setTimeout(()=>document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in')),1800);document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 const c=document.getElementById('sig');if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const x=c.getContext('2d');let W,H,D=devicePixelRatio,lanes=[],P=[],t=0;
-if(c.dataset.mode==='roster'){/* day roster: rows are agents, columns are the 24 hours of one day; fills like a clock over about 16 s, rests 10 s, then a new day (slower on purpose: it is background, not a show). green vouched, amber missed or unproven, red failed */
+if(c.dataset.mode==='roster'){/* day roster (names are real agents from our own fleet, see /stats): rows are agents, columns are the 24 hours of one day; fills like a clock over about 16 s, rests 10 s, then a new day (slower on purpose: it is background, not a show). green vouched, amber missed or unproven, red failed */
 let S=[],cols=24,rows=3,pw=0,ph=0,gx=0,gy=0,x0=0,y0=0,tick=0,maxAt=0;
-const COL={ok:'#3DDC84',warn:'#F5B547',fail:'#FF6B6B'},POOL=['nightly-report','inbox-triage','price-scraper','lead-enricher','repo-janitor','13f-digest','hiring-watch','invoice-sync','changelog-bot','backup-check','ticket-triage','form-d-raises'];let NAMES=POOL.slice(0,3);
+const COL={ok:'#3DDC84',warn:'#F5B547',fail:'#FF6B6B'},POOL=['performance-build','streams-refresh','blog-queue','trackrecord','indexnow-ping','digest-weekly','alerts-pro','smoke-chain','refresh-formd','db-backup','quality-round','subscribers-sync'];let NAMES=POOL.slice(0,3);
 function RR(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const narrow=c.offsetWidth<700;rows=narrow?2:3;x0=(narrow?12:110)*D;const avail=W-x0-16*D;gx=Math.max(3*D,avail*0.012);pw=(avail-gx*(cols-1))/cols;ph=7*D;gy=20*D;y0=(narrow?84:92)*D;S=[];maxAt=0;
 NAMES=POOL.slice().sort(()=>Math.random()-0.5).slice(0,3);for(let r=0;r<rows;r++)for(let i=0;i<cols;i++){const u=Math.random();const at=i*40+r*6;maxAt=Math.max(maxAt,at);S.push({r,i,kind:u<0.86?'ok':u<0.95?'warn':'fail',at})}tick=0}
 RR();addEventListener('resize',RR);
@@ -101,7 +101,7 @@ x.fillStyle='rgba(169,180,214,.38)';[0,6,12,18,24].forEach(h=>{const px=x0+Math.
 for(const s of S){const px=x0+s.i*(pw+gx),py=y0+s.r*gy;x.fillStyle='rgba(169,180,214,.09)';x.fillRect(px,py,pw,ph);
 if(tick>s.at){const k=Math.min(1,(tick-s.at)/24);x.globalAlpha=0.62*k;x.shadowColor=COL[s.kind];x.shadowBlur=(s.kind==='ok'?0:10)*D;x.fillStyle=COL[s.kind];x.fillRect(px,py,pw*k,ph);x.shadowBlur=0;x.globalAlpha=1}}
 const sweep=Math.min(tick,maxAt)/40;const sx=x0+Math.min(sweep,cols)*(pw+gx);if(tick<=maxAt+24){x.fillStyle='rgba(238,242,255,.35)';x.fillRect(sx,y0-4*D,1*D,rows*gy)}
-x.textAlign='right';x.fillStyle='rgba(169,180,214,.42)';x.fillText(c.offsetWidth<700?'every hour, every agent, checked':'one day, three agents, every hour checked',W-16*D,y0+rows*gy+4*D);
+x.textAlign='right';x.fillStyle='rgba(169,180,214,.42)';x.fillText(c.offsetWidth<700?'our own jobs, every hour checked':'one day, three of our own jobs, every hour checked',W-16*D,y0+rows*gy+4*D);
 if(tick>maxAt+24+600){RR()}requestAnimationFrame(drawR)}
 drawR();return}
 function R(){W=c.width=c.offsetWidth*D;H=c.height=c.offsetHeight*D;const n=Math.max(4,Math.floor(H/(110*D)));lanes=Array.from({length:n},(_,i)=>(i+.6)*H/n);P=[];for(let i=0;i<n*2;i++)add(true)}
