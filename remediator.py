@@ -121,10 +121,10 @@ def repair(agent: str, alert: dict, ctx: dict) -> tuple[str, str]:
     try:
         r = subprocess.run([CLAUDE, "-p", prompt, "--output-format", "json", "--max-turns", "60",
                             "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash"],
-                           cwd=ctx["repo"], capture_output=True, text=True, timeout=900)
+                           cwd=ctx["repo"], capture_output=True, text=True, timeout=1800)
         out = json.loads(r.stdout or "{}").get("result", "") or r.stderr[-800:]
     except subprocess.TimeoutExpired:
-        return "FAILED", "de herstelpoging duurde langer dan 15 minuten en is afgebroken"
+        return "FAILED", "de herstelpoging duurde langer dan 30 minuten en is afgebroken"
     except Exception as e:
         return "FAILED", f"herstelpoging kon niet starten: {type(e).__name__}"
     m = re.search(r"RESULT:\s*(FIXED|TRANSIENT|NEEDS_HUMAN|FAILED)\s*-\s*(.+)", out)
