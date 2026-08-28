@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY K
 CREATE TABLE IF NOT EXISTS proof_days(date TEXT PRIMARY KEY, root TEXT, prev TEXT, chain_hash TEXT, n_runs INTEGER, sealed_at REAL, ots_status TEXT, ots_path TEXT);
 CREATE TABLE IF NOT EXISTS run_leaves(id TEXT PRIMARY KEY, agent_id INTEGER, ended REAL, leaf_hash TEXT);
 CREATE TABLE IF NOT EXISTS heartbeats(minute INTEGER PRIMARY KEY, alerts_ok INTEGER);
+CREATE TABLE IF NOT EXISTS public_fleets(slug TEXT PRIMARY KEY, account_id INTEGER, title TEXT);
+CREATE TABLE IF NOT EXISTS public_agents(agent_id INTEGER PRIMARY KEY, label TEXT, kind TEXT);
 CREATE INDEX IF NOT EXISTS ix_run_leaves_ended ON run_leaves(ended);
 CREATE TABLE IF NOT EXISTS viewer_keys(id INTEGER PRIMARY KEY, account_id INTEGER, key_hash TEXT UNIQUE, name TEXT, created REAL, last_used REAL);
 """
@@ -874,6 +876,39 @@ def health():
             "checks": {"database": "ok" if db_ok else "error", "detectors": "running" if not os.getenv("RUNVOUCH_NO_SWEEP") else "disabled", "alert_delivery": _alert_delivery_status()},
             "docs": "https://runvouch.com/docs", "status_page": "https://runvouch.com/status"}
     return JSONResponse(body, status_code=200 if db_ok else 503)
+
+
+def fleet_summary(slug: str, now: Optional[float] = None) -> Optional[dict]:
+    """Public status of an opted-in fleet (a customer's status page can embed it). Only agents the owner marked
+    public, only run facts: name, cadence, last run, success rate. No evidence, no cost, no keys."""
+    fleet = q1("SELECT * FROM public_fleets WHERE slug=?", slug)
+    if not fleet:
+        return None
+    now = now or time.time()
+    rows = qa("SELECT g.id, g.name, g.cadence_s, g.paused, p.label, p.kind FROM public_agents p JOIN agents g ON g.id=p.agent_id "
+              "WHERE g.account_id=? ORDER BY p.kind DESC, g.name", fleet["account_id"])
+    agents = []
+    for g in rows:
+        last = q1("SELECT started, ended, status FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT 1", g["id"])
+        rates = {}
+        for label, days in (("7d", 7), ("30d", 30)):
+            r = q1("SELECT COUNT(*) n, SUM(status='ok') ok FROM runs WHERE agent_id=? AND started>? AND ended IS NOT NULL", g["id"], now - days * 86400)
+            rates[label] = {"runs": r["n"], "ok": r["ok"] or 0}
+        open_alert = q1("SELECT kind, ts FROM alerts WHERE agent_id=? AND acked=0 ORDER BY ts DESC LIMIT 1", g["id"])
+        late = bool(g["cadence_s"]) and last is not None and (now - last["started"]) > g["cadence_s"] * 1.5
+        agents.append({"name": g["name"], "label": g["label"] or g["name"], "kind": g["kind"] or "pipeline", "cadence_s": g["cadence_s"],
+                       "paused": bool(g["paused"]), "last_run": dict(last) if last else None, "late": late, "rates": rates,
+                       "open_alert": dict(open_alert) if open_alert else None})
+    return {"slug": slug, "title": fleet["title"], "time": datetime.utcfromtimestamp(now).isoformat(timespec="seconds") + "Z",
+            "agents": agents, "watched_by": "RunVouch", "docs": "https://runvouch.com/docs"}
+
+
+@app.get("/public/fleet/{slug}.json")
+def public_fleet(slug: str):
+    f = fleet_summary(slug)
+    if not f:
+        raise HTTPException(404, "no public fleet with that slug")
+    return f
 
 
 @app.get("/status.json")

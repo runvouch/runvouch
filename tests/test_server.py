@@ -599,3 +599,20 @@ def test_status_json_is_public_and_counts_heartbeats():
     assert 70 < j["windows"]["24h"]["detectors"] < 100
     assert any(i["minutes"] >= 6 for i in j["incidents"])
     assert "accounts" not in json.dumps(j)
+
+
+def test_public_fleet_only_shows_opted_in_agents():
+    sk, sh = _acct("solo")
+    for name in ("nightly-build", "secret-job"):
+        c.post("/v1/agents", json={"name": name, "cadence_s": 86400}, headers=sh)
+        rid = c.post("/v1/runs/start", json={"agent": name}, headers=sh).json()["run_id"]
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok"}, headers=sh)
+    acc = server.q1("SELECT id FROM agents WHERE name='nightly-build' ORDER BY id DESC LIMIT 1")
+    with server.tx() as db:
+        db.execute("INSERT OR REPLACE INTO public_fleets(slug, account_id, title) VALUES('demo', (SELECT account_id FROM agents WHERE id=?), 'Demo')", (acc["id"],))
+        db.execute("INSERT OR REPLACE INTO public_agents(agent_id, label, kind) VALUES(?, 'Nightly build', 'pipeline')", (acc["id"],))
+    j = c.get("/public/fleet/demo.json").json()  # no key
+    names = [a["name"] for a in j["agents"]]
+    assert names == ["nightly-build"] and "secret-job" not in json.dumps(j)
+    assert j["agents"][0]["last_run"]["status"] == "ok" and j["agents"][0]["rates"]["7d"]["ok"] == 1
+    assert c.get("/public/fleet/nope.json").status_code == 404
