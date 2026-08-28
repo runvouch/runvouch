@@ -312,7 +312,9 @@ export class RunVouch implements INodeType {
 					returnData.push({ json: { error: (error as Error).message }, pairedItem: { item: i } });
 					continue;
 				}
-				if (error instanceof NodeOperationError || error instanceof NodeApiError) throw error;
+				if (error instanceof NodeOperationError || error instanceof NodeApiError) {
+					throw new NodeOperationError(this.getNode(), error, { itemIndex: i });
+				}
 				throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
 			}
 		}
