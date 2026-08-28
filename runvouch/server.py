@@ -966,9 +966,14 @@ def contact(body: ContactIn, request: Request):
     with tx() as db:
         db.execute("CREATE TABLE IF NOT EXISTS contacts(id INTEGER PRIMARY KEY, ts REAL, email TEXT, topic TEXT, message TEXT, ip TEXT)")
         db.execute("INSERT INTO contacts(ts,email,topic,message,ip) VALUES(?,?,?,?,?)", (time.time(), body.email, body.topic, body.message, ip))
+    # form-fill bots post a name or a few words from a datacenter address; those are stored (visible in the contacts
+    # table) but not pushed to the owner's phone. A real message has a sentence in it.
+    words = body.message.split()
+    if len(words) < 4 or len(body.message) < 25:
+        return {"ok": True}
     owner = q1("SELECT telegram_token, telegram_chat FROM accounts WHERE telegram_token IS NOT NULL ORDER BY id LIMIT 1")
     if owner:
-        _telegram(owner["telegram_token"], owner["telegram_chat"], f"📩 RunVouch contact [{body.topic}] from {body.email}:\n{body.message[:1500]}")
+        _telegram(owner["telegram_token"], owner["telegram_chat"], f"RunVouch contact [{body.topic}] from {body.email}:\n{body.message[:1500]}\n(antwoord: mail naar dit adres als support@runvouch.com, of plak het bericht in deze chat voor een concept)")
     return {"ok": True}
 
 
