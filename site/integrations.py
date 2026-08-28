@@ -644,6 +644,7 @@ json.dump(r.json(), open("/out/brief.json", "w"))'''),
 # the same with HTTP Request nodes
 POST https://api.runvouch.com/v1/runs/start   {"agent":"lead-enricher","source":"n8n"}
 POST https://api.runvouch.com/v1/runs/end     {"run_id":"...","status":"ok","evidence":{"leads_fetched":true}}'''),
+    missing="<p>n8n's Error Workflow and the error trigger fire when a node throws. They do not fire when the Schedule Trigger never fires (workflow deactivated, instance down, trigger edited), and they do not fire when every node succeeds on empty data. The community forum thread on cron job monitoring (2022, still active) asks for exactly that and the answer there is to ping a heartbeat URL from an HTTP Request node.</p>",
     silent="<ul><li>A deactivated workflow, an n8n restart without the workflow active, or a changed trigger: nothing runs, nothing errors. MISSED after cadence plus grace.</li><li>The API returns an empty list, every node is green: the evidence expression is false and NO_EVIDENCE fires within a minute.</li><li>An LLM node in a loop: pass the model usage as cost in End Run and set <code>rv agent lead-enricher --cap-day-cost 5</code>.</li></ul>"),
   dict(slug="openclaw", name="OpenClaw (verified-run skill)", group="Agent frameworks",
     title="Monitor scheduled OpenClaw tasks with the verified-run skill: start, task, end with evidence file | RunVouch docs",
@@ -657,6 +658,7 @@ POST https://api.runvouch.com/v1/runs/end     {"run_id":"...","status":"ok","evi
 
 # the same wrapper with the rv CLI, if installed
 0 7 * * * rv run inbox-digest --evidence-file ~/out/digest.md -- openclaw task run inbox-digest'''),
+    missing="<p>OpenClaw runs scheduled tasks and keeps a session log, but it has no notion of an expected run: a task that never starts leaves no trace, and a task that starts, calls no tools and writes no file finishes as a normal session. OpenClaw issue #16808 (a polling loop that cost $150 with no alert) is the documented case.</p>",
     silent="<ul><li>The gateway is down at 7:00: no start call, MISSED at 7:30.</li><li>The task exits 0 without writing the digest: the wrapper reports <code>fail</code> with <code>evidence_file: false</code>; yesterday's file is removed first so it cannot pass as today's.</li><li>The agent loops on the same tool call: the companion <code>runvouch</code> skill reports tool calls, RETRY_STORM stops it.</li></ul>"),
   # ───────────── added 28 Aug 2026: the scheduler axis (Claude Code, OpenClaw, GitHub Actions, n8n, language schedulers) ─────────────
   dict(slug="claude-code-scheduled-tasks", name="Claude Code scheduled tasks", group="Schedulers",
@@ -901,7 +903,7 @@ Schedule::exec('rv run nightly-report --evidence-file storage/app/report.html --
     ->environments(['production']);
 
 # or, if you would rather not shell out: the two HTTP calls inside the command's handle()
-# Http::withHeaders(['X-API-Key' => env('RUNVOUCH_KEY')])->post('''' + API + '''/v1/runs/start', ['agent' => 'nightly-report', 'source' => 'laravel']);
+# Http::withHeaders(['X-API-Key' => env('RUNVOUCH_KEY')])->post("''' + API + '''/v1/runs/start", ['agent' => 'nightly-report', 'source' => 'laravel']);
 
 # rv agent nightly-report --cadence 24h --grace 30m --evidence'''),
     silent="<ul><li>No <code>schedule:run</code> cron line (new server, container without cron, a Forge server whose scheduler was removed): no task runs, no task fails. MISSED is the first and only signal.</li><li><code>emailOutputOnFailure()</code> and <code>pingOnFailure()</code> exist per task and fire on a non-zero exit; a command that returns 0 with an empty report is a success to both.</li><li><code>withoutOverlapping()</code> holds a lock for 24 hours by default; a task that crashed hard leaves the lock and the next runs are skipped. That is a MISSED with a cause you can read on the dashboard.</li><li><code>onOneServer()</code> needs a shared cache; with a file cache each server runs the task, and the daily cap counts every run.</li></ul>",
