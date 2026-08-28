@@ -1,5 +1,6 @@
 import type {
 	IAuthenticateGeneric,
+	Icon,
 	ICredentialTestRequest,
 	ICredentialType,
 	INodeProperties,
@@ -7,6 +8,8 @@ import type {
 
 export class RunVouchApi implements ICredentialType {
 	name = 'runVouchApi';
+
+	icon: Icon = { light: 'file:../nodes/RunVouch/runvouch.svg', dark: 'file:../nodes/RunVouch/runvouch.dark.svg' };
 
 	displayName = 'RunVouch API';
 

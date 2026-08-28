@@ -7,7 +7,7 @@ import type {
 	INodeTypeDescription,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 type Op = 'start' | 'end' | 'heartbeat';
 
@@ -45,7 +45,7 @@ async function startRun(
 	try {
 		return await runVouchRequest(ctx, 'POST', '/v1/runs/start', { agent, source, meta });
 	} catch (error) {
-		if (!isNotFound(error)) throw error;
+		if (!isNotFound(error)) throw new NodeApiError(ctx.getNode(), error as JsonObject);
 	}
 	await runVouchRequest(ctx, 'POST', '/v1/agents', {
 		name: agent,
@@ -73,7 +73,8 @@ export class RunVouch implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'RunVouch',
 		name: 'runVouch',
-		icon: 'file:runvouch.svg',
+		icon: { light: 'file:runvouch.svg', dark: 'file:runvouch.dark.svg' },
+		usableAsTool: true,
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
@@ -82,8 +83,8 @@ export class RunVouch implements INodeType {
 		defaults: {
 			name: 'RunVouch',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'runVouchApi',
@@ -311,7 +312,7 @@ export class RunVouch implements INodeType {
 					returnData.push({ json: { error: (error as Error).message }, pairedItem: { item: i } });
 					continue;
 				}
-				if (error instanceof NodeOperationError) throw error;
+				if (error instanceof NodeOperationError || error instanceof NodeApiError) throw error;
 				throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
 			}
 		}

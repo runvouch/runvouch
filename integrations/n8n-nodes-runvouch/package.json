@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-runvouch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "n8n community node for RunVouch: heartbeat and dead man's switch monitoring for scheduled workflows. Start run, end run with evidence, or both in one step. Alerts when a Schedule Trigger stops firing or a workflow finishes green without doing the work.",
   "keywords": [
     "n8n-community-node-package",
