@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""marktwacht.py — monthly market watch for both businesses, done by the local Claude Code CLI with web search.
+"""marktwacht.py — market watch for both businesses, every two weeks (1st and 15th), done by the local Claude Code CLI with web search.
 
-First of every month: what did the competition change (prices, features, positioning), who is new in the two niches,
+Twice a month: what did the competition change (prices, features, positioning), who is new in the two niches,
 where are we visible and where not, and which gaps are open that we could close first. Report ONLY what is measured
 (a URL, a price, a date), never guesses. Goes to the owner's Telegram and to data/marktwacht/YYYY-MM.md.
 """
@@ -25,9 +25,9 @@ reports ($19) and a free MCP server; daily output hashed and anchored in Bitcoin
 Unusual Whales, Capitol Trades, WhaleWisdom, Fintel, Dataroma.
 
 Deliver, in Dutch, plain text, no em dashes, no separator lines, max 70 lines:
-1. Per competitor (both lists): anything that changed in the last 45 days (price, new feature, new positioning, funding,
+1. Per competitor (both lists): anything that changed in the last 20 days (price, new feature, new positioning, funding,
    shutdown), with URL. Write "geen wijziging gevonden" if nothing.
-2. New entrants: products launched in the last 60 days in either niche (Product Hunt, Hacker News, GitHub trending, the
+2. New entrants: products launched in the last 30 days in either niche (Product Hunt, Hacker News, GitHub trending, the
    MCP registry, Apify Store), with URL and what they do.
 3. Our visibility: for each of these searches, are we in the first page of results (say yes/no per search engine you can
    check): "watchdog for AI agents", "monitor Claude Code routines", "prove what an AI agent did", "AI agent audit trail",
@@ -35,7 +35,12 @@ Deliver, in Dutch, plain text, no em dashes, no separator lines, max 70 lines:
    awesome-mcp-servers (check the live pages).
 4. Gaps: the 5 most valuable things a competitor does that we do not, and the 5 things we do that none of them do
    (verify on their sites). For each gap: one sentence on what it would take.
-5. One recommendation for next month, with the measurement that would prove it worked."""
+5. One recommendation for the next two weeks, with the measurement that would prove it worked.
+6. BOUWLIJST (fixed question, every time): which detector, integration or alert channel does any competitor have that
+   RunVouch does not, and which data source or delivery channel does any competitor have that DataSignals Lab does not?
+   One line each: what it is, who has it (URL), estimated build time for one developer, and whether a competitor could
+   copy it back within a month (if yes: low priority, it is maintenance, not an edge). Start this section with the exact
+   line "BOUWLIJST" so it can be filed automatically. Write "BOUWLIJST\ngeen" if nothing was found."""
 
 
 def telegram(text: str) -> None:
@@ -61,10 +66,18 @@ def main() -> int:
         out = ""
     if not out:
         out = "Marktwacht kon niet worden afgerond: " + (r.stderr or "geen uitvoer")[-500:]
-    path = os.path.join(OUT, time.strftime("%Y-%m") + ".md")
+    stamp = time.strftime("%Y-%m-%d")
+    path = os.path.join(OUT, stamp + ".md")
     open(path, "w").write(out + "\n")
+    # the build list accumulates in one file, newest on top, so the gap between us and the market is one document
+    if "BOUWLIJST" in out:
+        lijst = out[out.index("BOUWLIJST") + len("BOUWLIJST"):].strip()
+        bl = os.path.join(OUT, "bouwlijst.md")
+        oud = open(bl).read() if os.path.exists(bl) else "# Bouwlijst uit de marktwacht (nieuwste boven)\n\n"
+        kop, _, rest = oud.partition("\n\n")
+        open(bl, "w").write(f"{kop}\n\n## {stamp}\n{lijst}\n\n{rest}")
     print(out)
-    telegram("Marktwacht " + time.strftime("%Y-%m") + "\n\n" + out)
+    telegram("Marktwacht " + stamp + "\n\n" + out)
     return 0
 
 
