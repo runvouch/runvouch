@@ -1,0 +1,145 @@
+# RunVouch in Home Assistant: agent status as sensors, plus rest_command to report an automation as a run.
+# Copy the parts you need into configuration.yaml (or split them into packages). Home Assistant 2024.1 or later.
+#
+# secrets.yaml:
+#   runvouch_key: rv_...
+#
+# Every RunVouch agent becomes one sensor whose state is the RunVouch judgement:
+#   ok | unproven | failed | alert | running | waiting | paused
+# The list of agents comes from GET https://api.runvouch.com/v1/agents (your key); one REST resource, several sensors.
+
+rest:
+  # 1. your agents (needs the key). One sensor per agent; copy the block and change the name in both places.
+  - resource: https://api.runvouch.com/v1/agents
+    method: GET
+    headers:
+      X-API-Key: !secret runvouch_key
+      User-Agent: home-assistant-runvouch/1.0
+    scan_interval: 300
+    timeout: 15
+    sensor:
+      - name: "RunVouch nightly-report"
+        unique_id: runvouch_agent_nightly_report
+        icon: mdi:shield-check
+        value_template: >-
+          {{ (value_json | selectattr('name', 'eq', 'nightly-report') | map(attribute='state') | list | first) | default('unknown') }}
+        json_attributes_path: "$[?(@.name=='nightly-report')]"
+        json_attributes:
+          - cadence_s
+          - paused
+          - open_alerts
+          - cost_24h
+          - last_run
+      - name: "RunVouch nightly-backup"
+        unique_id: runvouch_agent_nightly_backup
+        icon: mdi:shield-check
+        value_template: >-
+          {{ (value_json | selectattr('name', 'eq', 'nightly-backup') | map(attribute='state') | list | first) | default('unknown') }}
+        json_attributes_path: "$[?(@.name=='nightly-backup')]"
+        json_attributes:
+          - cadence_s
+          - paused
+          - open_alerts
+          - cost_24h
+          - last_run
+      # fleet-wide numbers from the same response
+      - name: "RunVouch agents not ok"
+        unique_id: runvouch_agents_not_ok
+        icon: mdi:alert-circle-outline
+        value_template: "{{ value_json | rejectattr('state', 'eq', 'ok') | rejectattr('state', 'eq', 'paused') | list | count }}"
+      - name: "RunVouch cost 24h"
+        unique_id: runvouch_cost_24h
+        icon: mdi:currency-usd
+        unit_of_measurement: "USD"
+        state_class: measurement
+        value_template: "{{ value_json | map(attribute='cost_24h') | sum | round(4) }}"
+
+  # 2. open alerts (needs the key)
+  - resource: https://api.runvouch.com/v1/alerts
+    method: GET
+    headers:
+      X-API-Key: !secret runvouch_key
+    scan_interval: 120
+    sensor:
+      - name: "RunVouch open alerts"
+        unique_id: runvouch_open_alerts
+        icon: mdi:bell-alert
+        value_template: "{{ value_json | count }}"
+        json_attributes_path: "$[0]"
+        json_attributes:
+          - kind
+          - agent
+          - message
+          - ts
+
+  # 3. RunVouch itself (public, no key): is the detector loop alive?
+  - resource: https://api.runvouch.com/status.json
+    method: GET
+    scan_interval: 300
+    sensor:
+      - name: "RunVouch API heartbeat age"
+        unique_id: runvouch_api_heartbeat_age
+        icon: mdi:heart-pulse
+        unit_of_measurement: "s"
+        state_class: measurement
+        value_template: "{{ value_json.last_heartbeat_age_s }}"
+      - name: "RunVouch API uptime 30d"
+        unique_id: runvouch_api_uptime_30d
+        icon: mdi:chart-line
+        unit_of_measurement: "%"
+        value_template: "{{ value_json.windows['30d'].detectors }}"
+
+# 4. report a Home Assistant automation as a RunVouch run (the other direction)
+rest_command:
+  runvouch_start:
+    url: https://api.runvouch.com/v1/runs/start
+    method: POST
+    headers:
+      X-API-Key: !secret runvouch_key
+      content-type: application/json
+    payload: '{"agent":"{{ agent }}","source":"home-assistant"}'
+  runvouch_end:
+    url: https://api.runvouch.com/v1/runs/end
+    method: POST
+    headers:
+      X-API-Key: !secret runvouch_key
+      content-type: application/json
+    payload: '{"run_id":"{{ run_id }}","status":"{{ status | default("ok") }}","evidence":{{ evidence | default({}) | to_json }}}'
+
+# 5. automations: one that reports its own run, one that reacts to a RunVouch state
+automation:
+  - alias: "Nightly backup, vouched"
+    id: runvouch_nightly_backup
+    trigger:
+      - platform: time
+        at: "02:00:00"
+    action:
+      - service: rest_command.runvouch_start
+        data: { agent: nightly-backup }
+        response_variable: rv
+      - service: shell_command.backup
+      - service: rest_command.runvouch_end
+        data:
+          run_id: "{{ rv.content.run_id }}"
+          status: ok
+          evidence: { backup: true }
+
+  - alias: "RunVouch agent needs attention"
+    id: runvouch_agent_attention
+    trigger:
+      - platform: state
+        entity_id:
+          - sensor.runvouch_nightly_report
+          - sensor.runvouch_nightly_backup
+        to:
+          - failed
+          - unproven
+          - alert
+        for: "00:02:00"
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "RunVouch: {{ trigger.to_state.name }} is {{ trigger.to_state.state }}"
+          message: >-
+            Last run: {{ trigger.to_state.attributes.last_run.status if trigger.to_state.attributes.last_run else 'none' }}.
+            Open alerts: {{ trigger.to_state.attributes.open_alerts }}. https://runvouch.com/app

@@ -1,0 +1,33 @@
+{
+  "_metadata": {
+    "major_version": 1,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "RunVouch",
+    "description": "Alerts when a scheduled job or AI agent is missed, fails, produces nothing, loops or overspends.",
+    "long_description": "RunVouch is a dead man's switch, evidence check and cost cap for scheduled jobs and AI agents: cron, Kubernetes CronJobs, GitHub Actions, Vercel cron, Airflow, n8n, Claude Code routines, OpenClaw and 40 more runtimes. Each run reports a start and an end with evidence (a file written, a URL live, rows inserted). RunVouch watches from outside and posts to your Slack channel when a run is MISSED (the schedule stopped), FAILED (with the stderr excerpt), NO_EVIDENCE (green run, nothing produced), STALLED, RETRY_STORM (the same tool called with the same input many times), BUDGET_RUN or BUDGET_DAY (cost cap crossed, agent paused) or DRIFT (duration or output size far off its baseline). A weekly digest per workspace summarises every agent. Free for 3 agents, no card. Setup takes two minutes: add RunVouch to a channel, paste the webhook into your RunVouch settings, done.",
+    "background_color": "#0b1020"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "RunVouch",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://api.runvouch.com/oauth/slack/callback"
+    ],
+    "scopes": {
+      "bot": [
+        "incoming-webhook"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
