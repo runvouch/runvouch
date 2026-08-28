@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -44,7 +45,9 @@ def handle(text: str) -> list[str]:
     """One incoming message -> the messages to send back. Pure: no Telegram inside, so it is testable."""
     m = URL_RE.search(text or "")
     if not m:
-        return ["Stuur een Reddit- of GitHub-link, met daaronder (mag) het antwoord dat je kreeg. Je krijgt een reactie terug: eerst de tekst, dan de link."]
+        if len((text or "").split()) < 12:
+            return ["Stuur een Reddit- of GitHub-link (met daaronder het antwoord dat je kreeg), of plak de tekst van een mail of platformbericht. Je krijgt een antwoordconcept terug: eerst de tekst, dan waar je hem plaatst."]
+        return mail_reply(text)
     url = m.group(0).rstrip(").,")
     rest = (text[:m.start()] + text[m.end():]).strip()
     bron = "github" if "github.com" in url else "reddit"
@@ -59,6 +62,35 @@ def handle(text: str) -> list[str]:
         f.write(json.dumps({"ts": time.time(), "sub": bron + " reply", "url": url, "text": draft}) + "\n")
     kop = "GITHUB - reageer als account runvouch (niet je eigen)" if bron == "github" else "REDDIT - reageer als u/nightly_runs"
     return [draft, f"^ {kop}\nKopieer het bericht hierboven, tik de link, plak als reply:\n{url}"]
+
+
+MAIL_RULES = """You draft ONE reply to an incoming message (an e-mail or a marketplace/console message) for a small company.
+Decide from the content which company is addressed: DataSignals Lab (data products: SEC filings, Events API, Jobs API, MCP,
+Apify, RapidAPI; sign as "DataSignals Lab", support@datasignalslab.com) or RunVouch (watchdog for unattended AI agents;
+sign as "The RunVouch team", support@runvouch.com). Rules, all hard:
+- Answer what is actually asked. A customer question gets a direct, complete, friendly answer; a sales or partnership pitch
+  gets a short, polite decline that closes the thread; a bot or automated notice gets: NOREPLY.
+- Company voice ("we"), plain English, no em dashes, no emoji, no marketing phrases, 40-140 words. Never invent prices,
+  features, dates or names; if a fact is needed that is not in the message, write [CHECK: ...] in its place.
+- First line of your output must be exactly: COMPANY: DataSignals Lab   or   COMPANY: RunVouch
+- Then a blank line, then the reply text only (with the sign-off). If no reply is warranted, output only: NOREPLY - <why>"""
+
+
+def mail_reply(text: str) -> list[str]:
+    try:
+        r = subprocess.run([S.CLAUDE, "-p", MAIL_RULES + "\n\nINCOMING MESSAGE:\n" + text[:6000], "--output-format", "json", "--max-turns", "1"],
+                           capture_output=True, text=True, timeout=240)
+        out = json.loads(r.stdout or "{}").get("result", "").strip()
+    except Exception as e:
+        return [f"Concept mislukt: {type(e).__name__}"]
+    if not out or out.upper().startswith("NOREPLY"):
+        return ["Geen antwoord nodig: " + (out.split("-", 1)[1].strip() if "-" in out else "automatische melding of bot.")]
+    first, _, body = out.partition("\n")
+    company = first.replace("COMPANY:", "").strip() or "?"
+    addr = "support@datasignalslab.com" if "DataSignals" in company else "support@runvouch.com"
+    with open(S.HISTORY, "a") as f:
+        f.write(json.dumps({"ts": time.time(), "sub": "mail " + company, "url": "", "text": body.strip()}) + "\n")
+    return [body.strip(), f"^ ANTWOORD namens {company}\nKopieer het bericht hierboven en verstuur het in Gmail als {addr} (of plak het in de console van het platform)."]
 
 
 def main() -> int:
