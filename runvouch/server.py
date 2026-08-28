@@ -732,7 +732,7 @@ def purged_proof(leaf: sqlite3.Row) -> dict:
 
 
 HEARTBEAT_KEEP_DAYS = 100
-INCIDENT_GAP_MIN = 5  # minutes without a heartbeat that count as an outage on the public status page
+INCIDENT_GAP_MIN = 3  # minutes without a heartbeat that count as an outage on the public status page
 
 
 def record_heartbeat(now: Optional[float] = None) -> None:

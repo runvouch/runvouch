@@ -2,7 +2,7 @@
 """statuswacht.py: the watchdog for the status page itself.
 
 runvouch.com/status is the shop window: it must always resolve, always green, always fresh. RunVouch cannot vouch
-for itself when it is down, so this runs OUTSIDE it: a plain systemd timer every 5 minutes, no rv run, its own
+for itself when it is down, so this runs OUTSIDE it: a plain systemd timer every minute, no rv run, its own
 Telegram path. It checks from the public side (through Cloudflare, like a visitor), repairs what it can (restart
 the API or the tunnel, at most once per 30 minutes per component), and sends one Telegram line only when a repair
 happened or when something stays broken. Every :00 and :30 it also renders the page in a headless browser and
@@ -25,7 +25,7 @@ LOCAL_API = "http://127.0.0.1:8787"
 SITE = "https://runvouch.com/status"
 UA = "Mozilla/5.0 (compatible; runvouch-statuswacht/0.1)"
 REPAIR_EVERY = 1800
-MAX_HEARTBEAT_AGE = 240
+MAX_HEARTBEAT_AGE = 150
 
 
 def get(url: str, timeout: int = 20):
