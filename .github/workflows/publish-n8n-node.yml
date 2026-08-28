@@ -30,6 +30,8 @@ jobs:
         run: |
           v=$(node -p "require('./package.json').version")
           [ "${GITHUB_REF_NAME#n8n-nodes-runvouch-}" = "$v" ] || { echo "tag $GITHUB_REF_NAME != version $v"; exit 1; }
+      - name: npm 11.5+ (needed for OIDC trusted publishing)
+        run: npm install -g npm@latest && npm --version
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run lint
