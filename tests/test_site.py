@@ -11,13 +11,14 @@ def test_every_integration_is_complete_and_unique():
     intros = [i["intro"] for i in I.INTEGRATIONS]
     assert len(intros) == len(set(intros)), "two pages share an intro"
     for i in I.INTEGRATIONS:
-        for k in ("slug", "name", "group", "title", "desc", "h1", "intro", "where", "key", "snippet", "silent", "mode"):
+        for k in ("slug", "name", "group", "title", "desc", "h1", "intro", "where", "key", "snippet", "silent", "missing", "mode"):
             assert i.get(k), f"{i['slug']}: {k} missing"
         assert i["group"] in I.GROUPS
         assert i["mode"] in ("wrap", "http")
         assert re.fullmatch(r"[a-z0-9-]+", i["slug"])
-        assert "rv run" in i["snippet"] or '"rv", "run"' in i["snippet"] or "--command rv" in i["snippet"] or "/v1/runs/start" in i["snippet"] or "runvouch.vouch(" in i["snippet"], i["slug"]
+        assert "rv run" in i["snippet"] or '"rv", "run"' in i["snippet"] or "--command rv" in i["snippet"] or "/v1/runs/start" in i["snippet"] or "runvouch.vouch(" in i["snippet"] or "rv.vouch(" in i["snippet"], i["slug"]
         assert "<li>" in i["silent"], f"{i['slug']}: silent-failure list missing"
+        assert i["missing"].startswith("<p>") and 120 < len(re.sub("<[^>]+>", "", i["missing"])) < 1200, f"{i['slug']}: missing-section length"
         assert "—" not in str(i), f"{i['slug']}: em dash"
 
 
