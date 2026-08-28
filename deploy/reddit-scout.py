@@ -228,24 +228,28 @@ def main() -> int:
             else:
                 kop = "REDDIT - reageer als u/nightly_runs"
                 waar = "r/" + p["sub"]
-            blocks.append(f"=== {kop} ===\n{waar}: {p['title'][:100]}\n\nLINK:\n{p['url']}\n\nANTWOORD (kopieer en plak als comment):\n{text}")
+            # two messages per draft: first the answer alone (long-press, Copy, one tap), then the link right under it
+            blocks.append((text, f"^ {kop}\n{waar}: {p['title'][:100]}\nKopieer het bericht hierboven, tik de link, plak als comment:\n{p['url']}"))
         else:
             overig.append(p)
+    msgs = []
     if blocks:
-        msg = "Reddit en GitHub vandaag - " + str(drafted) + " antwoord(en) klaar\n\n" + "\n\n".join(blocks)
+        msgs.append("Reddit en GitHub vandaag - " + str(drafted) + " antwoord(en) klaar; per antwoord twee berichten: eerst de tekst, dan de link.")
+        for text, kop in blocks:
+            msgs += [text, kop]
         if overig:
-            msg += "\n\nGezien, geen antwoord geschreven (zeg 'reddit' + link als je er toch een wilt):\n" + "\n".join(
-                f"- {p['url']}" for p in overig)
+            msgs.append("Gezien, geen antwoord geschreven (zeg 'reddit' + link als je er toch een wilt):\n" + "\n".join(
+                f"- {p['url']}" for p in overig))
     else:
-        msg = "Reddit en GitHub vandaag: geen antwoord geschreven."
-        if overig:
-            msg += "\nGezien: " + ", ".join(p["url"] for p in overig)
+        msgs.append("Reddit en GitHub vandaag: geen antwoord geschreven." + ("\nGezien: " + ", ".join(p["url"] for p in overig) if overig else ""))
+    msg = "\n\n".join(msgs)
     print(msg)
     if "--dry" not in sys.argv:
         if not blocks:
             print("telegram: niets te melden, geen bericht gestuurd", file=sys.stderr)
-        for chunk in ([msg[i:i + 3800] for i in range(0, len(msg), 3800)] if blocks else []):
-            telegram(chunk)
+        for m in (msgs if blocks else []):
+            for chunk in [m[i:i + 3800] for i in range(0, len(m), 3800)]:
+                telegram(chunk)
         seen |= {p["url"] for p in top}
         os.makedirs(os.path.dirname(STATE), exist_ok=True)
         json.dump(sorted(seen)[-2000:], open(STATE, "w"))
