@@ -64,7 +64,7 @@ def main() -> int:
     open(path, "w").write(out + "\n")
     print(out)
     if out.startswith("OK"):
-        print("(OK: geen defecten, niets naar Telegram)")
+        telegram("Koperswandeling " + time.strftime("%Y-%m-%d") + ": OK, beide sites zonder defecten.")
     else:
         telegram("Koperswandeling " + time.strftime("%Y-%m-%d") + "\n\n" + out)
     return 0 if out.startswith("OK") else 1
