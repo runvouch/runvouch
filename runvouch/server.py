@@ -1090,7 +1090,7 @@ def _fmt_date(iso: Optional[str]) -> str:
 def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, api_key: Optional[str] = None) -> tuple[str, str]:
     """Customer-facing billing mails: welcome / canceled / ended / refunded. Returns (subject, text)."""
     name, limit = PLAN_NAMES.get(plan, plan.title()), PLAN_LIMITS.get(plan, 3)
-    sig = "\n\nKeith\nRunVouch - the watchdog for unattended AI agents\nhttps://runvouch.com  |  support@runvouch.com"
+    sig = "\n\nThe RunVouch team\nRunVouch - the watchdog for unattended AI agents\nhttps://runvouch.com  |  support@runvouch.com"
     if kind == "welcome":
         key_block = (f"\n\nYour API key (shown only here - store it now):\n\n    {api_key}\n\nSet it as RUNVOUCH_KEY wherever your agents run." if api_key
                      else "\n\nYour existing API key keeps working; the new limit is already active.")

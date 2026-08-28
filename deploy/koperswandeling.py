@@ -30,8 +30,8 @@ Sites and the paths a buyer takes:
    (the day file for yesterday must exist and load), /agent-templates.html, /company/, /hiring/, /filings/,
    /congress/ and one page in each, /blog.html and the newest post, /llms.txt, /sitemap.xml (sample 20 URLs).
 Use curl with a browser User-Agent for status codes and a headless browser (python3 with playwright; set
-LD_LIBRARY_PATH=/home/krtradingpro/chromelibs/root/usr/lib/x86_64-linux-gnu first; a working example is
-/home/krtradingpro/runvouch/shot.py) for rendering checks at 1440 and 390 px wide, scrolling each page fully.
+LD_LIBRARY_PATH=$HOME/chromelibs/root/usr/lib/x86_64-linux-gnu first; a working example is
+$HOME/runvouch/shot.py) for rendering checks at 1440 and 390 px wide, scrolling each page fully.
 
 Output: plain text, Dutch, no em dashes, no separator lines. First line: "OK" if nothing is broken, otherwise "DEFECTEN: N".
 Then one line per defect: site, page, what is wrong, how you measured it. Max 40 lines. Do not propose rewrites."""

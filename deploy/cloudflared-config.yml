@@ -1,5 +1,5 @@
 tunnel: runvouch
-credentials-file: /home/krtradingpro/.cloudflared/runvouch.json
+credentials-file: ~/.cloudflared/runvouch.json   # absolute path of the tunnel credentials on the host
 ingress:
   - hostname: api.runvouch.com
     service: http://127.0.0.1:8787

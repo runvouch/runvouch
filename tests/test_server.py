@@ -1,5 +1,6 @@
 import os, sys, time, json
-os.environ["RUNVOUCH_DB"] = "/tmp/claude-1000/-home-krtradingpro-TradingBot-Trading-Bot-Crypto/96bd68dd-1df7-4b4a-8980-d39ff4341368/scratchpad/aw_test.db"
+import tempfile
+os.environ["RUNVOUCH_DB"] = os.path.join(tempfile.mkdtemp(prefix="runvouch-test-"), "test.db")
 os.environ["RUNVOUCH_NO_SWEEP"] = "1"
 os.environ["RUNVOUCH_ADMIN_TOKEN"] = "adm"
 os.environ["RUNVOUCH_STORM_THRESHOLD"] = "5"

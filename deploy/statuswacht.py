@@ -70,7 +70,7 @@ with sync_playwright() as p:
     cells={i: pg.evaluate("(document.getElementById('%s')||{innerText:'MISSING'}).innerText" % i) for i in ("s-api","s-det","s-alerts","s-app","u-det-24h","s-meta")}
     print(json.dumps({"cells":cells,"errs":errs})); b.close()
 """
-    env = dict(os.environ, LD_LIBRARY_PATH="/home/krtradingpro/chromelibs/root/usr/lib/x86_64-linux-gnu")
+    env = dict(os.environ, LD_LIBRARY_PATH=os.path.expanduser("~/chromelibs/root/usr/lib/x86_64-linux-gnu"))
     try:
         r = subprocess.run([os.path.join(ROOT, ".venv", "bin", "python"), "-c", script], capture_output=True, text=True, timeout=120, env=env)
         j = json.loads(r.stdout.strip().splitlines()[-1])
@@ -89,7 +89,7 @@ def telegram(text: str) -> None:
         tok, chat = sqlite3.connect(env["RUNVOUCH_DB"]).execute("SELECT telegram_token, telegram_chat FROM accounts WHERE telegram_token IS NOT NULL ORDER BY id LIMIT 1").fetchone()
     except Exception:
         try:
-            env = {l.split("=", 1)[0]: l.split("=", 1)[1].strip().strip('"') for l in open("/home/krtradingpro/TradingBot/Trading_Bot_Crypto/config/API_keys_bitvavo.env") if "=" in l and not l.startswith("#")}
+            env = {l.split("=", 1)[0]: l.split("=", 1)[1].strip().strip('"') for l in open(os.path.expanduser("~/TradingBot/Trading_Bot_Crypto/config/API_keys_bitvavo.env")) if "=" in l and not l.startswith("#")}
             tok, chat = env.get("TELEGRAM_BOT_TOKEN"), env.get("TELEGRAM_CHAT_ID")
         except Exception:
             pass

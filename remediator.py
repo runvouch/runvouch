@@ -12,6 +12,8 @@ Limits: one repair attempt per agent per day, three repairs per day in total, ne
 """
 import fcntl, json, os, re, sqlite3, subprocess, sys, time, urllib.parse, urllib.request
 
+HOME = os.path.expanduser("~")
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 env = {l.split("=", 1)[0]: l.split("=", 1)[1].strip() for l in open(os.path.join(REPO, ".env")) if "=" in l and not l.startswith("#")}
 KEY, URL = env["RUNVOUCH_KEY"], "http://127.0.0.1:8787"
@@ -23,10 +25,10 @@ MAX_REPAIRS_PER_DAY = 3
 NEVER = {"blogmotor", "blog-writer", "blog-queue", "reddit-scout", "clawhub-publish"}   # content jobs: a human decides
 # where a job's code lives -> which git repo to fix and how to publish the fix
 REPOS = [
-    ("/home/krtradingpro/apify/landing-live/", "/home/krtradingpro/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
-    ("/home/krtradingpro/apify/landing/", "/home/krtradingpro/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
-    ("/home/krtradingpro/runvouch/", "/home/krtradingpro/runvouch", "git push -q origin main"),
-    ("/home/krtradingpro/apify/", "/home/krtradingpro/apify", "git push -q origin HEAD"),
+    (HOME + "/apify/landing-live/", HOME + "/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
+    (HOME + "/apify/landing/", HOME + "/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
+    (HOME + "/runvouch/", HOME + "/runvouch", "git push -q origin main"),
+    (HOME + "/apify/", HOME + "/apify", "git push -q origin HEAD"),
 ]
 
 
@@ -51,7 +53,7 @@ def telegram(text: str) -> None:
 def jobs_from_crontab() -> dict:
     out = {}
     for l in subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout.splitlines():
-        m = re.search(r"/home/krtradingpro/bin/rv run (\S+) (.*)$", l)
+        m = re.search(re.escape(HOME) + r"/bin/rv run (\S+) (.*)$", l)
         if m:
             out[m.group(1)] = m.group(2)
     return out
@@ -59,20 +61,20 @@ def jobs_from_crontab() -> dict:
 
 def run_job(agent: str, args: str) -> subprocess.CompletedProcess:
     args = args.replace("--source cron", "--source remediator")
-    return subprocess.run("/home/krtradingpro/bin/rv run " + agent + " " + args, shell=True, capture_output=True, text=True, timeout=3600)
+    return subprocess.run(HOME + "/bin/rv run " + agent + " " + args, shell=True, capture_output=True, text=True, timeout=3600)
 
 
 def job_context(args: str) -> dict:
     """Log tail, script path and the repo to fix, derived from the crontab arguments."""
     log = re.search(r"--log (\S+)", args)
     cmd = args.split(" -- ", 1)[1] if " -- " in args else args
-    script = next((t for t in cmd.split() if t.startswith("/home/krtradingpro/") and not t.startswith("-")), "")
+    script = next((t for t in cmd.split() if t.startswith(HOME + "/") and not t.startswith("-")), "")
     if "run_live.sh" in cmd:                       # landing-live/scripts/run_live.sh scripts/x.py -> the real source is landing/scripts/x.py
         tail = cmd.split("run_live.sh", 1)[1].strip().split()[0] if "run_live.sh" in cmd else ""
-        script = os.path.join("/home/krtradingpro/apify/landing", tail) if tail else script
+        script = os.path.join(HOME + "/apify/landing", tail) if tail else script
     repo, publish = "", ""
     for prefix, r, p in REPOS:
-        if script.startswith(prefix) or (script.startswith("/home/krtradingpro/apify/landing/") and prefix.endswith("landing/")):
+        if script.startswith(prefix) or (script.startswith(HOME + "/apify/landing/") and prefix.endswith("landing/")):
             repo, publish = r, p
             break
     tail_txt = ""
