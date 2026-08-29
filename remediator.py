@@ -87,6 +87,10 @@ def job_context(args: str) -> dict:
     cmd = args.split(" -- ", 1)[1] if " -- " in args else args
     cmd = cmd.rstrip("'")
     script = next((t for t in cmd.split() if t.startswith(HOME + "/") and not t.startswith("-")), "")
+    if not script:                                 # systemd unit: relative script inside its working directory
+        wd = re.search(r"cd (" + re.escape(HOME) + r"/\S+) &&", args)
+        if wd:
+            script = wd.group(1).rstrip("/") + "/" + (cmd.split()[-1] if cmd.split() else "")
     if "run_live.sh" in cmd:                       # landing-live/scripts/run_live.sh scripts/x.py -> the real source is landing/scripts/x.py
         tail = cmd.split("run_live.sh", 1)[1].strip().split()[0] if "run_live.sh" in cmd else ""
         script = os.path.join(HOME + "/apify/landing", tail) if tail else script
