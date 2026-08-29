@@ -159,10 +159,11 @@ document.querySelectorAll('a[data-ls]').forEach(a=>a.addEventListener('click',()
 
 def head(title, desc, path, jsonld=None, article=False):
     ld = json.dumps(jsonld, ensure_ascii=False) if jsonld else ""
+    icon_v = hashlib.sha1(LOGO_SVG.encode()).hexdigest()[:8]  # verandert mee met het logo, zodat een oud favicon niet een jaar in de browsercache blijft
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0B1020">
 <title>{title}</title><meta name="description" content="{desc}"><link rel="canonical" href="{BASE}{path}">
 <meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:url" content="{BASE}{path}"><meta property="og:image" content="{BASE}/og.png"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/logo.svg?v={CSS_HASH}" type="image/svg+xml"><link rel="icon" href="/favicon.png?v={CSS_HASH}" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v={CSS_HASH}"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
+<link rel="icon" href="/logo.svg?v={icon_v}" type="image/svg+xml"><link rel="icon" href="/favicon.png?v={icon_v}" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v={icon_v}"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.{CSS_HASH}.css"><noscript><style>.reveal{{opacity:1;transform:none}}</style></noscript>{('<script type="application/ld+json">'+ld+'</script>') if ld else ''}{ANALYTICS}</head><body{(' class="roster-pad"' if path != '/' else '')}>
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig" data-mode="roster"></canvas></div>
@@ -937,13 +938,15 @@ for old in _g.glob(str(OUT / "assets" / "style.*.css")): os.remove(old)
 (OUT / "logo.svg").write_text(LOGO_SVG, encoding="utf-8")
 try:
     from PIL import Image, ImageDraw
-    im = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    grad = Image.new("RGBA", (64, 64)); gd = ImageDraw.Draw(grad)
-    for i in range(64):
-        gd.line((i, 0, i, 64), fill=(int(255 - 131 * i / 64), int(61 + 16 * i / 64), int(129 + 126 * i / 64), 255))
-    mask = Image.new("L", (64, 64), 0); md = ImageDraw.Draw(mask); md.ellipse((4, 6, 56, 58), fill=255); md.ellipse((24, 7, 58, 41), fill=0)
-    im.paste(grad, (0, 0), mask); d = ImageDraw.Draw(im)
-    d.line([(17, 36), (25, 44), (41, 26)], fill="white", width=6, joint="curve"); d.ellipse((47, 9, 53, 15), fill="white")
+    # Zelfde beeld als LOGO_SVG (blauwe ring, donkere schijf, witte vink), 8x oversampled en dan verkleind voor gladde randen.
+    S = 8
+    im = Image.new("RGBA", (64 * S, 64 * S), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.ellipse((5 * S, 5 * S, 59 * S, 59 * S), fill="#4C8DFF")
+    d.ellipse((9 * S, 9 * S, 55 * S, 55 * S), fill="#141B33")
+    d.line([(19 * S, 34 * S), (28 * S, 43 * S), (45 * S, 24 * S)], fill="#EEF2FF", width=int(6.5 * S), joint="curve")
+    for x, y in ((19, 34), (28, 43), (45, 24)):
+        r = 6.5 * S / 2; d.ellipse((x * S - r, y * S - r, x * S + r, y * S + r), fill="#EEF2FF")
+    im = im.resize((64, 64), Image.LANCZOS)
     im.save(OUT / "favicon.png")
 except Exception as e:
     print("favicon png skipped", e)
