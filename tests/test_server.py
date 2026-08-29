@@ -76,6 +76,11 @@ def test_missed_and_stalled():
     assert not alerts("MISSED")
     server.sweep_once(now=time.time() + 3700)
     assert alerts("MISSED")
+    mine = lambda: [a for a in alerts("MISSED") if a["agent"] == "hourly"]
+    n = len(mine())
+    for extra in (7300, 10900, 14500):   # sweeps keep passing, the agent stays silent
+        server.sweep_once(now=time.time() + extra)
+    assert len(mine()) == n, "the same missed run must alert once, not every sweep"
     rid = c.post("/v1/runs/start", json={"agent": "hourly"}, headers=H).json()["run_id"]
     server.sweep_once(now=time.time() + 700)
     assert alerts("STALLED")

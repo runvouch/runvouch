@@ -475,7 +475,10 @@ def sweep_once(now: Optional[float] = None) -> None:
         # MISSED
         if agent["cadence_s"]:
             ref = last["started"] if last else agent["created"]
-            if now - ref > agent["cadence_s"] + agent["grace_s"]:
+            # One MISSED per missed run: the same silence is not news every sweep. On 29 Aug 2026 a paid
+            # account (priority alerts skip the cooldown) got the same MISSED nine times in one day.
+            if now - ref > agent["cadence_s"] + agent["grace_s"] and not q1(
+                    "SELECT id FROM alerts WHERE agent_id=? AND kind='MISSED' AND ts>?", agent["id"], ref):
                 raise_alert(agent["account_id"], agent["id"], None, "MISSED",
                             f"no run started for {int((now-ref)/60)} min (cadence {agent['cadence_s']//60} min + grace). Scheduler dead, auth expired, or agent crashed before first ping.")
         # STALLED

@@ -169,19 +169,22 @@ def main() -> int:
             if verdict == "FIXED":
                 r2 = run_job(agent, jobs[agent])
                 if r2.returncode == 0:
-                    telegram(f"Hersteld: {agent}. {sentence} De job draait weer (exit 0).")
+                    print(f"  hersteld: {sentence}")   # stil: een gerepareerde job is geen nieuws (29 aug 2026)
                 else:
-                    telegram(f"Herstel geprobeerd voor {agent}: {sentence} Maar de job faalt nog (exit {r2.returncode}). Kijk mee: {ctx['log'] or 'log onbekend'}")
+                    print(f"  herstel geprobeerd, job faalt nog (exit {r2.returncode}): {sentence}")
             elif verdict == "TRANSIENT":
-                telegram(f"{agent}: tijdelijke storing, niets veranderd. {sentence} Volgende geplande run pakt het op.")
+                print(f"  tijdelijk: {sentence}")
             elif verdict == "NEEDS_HUMAN":
-                telegram(f"{agent} heeft jou nodig: {sentence}")
+                # The only message left (29 aug 2026): something a human must decide, at most once a week per job.
+                if time.time() - st.get("mens", {}).get(agent, 0) > 7 * 86400:
+                    telegram(f"{agent} heeft jou nodig: {sentence}")
+                    st.setdefault("mens", {})[agent] = time.time()
             else:
-                telegram(f"{agent}: herstel niet gelukt. {sentence} Log: {ctx['log'] or 'onbekend'}")
+                print(f"  herstel niet gelukt: {sentence}")
         elif not ok:
-            telegram(f"{agent} faalt nog na een retry; de drie herstelpogingen van vandaag zijn op. Log: {job_context(jobs[agent])['log']}")
+            print(f"  faalt nog na een retry; de herstelpogingen van vandaag zijn op")
         api("POST", f"/v1/alerts/{a['id']}/ack"); seen.add(a["id"]); done += 1
-    json.dump({"seen": sorted(seen)[-500:], "last": last, "repairs": repairs}, open(STATE, "w"))
+    json.dump({"seen": sorted(seen)[-500:], "last": last, "repairs": repairs, "mens": st.get("mens", {})}, open(STATE, "w"))
     print(f"handled {done} of {len(alerts)} open alerts")
     return 0
 
