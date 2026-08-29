@@ -22,13 +22,15 @@ STATE = os.path.join(REPO, "data", "remediated.json")
 LOCK = os.path.join(REPO, "data", "remediator.lock")
 RETRY_EVERY = 24 * 3600          # one retry + one repair attempt per agent per day
 MAX_REPAIRS_PER_DAY = 3
-NEVER = {"blogmotor", "blog-writer", "blog-queue", "reddit-scout", "clawhub-publish"}   # content jobs: a human decides
+NEVER = {"blogmotor", "blog-writer", "blog-queue", "reddit-scout", "clawhub-publish",   # content jobs: a human decides
+         "verkoopmails", "events-api-kassa"}   # sends mail / touches money: never re-run blindly, only alert
 # where a job's code lives -> which git repo to fix and how to publish the fix
 REPOS = [
     (HOME + "/apify/landing-live/", HOME + "/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
     (HOME + "/apify/landing/", HOME + "/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
     (HOME + "/runvouch/", HOME + "/runvouch", "git push -q origin main"),
     (HOME + "/apify/", HOME + "/apify", "git push -q origin HEAD"),
+    (HOME + "/adresrapport/", HOME + "/adresrapport", "true"),
 ]
 
 
@@ -51,16 +53,31 @@ def telegram(text: str) -> None:
 
 
 def jobs_from_crontab() -> dict:
+    """Every job that runs through `rv run`: the crontab lines and, since 29 aug 2026, the systemd user units
+    (adresrapport, events-api, verkoopmails) whose ExecStart was wrapped the same way."""
     out = {}
     for l in subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout.splitlines():
         m = re.search(re.escape(HOME) + r"/bin/rv run (\S+) (.*)$", l)
         if m:
             out[m.group(1)] = m.group(2)
+    names = [l.split()[0] for l in subprocess.run(["systemctl", "--user", "list-unit-files", "--type=service", "--no-legend"],
+                                                  capture_output=True, text=True).stdout.splitlines() if l.strip() and "@" not in l]   # no templates
+    if names:
+        show = subprocess.run(["systemctl", "--user", "show", *names, "-p", "ExecStart", "-p", "WorkingDirectory"],
+                              capture_output=True, text=True).stdout
+        for blok in show.split("\n\n"):
+            wd = re.search(r"^WorkingDirectory=(.*)$", blok, re.M)
+            for m in re.finditer(r"argv\[\]=" + re.escape(HOME) + r"/bin/rv run (\S+) ([^;]*);", blok):
+                args = m.group(2).strip()
+                out[m.group(1)] = (f"/bin/sh -c 'cd {wd.group(1)} && exec {HOME}/bin/rv run {m.group(1)} {args}'"
+                                   if wd and wd.group(1) else args)
     return out
 
 
 def run_job(agent: str, args: str) -> subprocess.CompletedProcess:
-    args = args.replace("--source cron", "--source remediator")
+    args = args.replace("--source cron", "--source remediator").replace("--source systemd", "--source remediator")
+    if args.startswith("/bin/sh -c 'cd "):          # systemd unit with a working directory: the wrapper already calls rv run
+        return subprocess.run(args, shell=True, capture_output=True, text=True, timeout=3600)
     return subprocess.run(HOME + "/bin/rv run " + agent + " " + args, shell=True, capture_output=True, text=True, timeout=3600)
 
 
@@ -68,6 +85,7 @@ def job_context(args: str) -> dict:
     """Log tail, script path and the repo to fix, derived from the crontab arguments."""
     log = re.search(r"--log (\S+)", args)
     cmd = args.split(" -- ", 1)[1] if " -- " in args else args
+    cmd = cmd.rstrip("'")
     script = next((t for t in cmd.split() if t.startswith(HOME + "/") and not t.startswith("-")), "")
     if "run_live.sh" in cmd:                       # landing-live/scripts/run_live.sh scripts/x.py -> the real source is landing/scripts/x.py
         tail = cmd.split("run_live.sh", 1)[1].strip().split()[0] if "run_live.sh" in cmd else ""
