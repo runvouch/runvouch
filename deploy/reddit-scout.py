@@ -4,7 +4,8 @@ threads worth a genuine comment: scheduled/unattended agents, cron, cost, silent
 
   python3 reddit-scout.py            -> prints candidates, sends them to the owner's Telegram (from the RunVouch DB)
   python3 reddit-scout.py --dry      -> print only
-  python3 reddit-scout.py --thread URL -> print the post text and top comments of one thread (URL + .rss)
+  python3 reddit-scout.py --thread URL -> print the post text and top comments of one thread (URL + .rss;
+                                        a share link from the phone, /s/CODE or redd.it/ID, is resolved first)
 
 Scoring is a keyword match on title + summary; nothing is posted anywhere. Seen threads are remembered
 in data/reddit-seen.json so each one is suggested once.
@@ -108,10 +109,44 @@ def score(p: dict) -> int:
     return s
 
 
+# The share button in the Reddit app hands out a short link (reddit.com/r/x/s/CODE, sometimes on sh.reddit.com, or
+# redd.it/ID) and on a phone the long /comments/ address is nowhere to be copied. A short link has no RSS feed, so it
+# has to be resolved to the real permalink first; without that the feed read returns HTML and the XML parse blows up.
+SHARE_RE = re.compile(r"^https?://(?:[a-z0-9-]+\.)?(?:reddit\.com/(?:r/[^/]+/)?s/[A-Za-z0-9]+|redd\.it/[A-Za-z0-9]+)$", re.I)
+PERMALINK_RE = re.compile(r"https?://(?:[a-z0-9-]+\.)?reddit\.com/r/[^/\s\"'<>]+/comments/[A-Za-z0-9]+(?:/[^\s\"'<>]*)?", re.I)
+
+
+def normalise(url: str) -> str:
+    """Any Reddit address the owner can produce on a phone -> an address that has an .rss feed.
+
+    Drops the ?utm_source=share tail (it would otherwise land in front of the /.rss and break the feed address),
+    puts every subdomain (old., sh., np.) on www, and resolves a share link by following its redirect."""
+    url = url.split("#")[0].split("?")[0].rstrip("/")
+    url = re.sub(r"^(https?://)(?:[a-z0-9-]+\.)?reddit\.com", r"\1www.reddit.com", url, flags=re.I)
+    if not SHARE_RE.match(url):
+        return url
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=20) as r:      # urllib follows the 30x itself
+        final = r.geturl()
+        body = b"" if "/comments/" in final else r.read(300000)
+    time.sleep(5)                                            # same courtesy pause as fetch()
+    if "/comments/" in final:
+        return normalise(final)
+    m = PERMALINK_RE.search(html.unescape(body.decode("utf-8", "replace")))   # some share links redirect via HTML
+    if not m:
+        raise ValueError("deel-link wees niet naar een thread (verwijderd of besloten?): " + url)
+    return normalise(m.group(0))
+
+
 def thread(url: str) -> str:
     if "github.com/" in url:
         return thread_github(url)
-    root = ET.fromstring(fetch(url.rstrip("/") + "/.rss?limit=40"))
+    feed_url = normalise(url) + "/.rss?limit=40"
+    raw = fetch(feed_url)
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        raise ValueError("geen RSS-feed op dit adres, Reddit gaf geen feed terug: " + feed_url)
     parts = []
     for i, e in enumerate(root.findall("a:entry", NS)):
         who = e.findtext("a:author/a:name", default="?", namespaces=NS)

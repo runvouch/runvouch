@@ -24,7 +24,8 @@ spec = importlib.util.spec_from_file_location("scout", os.path.join(HERE, "reddi
 S = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(S)
 OFFSET = os.path.join(ROOT, "data", "telegram-antwoord.offset")
-URL_RE = re.compile(r"https?://(?:www\.)?(?:reddit\.com|redd\.it|github\.com)/\S+")
+# any subdomain: the phone's share button also hands out sh.reddit.com links, and old./np. links get typed by hand
+URL_RE = re.compile(r"https?://(?:[a-z0-9-]+\.)?(?:reddit\.com|redd\.it|github\.com)/\S+", re.I)
 UA = "runvouch-telegram-antwoord/0.1"
 
 
@@ -84,7 +85,7 @@ def handle(text: str) -> list[str]:
     try:
         th = S.thread(url)
     except Exception as e:
-        return [f"Kon de thread niet lezen ({type(e).__name__}): {url}"]
+        return [f"Kon de thread niet lezen: {e or type(e).__name__}\n{url}\nPlak anders de tekst van de thread hier, met reddit: ervoor."]
     draft = S.draft(th, bron, followup=rest)
     if not draft:
         return [f"Geen reactie geschreven: er valt niets echts toe te voegen (of de thread was leeg). {url}"]
