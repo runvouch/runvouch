@@ -917,6 +917,24 @@ def public_fleet(slug: str):
     return f
 
 
+PUBLIC_STATUS_DIR = Path(os.getenv("RUNVOUCH_PUBLIC_STATUS_DIR", DB_PATH.parent / "public_status"))
+_STATUS_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+
+
+@app.get("/public/status/{slug}.json")
+def public_status(slug: str):
+    """Public: the latest snapshot an external watcher wrote for a fleet (DataSignals probes its own APIs twice a day
+    and drops the answer here). Served from a file, so reading it wakes nothing and costs nothing on the watched side."""
+    from fastapi.responses import FileResponse
+    if not _STATUS_SLUG_RE.match(slug):
+        raise HTTPException(404, "not found")
+    p = PUBLIC_STATUS_DIR / f"{slug}.json"
+    if not p.is_file():
+        raise HTTPException(404, "no public status snapshot with that slug")
+    return FileResponse(p, media_type="application/json",
+                        headers={"Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*"})
+
+
 @app.get("/status.json")
 def status_json():
     """Public numbers behind runvouch.com/status: uptime per window, outages, sealed proof days. Nothing account-specific."""
