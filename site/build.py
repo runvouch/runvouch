@@ -326,7 +326,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <tr><td>Knows the job ran on time</td><td class="y">yes</td><td class="n">no</td><td class="y">yes</td></tr>
 <tr><td>Knows the job actually <em>did</em> something (evidence)</td><td class="n">no</td><td class="n">no</td><td class="y">yes</td></tr>
 <tr><td>Detects retry storms across tool calls</td><td class="n">no</td><td class="n">manual, in traces</td><td class="y">automatic</td></tr>
-<tr><td>Hard cost cap per run / per day</td><td class="n">no</td><td class="n">dashboards, no cap</td><td class="y">yes + pause</td></tr>
+<tr><td>Hard cost cap per run / per day</td><td class="n">no</td><td class="n">threshold alerts, no cap</td><td class="y">yes + pause</td></tr>
 <tr><td>Setup</td><td>1 URL</td><td>SDK in your code</td><td>2 lines or a plugin</td></tr>
 <tr><td>Built for</td><td>ops teams, cron</td><td>ML teams debugging prompts</td><td>people running agents unattended</td></tr>
 <tr><td>Price</td><td>$0–85/mo</td><td>per seat / per million spans</td><td>$0 · $9 · $29</td></tr></table>
@@ -766,7 +766,7 @@ vs("cronitor", "Cronitor", "Cronitor is a mature cron, heartbeat and uptime moni
    [("Cron expression parsing", "yes", "cadence + grace"), ("Uptime / status pages", "yes", "no (we link to yours)"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Claude Code / MCP / OpenClaw integrations", "no", "yes"), ("Price", "free tier; paid from ~$5 per monitor tier", "free 3 agents; $9 / $29")],
    "<p>Pick Cronitor if you need status pages and hundreds of classic monitors. Pick RunVouch if what you run is agents and you care about \"done\" and \"how much\", not just \"on time\".</p>")
 vs("langfuse", "Langfuse", "Langfuse is excellent open-source LLM observability: traces, evals, prompt management. RunVouch is not a tracing tool; it's the watchdog that tells you a scheduled agent is broken or expensive, without instrumenting your code.",
-   [("Traces, spans, prompt versions, evals", "yes", "no"), ("Requires SDK in your code", "yes", "no, wrap the command or install the plugin"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in traces", "automatic"), ("Hard cost cap + pause", "dashboards", "yes"), ("Pricing", "free self-host; cloud per unit", "free 3 agents; $9 / $29")],
+   [("Traces, spans, prompt versions, evals", "yes", "no"), ("Requires SDK in your code", "yes", "no, wrap the command or install the plugin"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in traces", "automatic"), ("Hard cost cap + pause", "cost threshold alerts since v4, no cap or pause", "yes"), ("Pricing", "free self-host; cloud per unit", "free 3 agents; $9 / $29")],
    "<p>They're complementary. Langfuse answers \"why did this prompt produce that\"; RunVouch answers \"did last night's agent run, finish, prove it, and stay under budget\". If you only want the second, you don't need the first.</p>")
 
 vs("dead-mans-snitch", "Dead Man's Snitch", "Dead Man's Snitch is a heartbeat monitor: your job checks in, and you hear about it when it does not. RunVouch keeps the heartbeat and adds what the job did and what it cost.",
