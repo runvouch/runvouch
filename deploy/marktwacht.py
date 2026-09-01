@@ -18,11 +18,20 @@ every fact. No guesses, no invented numbers; if you cannot verify something, lea
 Company 1: RunVouch (runvouch.com), the watchdog for unattended AI agents: 8 detectors (MISSED, FAILED, NO_EVIDENCE,
 RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED), alerts (Telegram, Slack, email, webhook, PagerDuty), a tamper-evident
 proof per run anchored in Bitcoin, Claude Code plugin, MCP server, GitHub Action, pip/npm CLI. Free 3 agents, Solo $9, Team $29.
-Known competitors: Healthchecks.io, Cronitor, Langfuse, LangSmith, NotiLens, AgentWatch (getagentwatch.com), AgentWatch (agent-watch.de).
+Known competitors: Healthchecks.io, Cronitor, Langfuse, LangSmith, NotiLens, AgentWatch (getagentwatch.com).
 Company 2: DataSignals Lab (datasignalslab.com), official US public data (SEC filings, Form D, 13F, 8-K, FDA, NIH, federal
 contracts, congress trades, hiring) turned into scored signals; sold as Apify actors ($0.20/result), an Events API ($29+),
 reports ($19) and a free MCP server; daily output hashed and anchored in Bitcoin. Known competitors: Quiver Quantitative,
 Unusual Whales, Capitol Trades, WhaleWisdom, Fintel, Dataroma.
+
+Inventory we ALREADY have (never propose these as a gap or BOUWLIJST item; if a competitor's version differs, name the
+difference in one sentence instead):
+RunVouch: public status page with per-component uptime (runvouch.com/status); alerts via Telegram, Slack, email, webhook,
+PagerDuty; Claude Code plugin; MCP server (official registry, Smithery, Glama); GitHub Action; n8n community node; OpenClaw
+skill; pip/npm CLI; Python/Node clients; MIT self-host; weekly cost report; per-run tamper-evident proof with Bitcoin anchor.
+DataSignals: Discord bot with 12 slash commands (live); daily pro email alerts on signals; weekly email digest; newsletter
+signup on the site; lobbying and federal contracts data streams; Google Sheets add-on; n8n node (built); CSV exports of all
+streams; free MCP server and free Events API key (self service); status page with per-stream freshness; track record page.
 
 Deliver, in Dutch, plain text, no em dashes, no separator lines, max 70 lines:
 1. Per competitor (both lists): anything that changed in the last 20 days (price, new feature, new positioning, funding,
@@ -39,7 +48,8 @@ Deliver, in Dutch, plain text, no em dashes, no separator lines, max 70 lines:
 6. BOUWLIJST (fixed question, every time): which detector, integration or alert channel does any competitor have that
    RunVouch does not, and which data source or delivery channel does any competitor have that DataSignals Lab does not?
    One line each: what it is, who has it (URL), estimated build time for one developer, and whether a competitor could
-   copy it back within a month (if yes: low priority, it is maintenance, not an edge). Start this section with the exact
+   copy it back within a month (if yes: low priority, it is maintenance, not an edge). Before writing a line, check it
+   against the inventory above: if we already have it, leave it out. Start this section with the exact
    line "BOUWLIJST" so it can be filed automatically. Write "BOUWLIJST\ngeen" if nothing was found."""
 
 
