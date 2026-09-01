@@ -132,15 +132,15 @@ def main() -> int:
         print(line)
         fresh = {k: v for k, v in problems.items() if k not in st["broken"]}
         if fresh or done:  # a new problem, or a repair that did not help: say it once, not every 5 minutes
-            telegram("Statuspagina runvouch.com: " + line + "\nDit is de onafhankelijke wacht; RunVouch zelf kan dit niet melden.")
+            telegram("⚠️ RunVouch [STATUS] runvouch.com\n" + line + "\nDit is de onafhankelijke wacht; RunVouch zelf kan dit niet melden.")
         st["broken"] = {k: st["broken"].get(k, now) for k in problems}
     else:
         line = f"{stamp} ok" + ((" | hersteld: " + ", ".join(done)) if done else "") + (" (browser)" if browser else "")
         print(line)
         if done:
-            telegram(f"Statuspagina runvouch.com: zelf hersteld ({', '.join(done)}), alles weer groen.")
+            telegram(f"✅ RunVouch [STATUS] runvouch.com\nzelf hersteld ({', '.join(done)}), alles weer groen.")
         elif st["broken"]:
-            telegram(f"Statuspagina runvouch.com: weer groen na {', '.join(st['broken'])} (stond sinds {time.strftime('%H:%M', time.localtime(min(st['broken'].values())))}).")
+            telegram(f"✅ RunVouch [STATUS] runvouch.com\nweer groen na {', '.join(st['broken'])} (stond sinds {time.strftime('%H:%M', time.localtime(min(st['broken'].values())))}).")
         st["broken"] = {}
     json.dump(st, open(STATE, "w"))
     return 1 if problems else 0
