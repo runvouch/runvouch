@@ -87,6 +87,8 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [vs Helicone](https://runvouch.com/vs/helicone): LLM proxy vs outside watchdog.
 - [vs AgentOps](https://runvouch.com/vs/agentops): Session replay vs pager.
 - [vs LangSmith](https://runvouch.com/vs/langsmith): Tracing vs the alert that there is something to trace.
+- [vs Traceseal](https://runvouch.com/vs/traceseal): Signed receipt per invocation vs watchdog plus proof.
+- [vs Traccia](https://runvouch.com/vs/traccia): Control plane inside the stack vs watchdog outside it.
 
 
 ## Other
