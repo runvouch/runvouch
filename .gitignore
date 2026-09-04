@@ -34,3 +34,6 @@ packaging/github-action/LICENSE
 docs/BILLING.md
 docs/STRIPE.md
 docs/DIRECTORIES.md
+
+# Claude Code werkmap-instellingen (lokaal, niet uitleveren)
+.claude/
