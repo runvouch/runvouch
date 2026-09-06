@@ -858,6 +858,15 @@ def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
     return a
 
 
+def _own_run(acc, run_id: str) -> sqlite3.Row:
+    """A run is reachable only through the account that owns its agent. Knowing a run_id is not enough:
+    ids travel in exports, webhook payloads and the public proof files."""
+    run = q1("SELECT r.* FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=? AND g.account_id=?", run_id, acc["id"])
+    if not run:
+        raise HTTPException(404, "run not found")
+    return run
+
+
 # ───────────────────────────── routes ─────────────────────────────
 def _alert_delivery_status() -> str:
     """'ok' when the newest alert of the last 7 days was delivered, 'idle' when nothing was due, 'failing' otherwise."""
@@ -1417,6 +1426,10 @@ def run_start(s: StartIn, acc=Depends(account_from_key)):
     a = _agent(acc, s.agent)
     rid = s.run_id or secrets.token_hex(8)
     now = time.time()
+    if s.run_id:  # reusing your own run_id restarts that run; one of another account is never overwritten
+        owner = q1("SELECT g.account_id FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=?", rid)
+        if owner and owner["account_id"] != acc["id"]:
+            raise HTTPException(409, "run_id already in use; choose another")
     with tx() as db:
         db.execute("INSERT OR REPLACE INTO runs(id,agent_id,started,last_seen,status,meta_json,source) VALUES(?,?,?,?,?,?,?)",
                    (rid, a["id"], now, now, "running", json.dumps(s.meta), s.source))
@@ -1425,9 +1438,7 @@ def run_start(s: StartIn, acc=Depends(account_from_key)):
 
 @app.post("/v1/runs/tool")
 def run_tool(t: ToolIn, acc=Depends(account_from_key)):
-    run = q1("SELECT * FROM runs WHERE id=?", t.run_id)
-    if not run:
-        raise HTTPException(404, "run not found")
+    run = _own_run(acc, t.run_id)
     a = q1("SELECT * FROM agents WHERE id=?", run["agent_id"])
     h = t.input_hash or hashlib.sha1(json.dumps(t.input, sort_keys=True, default=str).encode()).hexdigest()[:16]
     with tx() as db:
@@ -1443,6 +1454,7 @@ def run_tool(t: ToolIn, acc=Depends(account_from_key)):
 
 @app.post("/v1/runs/heartbeat")
 def run_heartbeat(run_id: str, acc=Depends(account_from_key)):
+    _own_run(acc, run_id)
     with tx() as db:
         db.execute("UPDATE runs SET last_seen=? WHERE id=?", (time.time(), run_id))
     return {"ok": True}
@@ -1450,9 +1462,7 @@ def run_heartbeat(run_id: str, acc=Depends(account_from_key)):
 
 @app.post("/v1/runs/end")
 def run_end(e: EndIn, acc=Depends(account_from_key)):
-    run = q1("SELECT * FROM runs WHERE id=?", e.run_id)
-    if not run:
-        raise HTTPException(404, "run not found")
+    run = _own_run(acc, e.run_id)
     a = q1("SELECT * FROM agents WHERE id=?", run["agent_id"])
     ev_ok, ev_detail = evaluate_evidence(e.evidence)
     if a["evidence_required"] and not e.evidence:

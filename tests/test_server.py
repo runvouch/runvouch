@@ -677,3 +677,51 @@ def test_slack_callback_stores_webhook_and_posts_test(monkeypatch):
     assert server.q1("SELECT slack_webhook_url FROM accounts WHERE id=?", acc_id)["slack_webhook_url"] == "https://hooks.slack.com/services/T1/B1/oauth"
     with server.tx() as db:
         db.execute("UPDATE accounts SET slack_webhook_url=NULL WHERE id=?", (acc_id,))
+
+
+# ───────────────────────────── tenant isolation: a run belongs to one account ─────────────────────────────
+def test_runs_are_scoped_to_the_owning_account():
+    """Knowing a run_id must not be enough: run ids travel in exports, webhooks and the public proof files."""
+    ak, ah = _acct("team")          # A, the victim
+    bk, bh = _acct("team")          # B, any other valid key
+    c.post("/v1/agents", json={"name": "nachtrun", "cap_run_cost": 1.0}, headers=ah)
+    c.post("/v1/agents", json={"name": "eigen-job"}, headers=bh)
+    rid = c.post("/v1/runs/start", json={"agent": "nachtrun"}, headers=ah).json()["run_id"]
+
+    # B cannot write to A's run through any of the three run endpoints
+    assert c.post("/v1/runs/tool", json={"run_id": rid, "tool": "llm", "input": 1, "cost": 99.0}, headers=bh).status_code == 404
+    assert c.post("/v1/runs/heartbeat", params={"run_id": rid}, headers=bh).status_code == 404
+    assert c.post("/v1/runs/end", json={"run_id": rid, "status": "fail", "meta": {"error": "door B"}}, headers=bh).status_code == 404
+
+    run = server.q1("SELECT * FROM runs WHERE id=?", rid)
+    assert run["ended"] is None and run["status"] == "running" and run["cost"] == 0 and run["tool_calls"] == 0
+    assert server.q1("SELECT COUNT(*) n FROM tool_events WHERE run_id=?", rid)["n"] == 0
+    assert c.get("/v1/alerts", headers=ah).json() == [], "no alert of A may be raised by another account"
+
+    # a run_id that does not exist at all is a 404 too, not a silent ok
+    assert c.post("/v1/runs/heartbeat", params={"run_id": "bestaat-niet"}, headers=ah).status_code == 404
+
+    # A keeps working on its own run
+    assert c.post("/v1/runs/tool", json={"run_id": rid, "tool": "llm", "input": 1, "cost": 0.1}, headers=ah).status_code == 200
+    assert c.post("/v1/runs/heartbeat", params={"run_id": rid}, headers=ah).status_code == 200
+    assert c.post("/v1/runs/end", json={"run_id": rid, "status": "ok"}, headers=ah).status_code == 200
+
+
+def test_run_start_never_takes_over_a_run_id_of_another_account():
+    ak, ah = _acct("team")
+    bk, bh = _acct("team")
+    c.post("/v1/agents", json={"name": "avondrun"}, headers=ah)
+    c.post("/v1/agents", json={"name": "avondrun"}, headers=bh)     # same agent name, different account
+    shared = "nightly-2026-09-06"
+    assert c.post("/v1/runs/start", json={"agent": "avondrun", "run_id": shared}, headers=ah).json()["run_id"] == shared
+    mine = server.q1("SELECT agent_id FROM runs WHERE id=?", shared)["agent_id"]
+
+    r = c.post("/v1/runs/start", json={"agent": "avondrun", "run_id": shared}, headers=bh)
+    assert r.status_code == 409, "a run_id of another account must not be overwritten"
+    assert server.q1("SELECT agent_id FROM runs WHERE id=?", shared)["agent_id"] == mine
+    assert [x["id"] for x in c.get("/v1/agents/avondrun/runs", headers=ah).json()] == [shared]
+    assert c.get("/v1/agents/avondrun/runs", headers=bh).json() == []
+
+    # restarting your own run id stays allowed (a retry of the same job reuses it)
+    assert c.post("/v1/runs/start", json={"agent": "avondrun", "run_id": shared}, headers=ah).status_code == 200
+    assert server.q1("SELECT COUNT(*) n FROM runs WHERE id=?", shared)["n"] == 1
