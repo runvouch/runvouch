@@ -94,10 +94,45 @@ docker compose cp runvouch:/data/backup.db ./runvouch-backup.db
 ```
 git pull
 docker compose build && docker compose up -d
+python3 deploy/check_integrity.py /path/to/runvouch.db
 ```
 
-Schema changes are applied by the server on start (`CREATE TABLE IF NOT EXISTS` and
-additive `ALTER TABLE`). Take a backup first anyway.
+Schema changes are normally applied by the server on start and are additive
+(`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN`), so an old database keeps working.
+`deploy/check_integrity.py` reads the database without writing to it and reports whether every
+run is attached to an account and whether every sealed proof day still recomputes to the root
+that was stamped. Exit code 0 means all of it holds. Take a backup first anyway.
+
+### The one release that rebuilds tables
+
+The release that gave run ids a namespace per account is the exception. Run ids used to be
+globally unique, which let any account address the run of another by id alone. Uniqueness is now
+`(account_id, id)`, and a primary key cannot be removed with `ALTER TABLE`, so on first start the
+server renames `runs` and `run_leaves`, recreates them and copies every row back with the account
+of its agent. Run ids keep their value, so every sealed leaf stays reproducible, and the step runs
+only once: after it the column is there and the branch is skipped.
+
+Back up before that first start:
+
+```
+.venv/bin/python -c "import sqlite3; sqlite3.connect('file:data/runvouch.db?mode=ro', uri=True).execute('VACUUM INTO ?', ('data/backups/pre-run-namespace.db',))"
+```
+
+The way back, if the migration or the release turns out wrong:
+
+1. Stop the server. On a systemd install `systemctl --user stop runvouch`, with Docker
+   `docker compose stop`.
+2. Put the backup in place of the live file and remove the write-ahead log next to it, so SQLite
+   cannot replay newer pages onto the restored copy:
+   `mv data/runvouch.db data/runvouch.db.broken && rm -f data/runvouch.db-wal data/runvouch.db-shm && cp data/backups/pre-run-namespace.db data/runvouch.db`
+3. Check out the previous release (`git checkout <tag or commit>`) and start again. An older server
+   cannot read the rebuilt schema, so the database and the code have to move back together.
+4. Runs reported while the new release was up are in `data/runvouch.db.broken` only. Keep that file:
+   it is the record of that window, and the proof day files under `RUNVOUCH_PROOF_DIR` are not
+   touched by any of this.
+
+Rolling back costs the runs of the window, never the proof archive. Day files and their
+OpenTimestamps attestations live on disk, outside the database, and stay verifiable either way.
 
 ## What the hosted service has that self-host does not
 
