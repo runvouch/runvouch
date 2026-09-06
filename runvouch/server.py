@@ -115,23 +115,26 @@ CREATE TABLE IF NOT EXISTS agents(
   cap_run_cost REAL, cap_day_cost REAL, cap_run_tokens INTEGER,
   evidence_required INTEGER DEFAULT 0, paused INTEGER DEFAULT 0,
   UNIQUE(account_id, name));
+-- run ids are namespaced per account: the client picks the id, so "nightly-2026-09-06" belongs to
+-- whoever sent it and to nobody else. Uniqueness is (account_id, id), never id on its own.
 CREATE TABLE IF NOT EXISTS runs(
-  id TEXT PRIMARY KEY, agent_id INTEGER, started REAL, ended REAL, last_seen REAL,
+  id TEXT, account_id INTEGER, agent_id INTEGER, started REAL, ended REAL, last_seen REAL,
   status TEXT, cost REAL DEFAULT 0, tokens INTEGER DEFAULT 0, tool_calls INTEGER DEFAULT 0,
-  output_bytes INTEGER, evidence_ok INTEGER, evidence_json TEXT, meta_json TEXT, source TEXT);
+  output_bytes INTEGER, evidence_ok INTEGER, evidence_json TEXT, meta_json TEXT, source TEXT, leaf_hash TEXT);
 CREATE TABLE IF NOT EXISTS tool_events(
-  id INTEGER PRIMARY KEY, run_id TEXT, ts REAL, tool TEXT, input_hash TEXT, ok INTEGER, cost REAL DEFAULT 0, tokens INTEGER DEFAULT 0);
+  id INTEGER PRIMARY KEY, run_id TEXT, account_id INTEGER, ts REAL, tool TEXT, input_hash TEXT, ok INTEGER, cost REAL DEFAULT 0, tokens INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS alerts(
   id INTEGER PRIMARY KEY, account_id INTEGER, agent_id INTEGER, run_id TEXT, ts REAL,
   kind TEXT, message TEXT, acked INTEGER DEFAULT 0, delivered INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS ix_runs_agent ON runs(agent_id, started);
-CREATE INDEX IF NOT EXISTS ix_tool_run ON tool_events(run_id, input_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_runs_account_id ON runs(account_id, id);
 CREATE INDEX IF NOT EXISTS ix_alerts_acc ON alerts(account_id, ts);
 CREATE TABLE IF NOT EXISTS signups(id INTEGER PRIMARY KEY, ip TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS ls_events(id TEXT PRIMARY KEY, ts REAL, name TEXT, payload TEXT);
 CREATE TABLE IF NOT EXISTS reports_sent(account_id INTEGER, week TEXT, PRIMARY KEY(account_id, week));
 CREATE TABLE IF NOT EXISTS proof_days(date TEXT PRIMARY KEY, root TEXT, prev TEXT, chain_hash TEXT, n_runs INTEGER, sealed_at REAL, ots_status TEXT, ots_path TEXT);
-CREATE TABLE IF NOT EXISTS run_leaves(id TEXT PRIMARY KEY, agent_id INTEGER, ended REAL, leaf_hash TEXT);
+CREATE TABLE IF NOT EXISTS run_leaves(id TEXT, account_id INTEGER, agent_id INTEGER, ended REAL, leaf_hash TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_run_leaves_account_id ON run_leaves(account_id, id);
 CREATE TABLE IF NOT EXISTS heartbeats(minute INTEGER PRIMARY KEY, alerts_ok INTEGER);
 CREATE TABLE IF NOT EXISTS public_fleets(slug TEXT PRIMARY KEY, account_id INTEGER, title TEXT);
 CREATE TABLE IF NOT EXISTS public_agents(agent_id INTEGER PRIMARY KEY, label TEXT, kind TEXT);
@@ -139,17 +142,37 @@ CREATE INDEX IF NOT EXISTS ix_run_leaves_ended ON run_leaves(ended);
 CREATE TABLE IF NOT EXISTS viewer_keys(id INTEGER PRIMARY KEY, account_id INTEGER, key_hash TEXT UNIQUE, name TEXT, created REAL, last_used REAL);
 """
 with _lock:
+    # A database from before run ids were namespaced per account has runs and run_leaves keyed on the run id
+    # alone. Those two tables cannot be widened with ALTER (the primary key has to go), so they are renamed,
+    # rebuilt from SCHEMA and refilled with the account of their agent. Run ids keep their value, so every
+    # sealed leaf stays reproducible. Idempotent: after this the column is there and the branch is skipped.
+    _shape = {t: [c[1] for c in _db.execute(f"PRAGMA table_info({t})").fetchall()] for t in ("runs", "run_leaves")}
+    _legacy = [t for t, cols in _shape.items() if cols and "account_id" not in cols]
+    for t in _legacy:
+        _db.execute(f"ALTER TABLE {t} RENAME TO {t}_legacy")
     _db.executescript(SCHEMA)
+    for t in _legacy:
+        _db.execute(f"INSERT INTO {t}(account_id, {', '.join(_shape[t])}) "
+                    f"SELECT g.account_id, {', '.join('o.' + c for c in _shape[t])} "
+                    f"FROM {t}_legacy o LEFT JOIN agents g ON g.id=o.agent_id")
+        _db.execute(f"DROP TABLE {t}_legacy")
+    if _legacy:
+        _db.executescript(SCHEMA)  # the indexes followed the renamed tables and went down with them
     for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT", "polar_customer_id TEXT", "polar_subscription_id TEXT",
                 "slack_webhook_url TEXT", "pagerduty_routing_key TEXT"):
         try:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
-    try:
-        _db.execute("ALTER TABLE runs ADD COLUMN leaf_hash TEXT")
-    except sqlite3.OperationalError:
-        pass
+    for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER")):
+        try:
+            _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
+        except sqlite3.OperationalError:
+            pass
+    _db.execute("CREATE INDEX IF NOT EXISTS ix_tool_run_acc ON tool_events(account_id, run_id, input_hash)")
+    _db.execute("DROP INDEX IF EXISTS ix_tool_run")  # superseded: a run id says nothing without its account
+    if _db.execute("SELECT 1 FROM tool_events WHERE account_id IS NULL LIMIT 1").fetchone():
+        _db.execute("UPDATE tool_events SET account_id=(SELECT r.account_id FROM runs r WHERE r.id=tool_events.run_id) WHERE account_id IS NULL")
     for r in _db.execute("SELECT id, api_key FROM accounts WHERE api_key LIKE 'rv_%'").fetchall():
         _db.execute("UPDATE accounts SET api_key=? WHERE id=?", (hashlib.sha256(r["api_key"].encode()).hexdigest(), r["id"]))
     _db.commit()
@@ -435,7 +458,7 @@ def check_budget(agent: sqlite3.Row, run: sqlite3.Row) -> None:
 
 
 def check_storm(agent: sqlite3.Row, run_id: str, input_hash: str, tool: str) -> None:
-    n = q1("SELECT COUNT(*) n FROM tool_events WHERE run_id=? AND input_hash=?", run_id, input_hash)["n"]
+    n = q1("SELECT COUNT(*) n FROM tool_events WHERE account_id=? AND run_id=? AND input_hash=?", agent["account_id"], run_id, input_hash)["n"]
     if n >= STORM_THRESHOLD:
         raise_alert(agent["account_id"], agent["id"], run_id, "RETRY_STORM",
                     f"tool '{tool}' called {n}x with identical input in one run. Each call looks fine; together it's a loop.")
@@ -554,7 +577,7 @@ SEAL_DELAY = 300  # seconds after UTC midnight before a day is sealed: a run end
 def leaf_record(run: sqlite3.Row, agent: sqlite3.Row) -> dict:
     """The facts of one finished run. Hashes only for tool inputs; never prompts, outputs or evidence content."""
     meta = json.loads(run["meta_json"] or "{}")
-    events = qa("SELECT tool, input_hash, ok, ts FROM tool_events WHERE run_id=? ORDER BY id", run["id"])
+    events = qa("SELECT tool, input_hash, ok, ts FROM tool_events WHERE account_id=? AND run_id=? ORDER BY id", agent["account_id"], run["id"])
     rec = {"run_id": run["id"], "agent": agent["name"], "account_id": agent["account_id"], "started": run["started"], "ended": run["ended"],
            "status": run["status"], "cost": run["cost"], "tokens": run["tokens"], "tool_calls": run["tool_calls"], "output_bytes": run["output_bytes"],
            "evidence": json.loads(run["evidence_json"] or "{}"), "evidence_ok": run["evidence_ok"], "source": run["source"],
@@ -576,7 +599,7 @@ def _day_leaves(date: str) -> list[sqlite3.Row]:
     t0 = _day_ts(date)
     # purged runs live on in run_leaves (id, ended, leaf_hash), so a sealed day keeps the same leaf list after retention
     return qa("SELECT id, leaf_hash FROM (SELECT id, leaf_hash, ended FROM runs WHERE leaf_hash IS NOT NULL "
-              "UNION SELECT id, leaf_hash, ended FROM run_leaves) WHERE ended>=? AND ended<? ORDER BY id", t0, t0 + 86400)
+              "UNION SELECT id, leaf_hash, ended FROM run_leaves) WHERE ended>=? AND ended<? ORDER BY id, leaf_hash", t0, t0 + 86400)
 
 
 def ots_stamp(path: Path) -> str:
@@ -679,7 +702,7 @@ def run_proof(run: sqlite3.Row, agent: sqlite3.Row) -> dict:
     date = _day_of(run["ended"])
     rows = _day_leaves(date)
     leaves = [r["leaf_hash"] for r in rows]
-    idx = next((i for i, r in enumerate(rows) if r["id"] == run["id"]), None)
+    idx = next((i for i, r in enumerate(rows) if r["id"] == run["id"] and r["leaf_hash"] == run["leaf_hash"]), None)
     day = q1("SELECT * FROM proof_days WHERE date=?", date)
     out = {"run_id": run["id"], "record": rec, "leaf_hash": leaf, "stored_leaf_hash": run["leaf_hash"], "date": date,
            "merkle_path": _pf.merkle_path(leaves, idx) if idx is not None else [], "root": _pf.merkle_root(leaves),
@@ -703,14 +726,14 @@ def purge_once(now: Optional[float] = None) -> dict:
     out = {"runs": 0, "tool_events": 0, "alerts": 0}
     for acc in qa("SELECT id, plan FROM accounts"):
         cutoff = now - RETENTION_DAYS.get(acc["plan"], 7) * 86400
-        old = qa("SELECT r.id, r.agent_id, r.ended, r.leaf_hash FROM runs r JOIN agents g ON g.id=r.agent_id "
-                 "WHERE g.account_id=? AND COALESCE(r.ended, r.started)<?", acc["id"], cutoff)
+        old = qa("SELECT id, agent_id, ended, leaf_hash FROM runs WHERE account_id=? AND COALESCE(ended, started)<?", acc["id"], cutoff)
         with tx() as db:
             for r in old:
                 if r["leaf_hash"]:
-                    db.execute("INSERT OR IGNORE INTO run_leaves(id, agent_id, ended, leaf_hash) VALUES(?,?,?,?)", (r["id"], r["agent_id"], r["ended"], r["leaf_hash"]))
-                out["tool_events"] += db.execute("DELETE FROM tool_events WHERE run_id=?", (r["id"],)).rowcount
-                out["runs"] += db.execute("DELETE FROM runs WHERE id=?", (r["id"],)).rowcount
+                    db.execute("INSERT OR IGNORE INTO run_leaves(id, account_id, agent_id, ended, leaf_hash) VALUES(?,?,?,?,?)",
+                               (r["id"], acc["id"], r["agent_id"], r["ended"], r["leaf_hash"]))
+                out["tool_events"] += db.execute("DELETE FROM tool_events WHERE account_id=? AND run_id=?", (acc["id"], r["id"])).rowcount
+                out["runs"] += db.execute("DELETE FROM runs WHERE account_id=? AND id=?", (acc["id"], r["id"])).rowcount
             out["alerts"] += db.execute("DELETE FROM alerts WHERE account_id=? AND acked=1 AND ts<?", (acc["id"], cutoff)).rowcount
     return out
 
@@ -729,7 +752,7 @@ def purged_proof(leaf: sqlite3.Row) -> dict:
     date = _day_of(leaf["ended"])
     rows = _day_leaves(date)
     leaves = [r["leaf_hash"] for r in rows]
-    idx = next((i for i, r in enumerate(rows) if r["id"] == leaf["id"]), None)
+    idx = next((i for i, r in enumerate(rows) if r["id"] == leaf["id"] and r["leaf_hash"] == leaf["leaf_hash"]), None)
     day = q1("SELECT * FROM proof_days WHERE date=?", date)
     return {"run_id": leaf["id"], "record": None, "leaf_hash": leaf["leaf_hash"], "stored_leaf_hash": leaf["leaf_hash"], "date": date, "agent": leaf["agent"],
             "merkle_path": _pf.merkle_path(leaves, idx) if idx is not None else [], "root": _pf.merkle_root(leaves),
@@ -861,7 +884,7 @@ def _agent(acc: sqlite3.Row, name: str) -> sqlite3.Row:
 def _own_run(acc, run_id: str) -> sqlite3.Row:
     """A run is reachable only through the account that owns its agent. Knowing a run_id is not enough:
     ids travel in exports, webhook payloads and the public proof files."""
-    run = q1("SELECT r.* FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=? AND g.account_id=?", run_id, acc["id"])
+    run = q1("SELECT * FROM runs WHERE id=? AND account_id=?", run_id, acc["id"])
     if not run:
         raise HTTPException(404, "run not found")
     return run
@@ -1426,13 +1449,14 @@ def run_start(s: StartIn, acc=Depends(account_from_key)):
     a = _agent(acc, s.agent)
     rid = s.run_id or secrets.token_hex(8)
     now = time.time()
-    if s.run_id:  # reusing your own run_id restarts that run; one of another account is never overwritten
-        owner = q1("SELECT g.account_id FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=?", rid)
-        if owner and owner["account_id"] != acc["id"]:
-            raise HTTPException(409, "run_id already in use; choose another")
     with tx() as db:
-        db.execute("INSERT OR REPLACE INTO runs(id,agent_id,started,last_seen,status,meta_json,source) VALUES(?,?,?,?,?,?,?)",
-                   (rid, a["id"], now, now, "running", json.dumps(s.meta), s.source))
+        # one statement: no window between deciding and writing. The conflict target is (account_id, id), so
+        # reusing your own run_id restarts that run and a row of another account is simply not addressed.
+        db.execute("INSERT INTO runs(id,account_id,agent_id,started,last_seen,status,meta_json,source) VALUES(?,?,?,?,?,?,?,?) "
+                   "ON CONFLICT(account_id,id) DO UPDATE SET agent_id=excluded.agent_id, started=excluded.started, "
+                   "last_seen=excluded.last_seen, status=excluded.status, meta_json=excluded.meta_json, source=excluded.source, "
+                   "ended=NULL, cost=0, tokens=0, tool_calls=0, output_bytes=NULL, evidence_ok=NULL, evidence_json=NULL, leaf_hash=NULL",
+                   (rid, acc["id"], a["id"], now, now, "running", json.dumps(s.meta), s.source))
     return {"run_id": rid}
 
 
@@ -1442,12 +1466,12 @@ def run_tool(t: ToolIn, acc=Depends(account_from_key)):
     a = q1("SELECT * FROM agents WHERE id=?", run["agent_id"])
     h = t.input_hash or hashlib.sha1(json.dumps(t.input, sort_keys=True, default=str).encode()).hexdigest()[:16]
     with tx() as db:
-        db.execute("INSERT INTO tool_events(run_id,ts,tool,input_hash,ok,cost,tokens) VALUES(?,?,?,?,?,?,?)",
-                   (t.run_id, time.time(), t.tool, h, int(t.ok), t.cost, t.tokens))
-        db.execute("UPDATE runs SET tool_calls=tool_calls+1, cost=cost+?, tokens=tokens+?, last_seen=? WHERE id=?",
-                   (t.cost, t.tokens, time.time(), t.run_id))
+        db.execute("INSERT INTO tool_events(run_id,account_id,ts,tool,input_hash,ok,cost,tokens) VALUES(?,?,?,?,?,?,?,?)",
+                   (t.run_id, acc["id"], time.time(), t.tool, h, int(t.ok), t.cost, t.tokens))
+        db.execute("UPDATE runs SET tool_calls=tool_calls+1, cost=cost+?, tokens=tokens+?, last_seen=? WHERE id=? AND account_id=?",
+                   (t.cost, t.tokens, time.time(), t.run_id, acc["id"]))
     check_storm(a, t.run_id, h, t.tool)
-    run = q1("SELECT * FROM runs WHERE id=?", t.run_id)
+    run = _own_run(acc, t.run_id)
     check_budget(a, run)
     return {"ok": True}
 
@@ -1456,7 +1480,7 @@ def run_tool(t: ToolIn, acc=Depends(account_from_key)):
 def run_heartbeat(run_id: str, acc=Depends(account_from_key)):
     _own_run(acc, run_id)
     with tx() as db:
-        db.execute("UPDATE runs SET last_seen=? WHERE id=?", (time.time(), run_id))
+        db.execute("UPDATE runs SET last_seen=? WHERE id=? AND account_id=?", (time.time(), run_id, acc["id"]))
     return {"ok": True}
 
 
@@ -1470,12 +1494,12 @@ def run_end(e: EndIn, acc=Depends(account_from_key)):
         ev_detail = {"_": "evidence required but none supplied"}
     with tx() as db:
         db.execute("UPDATE runs SET ended=?, last_seen=?, status=?, cost=cost+?, tokens=tokens+?, output_bytes=?, evidence_ok=?, "
-                   "evidence_json=?, meta_json=? WHERE id=?",
+                   "evidence_json=?, meta_json=? WHERE id=? AND account_id=?",
                    (time.time(), time.time(), e.status, e.cost, e.tokens, e.output_bytes, int(ev_ok), json.dumps(ev_detail),
-                    json.dumps({**json.loads(run["meta_json"] or "{}"), **e.meta}), e.run_id))
-    run = q1("SELECT * FROM runs WHERE id=?", e.run_id)
+                    json.dumps({**json.loads(run["meta_json"] or "{}"), **e.meta}), e.run_id, acc["id"]))
+    run = _own_run(acc, e.run_id)
     with tx() as db:  # the leaf is fixed here and never rewritten; the day seal later includes it
-        db.execute("UPDATE runs SET leaf_hash=? WHERE id=?", (_pf.leaf_hash(leaf_record(run, a)), e.run_id))
+        db.execute("UPDATE runs SET leaf_hash=? WHERE id=? AND account_id=?", (_pf.leaf_hash(leaf_record(run, a)), e.run_id, acc["id"]))
     if e.status != "ok":
         # a retry started by the remediator reports its own outcome (Hersteld / heeft jou nodig); a second FAILED for
         # the same story every 15 minutes is noise, so it is stored but not sent
@@ -1599,7 +1623,7 @@ def pause_agent(name: str, paused: bool = True, acc=Depends(account_from_key)):
 def delete_agent(name: str, acc=Depends(account_from_key)):
     a = _agent(acc, name)
     with tx() as db:
-        db.execute("DELETE FROM tool_events WHERE run_id IN (SELECT id FROM runs WHERE agent_id=?)", (a["id"],))
+        db.execute("DELETE FROM tool_events WHERE account_id=? AND run_id IN (SELECT id FROM runs WHERE agent_id=?)", (acc["id"], a["id"]))
         db.execute("DELETE FROM runs WHERE agent_id=?", (a["id"],)); db.execute("DELETE FROM alerts WHERE agent_id=?", (a["id"],)); db.execute("DELETE FROM agents WHERE id=?", (a["id"],))
     return {"ok": True, "deleted": name}
 
@@ -1612,9 +1636,9 @@ def agent_runs(name: str, limit: int = 30, acc=Depends(account_from_key)):
 
 @app.get("/v1/runs/{run_id}/proof")
 def run_proof_api(run_id: str, acc=Depends(account_from_key)):
-    run = q1("SELECT r.* FROM runs r JOIN agents g ON g.id=r.agent_id WHERE r.id=? AND g.account_id=?", run_id, acc["id"])
+    run = q1("SELECT * FROM runs WHERE id=? AND account_id=?", run_id, acc["id"])
     if not run:
-        purged = q1("SELECT l.*, g.name agent FROM run_leaves l JOIN agents g ON g.id=l.agent_id WHERE l.id=? AND g.account_id=?", run_id, acc["id"])
+        purged = q1("SELECT l.*, g.name agent FROM run_leaves l JOIN agents g ON g.id=l.agent_id WHERE l.id=? AND l.account_id=?", run_id, acc["id"])
         if not purged:
             raise HTTPException(404, "run not found")
         return purged_proof(purged)

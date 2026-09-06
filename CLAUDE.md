@@ -14,7 +14,7 @@ purpose: one server file, one client file, one proof module (see CONTRIBUTING.md
 
 ```
 .venv/bin/pip install -r requirements-dev.txt        # fastapi, uvicorn, pytest, httpx
-.venv/bin/python -m pytest -q tests                   # full suite, 44 tests, under 10 s, no network
+.venv/bin/python -m pytest -q tests                   # full suite, 49 tests, under 10 s, no network
 .venv/bin/python -m pytest -q tests/test_server.py -k drift   # one test
 ./run.sh                                              # loads .env, uvicorn on 127.0.0.1:8787
 .venv/bin/python site/build.py                        # regenerate site/public/ from site/build.py + site/integrations.py + site/articles.json

@@ -707,21 +707,126 @@ def test_runs_are_scoped_to_the_owning_account():
     assert c.post("/v1/runs/end", json={"run_id": rid, "status": "ok"}, headers=ah).status_code == 200
 
 
-def test_run_start_never_takes_over_a_run_id_of_another_account():
+def test_two_accounts_can_use_the_same_run_id_without_touching_each_other():
+    """Run ids live per account. A shared name like "nightly-2026-09-06" is not a first-come resource,
+    so B claiming it can neither overwrite A's run nor lock A out of its own id."""
     ak, ah = _acct("team")
     bk, bh = _acct("team")
-    c.post("/v1/agents", json={"name": "avondrun"}, headers=ah)
-    c.post("/v1/agents", json={"name": "avondrun"}, headers=bh)     # same agent name, different account
+    c.post("/v1/agents", json={"name": "evening-run"}, headers=ah)
+    c.post("/v1/agents", json={"name": "evening-run"}, headers=bh)   # same agent name, different account
+    a_agent = server.q1("SELECT id FROM agents WHERE name='evening-run' AND account_id=(SELECT account_id FROM agents WHERE id=(SELECT MIN(id) FROM agents WHERE name='evening-run'))")["id"]
     shared = "nightly-2026-09-06"
-    assert c.post("/v1/runs/start", json={"agent": "avondrun", "run_id": shared}, headers=ah).json()["run_id"] == shared
-    mine = server.q1("SELECT agent_id FROM runs WHERE id=?", shared)["agent_id"]
+    assert c.post("/v1/runs/start", json={"agent": "evening-run", "run_id": shared}, headers=ah).json()["run_id"] == shared
+    assert c.post("/v1/runs/start", json={"agent": "evening-run", "run_id": shared}, headers=bh).json()["run_id"] == shared
+    rows = server.qa("SELECT agent_id FROM runs WHERE id=?", shared)
+    assert len(rows) == 2 and a_agent in [r["agent_id"] for r in rows], "both accounts keep their own row"
 
-    r = c.post("/v1/runs/start", json={"agent": "avondrun", "run_id": shared}, headers=bh)
-    assert r.status_code == 409, "a run_id of another account must not be overwritten"
-    assert server.q1("SELECT agent_id FROM runs WHERE id=?", shared)["agent_id"] == mine
-    assert [x["id"] for x in c.get("/v1/agents/avondrun/runs", headers=ah).json()] == [shared]
-    assert c.get("/v1/agents/avondrun/runs", headers=bh).json() == []
+    # what B does to its own run stays with B
+    c.post("/v1/runs/tool", json={"run_id": shared, "tool": "llm", "input": {"q": 1}, "cost": 5.0}, headers=bh)
+    c.post("/v1/runs/end", json={"run_id": shared, "status": "fail", "meta": {"error": "kapot bij B"}}, headers=bh)
+    a_run = c.get("/v1/agents/evening-run/runs", headers=ah).json()
+    b_run = c.get("/v1/agents/evening-run/runs", headers=bh).json()
+    assert [x["id"] for x in a_run] == [shared] and [x["id"] for x in b_run] == [shared]
+    assert a_run[0]["status"] == "running" and a_run[0]["ended"] is None and a_run[0]["cost"] == 0
+    assert a_run[0]["tool_calls"] == 0, "tool events of another account must not count towards this run"
+    assert b_run[0]["status"] == "fail" and b_run[0]["cost"] == 5.0
+    assert c.get("/v1/alerts", headers=ah).json() == []
+    assert [x["kind"] for x in c.get("/v1/alerts", headers=bh).json()] == ["FAILED"]
+
+    # A finishes its own run under the same id, and gets its own proof
+    assert c.post("/v1/runs/end", json={"run_id": shared, "status": "ok"}, headers=ah).status_code == 200
+    pa = c.get(f"/v1/runs/{shared}/proof", headers=ah).json()
+    pb = c.get(f"/v1/runs/{shared}/proof", headers=bh).json()
+    assert pa["leaf_hash"] != pb["leaf_hash"] and pa["record"]["status"] == "ok" and pb["record"]["status"] == "fail"
+    assert pa["record"]["tool_calls"] == 0 and pb["record"]["tool_calls"] == 1
+    assert pa["leaf_hash"] == pa["stored_leaf_hash"] and pb["leaf_hash"] == pb["stored_leaf_hash"]
 
     # restarting your own run id stays allowed (a retry of the same job reuses it)
-    assert c.post("/v1/runs/start", json={"agent": "avondrun", "run_id": shared}, headers=ah).status_code == 200
-    assert server.q1("SELECT COUNT(*) n FROM runs WHERE id=?", shared)["n"] == 1
+    assert c.post("/v1/runs/start", json={"agent": "evening-run", "run_id": shared}, headers=ah).status_code == 200
+    assert server.q1("SELECT COUNT(*) n FROM runs WHERE id=?", shared)["n"] == 2
+
+
+def test_run_start_is_atomic_under_concurrency():
+    """The ownership check and the insert must be one step. With a lookup first and an INSERT OR REPLACE
+    after, two simultaneous starts of the same run_id both see a free id and the second takes the first
+    one's row, agent_id included."""
+    from concurrent.futures import ThreadPoolExecutor
+    ak, ah = _acct("team")
+    bk, bh = _acct("team")
+    c.post("/v1/agents", json={"name": "race-a"}, headers=ah)
+    c.post("/v1/agents", json={"name": "race-b"}, headers=bh)
+    a_agent = server.q1("SELECT id FROM agents WHERE name='race-a'")["id"]
+    b_agent = server.q1("SELECT id FROM agents WHERE name='race-b'")["id"]
+    for i in range(40):
+        rid = f"nightly-race-{i}"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fa = pool.submit(lambda: c.post("/v1/runs/start", json={"agent": "race-a", "run_id": rid}, headers=ah))
+            fb = pool.submit(lambda: c.post("/v1/runs/start", json={"agent": "race-b", "run_id": rid}, headers=bh))
+            ra, rb = fa.result(), fb.result()
+        assert (ra.status_code, rb.status_code) == (200, 200), f"round {i}: both accounts own this run_id"
+        got = sorted(r["agent_id"] for r in server.qa("SELECT agent_id FROM runs WHERE id=?", rid))
+        assert got == sorted([a_agent, b_agent]), f"round {i}: a run was taken over, rows {got}"
+
+
+def test_mcp_run_tools_are_scoped_to_the_account():
+    ak, ah = _acct("team")
+    bk, bh = _acct("team")
+    c.post("/v1/agents", json={"name": "mcp-job"}, headers=ah)
+    c.post("/v1/agents", json={"name": "mcp-job"}, headers=bh)
+    rid = c.post("/v1/runs/start", json={"agent": "mcp-job"}, headers=ah).json()["run_id"]
+
+    def call(tool, args, headers):
+        r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                 "params": {"name": tool, "arguments": args}}, headers=headers).json()
+        return r["result"]
+
+    out = call("runvouch_run_end", {"run_id": rid, "status": "fail"}, bh)
+    assert out.get("isError") and "404" in out["content"][0]["text"]
+    out = call("runvouch_run_proof", {"run_id": rid}, bh)
+    assert out.get("isError") and "404" in out["content"][0]["text"]
+    assert server.q1("SELECT status FROM runs WHERE id=?", rid)["status"] == "running"
+
+    # B does the same thing on its own run and that works
+    own = call("runvouch_run_start", {"agent": "mcp-job"}, bh)
+    own_id = json.loads(own["content"][0]["text"])["run_id"]
+    assert not call("runvouch_run_end", {"run_id": own_id, "status": "ok"}, bh).get("isError")
+    assert not call("runvouch_run_proof", {"run_id": own_id}, bh).get("isError")
+    assert not call("runvouch_run_end", {"run_id": rid, "status": "ok"}, ah).get("isError")
+
+
+def test_a_sealed_day_keeps_both_runs_that_share_a_run_id(monkeypatch, tmp_path):
+    """Namespacing run ids means one day can hold the same id twice. The day root must cover both leaves
+    and each account must get the path of its own leaf, not the first one with a matching id."""
+    monkeypatch.setattr(server, "PROOF_DIR", tmp_path)
+    monkeypatch.setattr(server, "OTS_BIN", str(tmp_path / "no-ots"))
+    ak, ah = _acct("team")
+    bk, bh = _acct("team")
+    c.post("/v1/agents", json={"name": "sealed-job"}, headers=ah)
+    c.post("/v1/agents", json={"name": "sealed-job"}, headers=bh)
+    shared = "nightly-2026-08-01"
+    now = time.time()
+    first = server.q1("SELECT MIN(date) d FROM proof_days")["d"]          # the suite seals every day from
+    day = server._day_of(server._day_ts(first) - 86400) if first else server._day_of(now - 40 * 86400)
+    assert not server._day_leaves(day), "this test needs a day of its own to seal"
+    t_old = server._day_ts(day) + 3600
+    for h, size in ((ah, 100), (bh, 200)):
+        c.post("/v1/runs/start", json={"agent": "sealed-job", "run_id": shared}, headers=h)
+        c.post("/v1/runs/end", json={"run_id": shared, "status": "ok", "output_bytes": size}, headers=h)
+    with server.tx() as db:  # move both into a day that is over, then refresh the leaves the way run_end does
+        db.execute("UPDATE runs SET started=?, ended=? WHERE id=?", (t_old - 5, t_old, shared))
+    for r in server.qa("SELECT * FROM runs WHERE id=?", shared):
+        ag = server.q1("SELECT * FROM agents WHERE id=?", r["agent_id"])
+        with server.tx() as db:
+            db.execute("UPDATE runs SET leaf_hash=? WHERE id=? AND account_id=?",
+                       (pf.leaf_hash(server.leaf_record(r, ag)), r["id"], r["account_id"]))
+    d = server.seal_day(day)
+    assert d["n_runs"] == 2
+
+    pa = c.get(f"/v1/runs/{shared}/proof", headers=ah).json()
+    pb = c.get(f"/v1/runs/{shared}/proof", headers=bh).json()
+    assert pa["leaf_hash"] != pb["leaf_hash"], "same id, different account, different leaf"
+    for p in (pa, pb):
+        assert p["sealed"] and p["root"] == d["root"]
+        assert pf.apply_path(p["leaf_hash"], [tuple(x) for x in p["merkle_path"]]) == d["root"]
+    dj = json.loads((tmp_path / f"{day}.json").read_text())
+    assert sorted(l["leaf"] for l in dj["leaves"]) == sorted([pa["leaf_hash"], pb["leaf_hash"]])
