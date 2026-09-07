@@ -11,6 +11,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "public"
+
+# Versie uit het pakket, niet met de hand: de changelog stond op 0.2 terwijl PyPI,
+# npm en /health al 0.3.3 gaven (gemeten 7 sep 2026). Eén bron voorkomt dat opnieuw.
+def _pkg_version():
+    m = re.search(r'^version = "([^"]+)"', (ROOT.parent / "packaging" / "pypi" / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+    return m.group(1) if m else "unknown"
+
+VERSION = _pkg_version()
+# verified sources per article (only URLs that resolve); anything we cannot link, we do not claim
 BASE = "https://runvouch.com"
 API = "https://api.runvouch.com"
 TODAY = datetime.date.today().isoformat()
@@ -32,6 +41,20 @@ elif STRIPE_LIVE:
     PROCESSOR, SOLO_URL, TEAM_URL, EMAIL_PARAM = "Stripe", _ENV["STRIPE_SOLO_URL"], _ENV["STRIPE_TEAM_URL"], "prefilled_email"
 else:
     PROCESSOR, SOLO_URL, TEAM_URL, EMAIL_PARAM = ("Lemon Squeezy" if LS_LIVE else "Polar"), "https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22", "https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9", "checkout[email]"
+
+# Data uit de git-historie van dit archief, niet uit het hoofd.
+RELEASES = [
+    ("0.3.3", "2026-08-26", ["<code>pip install runvouch</code> and <code>npm install runvouch</code>: client plus the <code>rv</code> CLI, hosted API by default.",
+                             "Listed in the MCP registry with a verifiable proof link."]),
+    ("0.3.2", "2026-08-26", ["Claude Code plugin: skill, agent and the <code>/vouch</code> command.",
+                             "Claude Desktop bundle (<code>.mcpb</code>)."]),
+    ("0.3",   "2026-08-25", ["Public launch on runvouch.com and api.runvouch.com.",
+                             "Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.",
+                             "MCP server and the zero-dependency <code>rv</code> CLI with fail-open.",
+                             "Hashed keys, rate limits, self-serve signup, subscriptions via " + PROCESSOR + "."]),
+]
+# Losse pakketten met hun eigen nummering; anders lijkt 0.1.3 een stap terug.
+SIDE_RELEASES = [("n8n-nodes-runvouch 0.1.3", "2026-08-28", "n8n community node, published with provenance.")]
 BILLING_LIVE = POLAR_LIVE or STRIPE_LIVE or LS_LIVE
 SOLO_BTN = f'<a class="btn" href="{SOLO_URL}" data-ls="{EMAIL_PARAM}">Upgrade to Solo, $9/mo</a>' if BILLING_LIVE else '<a class="btn" href="/contact?topic=billing">Start free; paid plans open Sept 2026</a>'
 TEAM_BTN = f'<a class="btn ghost" href="{TEAM_URL}" data-ls="{EMAIL_PARAM}">Upgrade to Team, $29/mo</a>' if BILLING_LIVE else '<a class="btn ghost" href="/contact?topic=billing">Request Team plan</a>'
@@ -923,11 +946,15 @@ page("/security", "Security | RunVouch", "What RunVouch stores, how keys are han
 <ul><li>API keys are stored as SHA-256 hashes; the plaintext key is shown once.</li><li>Tool inputs are hashed on the client or server for loop detection; prompts and outputs are never stored.</li><li>Evidence file checks run on your machine; only a boolean is transmitted.</li><li>Every finished run gets a hash that is chained per day and anchored in Bitcoin via OpenTimestamps, so a record cannot be altered afterwards without it showing; see <a href="/docs/proof">verifiable runs</a>. An auditor can verify a run with a standalone script and <code>ots verify</code>, without trusting us: <a href="/verifiable-agent-runs">how</a>.</li><li>All traffic is TLS via Cloudflare; infrastructure in the EU (Netherlands).</li><li>Per-key rate limits; alert credentials (Telegram token, webhook URL) are stored per account and used only to deliver your alerts.</li><li>Report vulnerabilities via the <a href="/contact?topic=security">contact form</a> (topic: security), see <a href="/.well-known/security.txt">security.txt</a>.</li></ul></div></main>''', [ORG_LD])
 page("/privacy", "Privacy | RunVouch", "RunVouch privacy policy: the run metadata and account data we process, what we never store (prompts, outputs), retention, and how to delete your data.", f'''<main><div class="wrap doc"><h1>Privacy</h1><p>RunVouch (Netherlands) processes: your email (account identity, billing match), agent names and run metadata you send (timestamps, status, cost, token counts, tool names, input hashes, output sizes, evidence verdicts), alert delivery settings, and standard server logs (IP, user agent) kept 30 days. Runs, tool events and acknowledged alerts are purged after the history window of your plan (7 days on Free, 90 days on Solo and Team); the per-run leaf hash stays in the public proof chain. We do not sell data, do not send marketing email, and do not use third-party analytics that track you across sites. Payments are processed by {PROCESSOR}; card details never touch our servers. Delete your account and data any time via <a href="/contact">contact</a>. GDPR requests: same form.</p></div></main>''', [ORG_LD])
 page("/terms", "Terms | RunVouch", "RunVouch terms of service: early-access status, monthly plans that cancel any time, acceptable use, and liability limits in plain language.", '''<main><div class="wrap doc"><h1>Terms of service</h1><p>RunVouch is provided as-is during early access. Free plans may be rate-limited. Paid plans renew monthly and can be cancelled any time; the current period is not refunded. Don't use RunVouch to monitor anything illegal, and don't attack the service. We may change these terms with notice on this page. Governing law: the Netherlands.</p></div></main>''', [ORG_LD])
-page("/changelog", "Changelog | RunVouch", "What's new in RunVouch: releases of the API, CLI, Claude Code plugin, MCP server and detectors, with dates.", f'''<main><div class="wrap doc"><h1>Changelog</h1><h3>{TODAY}: 0.2 (early access)</h3><ul><li>Public launch on runvouch.com and api.runvouch.com.</li><li>Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.</li><li>Claude Code plugin with transcript-based cost; MCP server; zero-dependency <code>rv</code> CLI with fail-open.</li><li>Hashed keys, rate limits, self-serve signup, subscriptions via {PROCESSOR}.</li></ul></div></main>''', [ORG_LD])
+_cl = "".join(f'<h3>{v} <span class="small muted">{d}</span></h3><ul>' + "".join(f"<li>{i}</li>" for i in items) + "</ul>"
+               for v, d, items in RELEASES)
+_cl += '<h3 class="small muted">Separately versioned packages</h3><ul>' + "".join(
+    f"<li>{n} <span class=\"small muted\">{d}</span>: {t}</li>" for n, d, t in SIDE_RELEASES) + "</ul>"
+page("/changelog", "Changelog | RunVouch", "What's new in RunVouch: releases of the API, CLI, Claude Code plugin, MCP server and detectors, with dates.", f'''<main><div class="wrap doc"><h1>Changelog</h1><p class="small muted">Current release: <b>{VERSION}</b>, the same version <a href="{API}/health">{API}/health</a>, PyPI and npm report. Incidents are on the <a href="/status">status page</a>.</p>{_cl}</div></main>''', [ORG_LD])
 # ───────────────────────── BLOG ─────────────────────────
 ARTICLES = json.loads((ROOT / "articles.json").read_text(encoding="utf-8"))["articles"] if (ROOT / "articles.json").exists() else []
-BLOG_DATE = "2026-08-25"
-# verified sources per article (only URLs that resolve); anything we cannot link, we do not claim
+BLOG_DATE = "2026-08-25"   # terugval voor de eerste lichting artikelen; nieuwe dragen hun eigen "date"
+
 SOURCES = {
     "claude-code-cron-unexpected-api-bill-runaway-cost-overnight": [("Claude Code issue #37686: $1,800+ in two days", "https://github.com/anthropics/claude-code/issues/37686"), ("dev.to: \"I let my AI agent run overnight, it cost $437\"", "https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7")],
     "claude-code-routine-failed-silently-scheduled-task-didnt-run": [("Claude Code docs: scheduled tasks, limitations", "https://code.claude.com/docs/en/scheduled-tasks#limitations"), ("Claude Code docs: routines", "https://code.claude.com/docs/en/routines")],
@@ -943,9 +970,9 @@ def _related_html(art):
     others = [a for a in ARTICLES if a["slug"] != art["slug"]][:3]
     return '<h2>Related field notes</h2><ul>' + "".join(f'<li><a href="/blog/{a["slug"]}">{a["title"]}</a></li>' for a in others) + '</ul>'
 for art in ARTICLES:
-    body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · {BLOG_DATE} · RunVouch</p><h1>{art["title"]}</h1><p class="lead muted">{art["description"]}</p>{art["html"]}
+    body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · {art.get("date") or BLOG_DATE} · RunVouch</p><h1>{art["title"]}</h1><p class="lead muted">{art["description"]}</p>{art["html"]}
 {_sources_html(art)}{_related_html(art)}<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main>'''
-    ld = [ORG_LD, {"@context": "https://schema.org", "@type": "Article", "headline": art["title"], "description": art["description"], "datePublished": BLOG_DATE, "dateModified": BLOG_DATE,
+    ld = [ORG_LD, {"@context": "https://schema.org", "@type": "Article", "headline": art["title"], "description": art["description"], "datePublished": art.get("date") or BLOG_DATE, "dateModified": art.get("date") or BLOG_DATE,
                    "author": {"@type": "Organization", "name": "RunVouch", "url": BASE}, "publisher": {"@type": "Organization", "name": "RunVouch", "logo": {"@type": "ImageObject", "url": BASE + "/logo.svg"}},
                    "mainEntityOfPage": f"{BASE}/blog/{art['slug']}", "image": BASE + "/og.png"}]
     t = art["title"] if len(art["title"]) <= 62 else art["title"][:59].rsplit(" ", 1)[0] + "…"
@@ -1012,7 +1039,21 @@ API base: {API} (header X-API-Key).
 """)
 (OUT / ".well-known").mkdir(exist_ok=True)
 (OUT / ".well-known" / "security.txt").write_text(f"Contact: https://runvouch.com/contact?topic=security\nExpires: {datetime.date.today().year+1}-12-31T00:00:00.000Z\nPreferred-Languages: en, nl\nCanonical: {BASE}/.well-known/security.txt\n")
-(OUT / "feed.xml").write_text(f'<?xml version="1.0"?><rss version="2.0"><channel><title>RunVouch changelog</title><link>{BASE}/changelog</link><description>What\'s new in RunVouch</description>' + ''.join(f"<item><title>{a['title']}</title><link>{BASE}/blog/{a['slug']}</link><description>{a['description']}</description><pubDate>{datetime.datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}</pubDate></item>" for a in ARTICLES) + f'<item><title>0.2, early access launch</title><link>{BASE}/changelog</link><pubDate>{datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")}</pubDate></item></channel></rss>')
+def _rfc822(d):
+    """Datum als RFC 822, zoals RSS eist. Stond hier utcnow(), waardoor alle tien items
+    de bouwtijd droegen en elke lezer dacht dat alles vandaag geplaatst was (gemeten 7 sep 2026)."""
+    return datetime.datetime.strptime(d, "%Y-%m-%d").strftime("%a, %d %b %Y 00:00:00 GMT")
+
+_items = "".join(
+    f"<item><title>{a['title']}</title><link>{BASE}/blog/{a['slug']}</link>"
+    f"<guid isPermaLink=\"true\">{BASE}/blog/{a['slug']}</guid>"
+    f"<description>{a['description']}</description>"
+    f"<pubDate>{_rfc822(a.get('date') or BLOG_DATE)}</pubDate></item>"
+    for a in sorted(ARTICLES, key=lambda x: x.get("date") or BLOG_DATE, reverse=True))
+_items += (f"<item><title>{RELEASES[0][0]}, latest release</title><link>{BASE}/changelog</link>"
+           f"<guid isPermaLink=\"false\">runvouch-release-{RELEASES[0][0]}</guid>"
+           f"<pubDate>{_rfc822(RELEASES[0][1])}</pubDate></item>")
+(OUT / "feed.xml").write_text(f'<?xml version="1.0"?><rss version="2.0"><channel><title>RunVouch changelog</title><link>{BASE}/changelog</link><description>What\'s new in RunVouch</description>' + _items + '</channel></rss>')
 # rv client download
 import shutil
 shutil.copy(ROOT.parent / "runvouch" / "cli.py", OUT / "rv")

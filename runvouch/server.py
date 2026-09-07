@@ -164,7 +164,8 @@ with _lock:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
-    for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER")):
+    for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER"),
+                     ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL")):
         try:
             _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
         except sqlite3.OperationalError:
@@ -396,7 +397,44 @@ def _deliver(alert_id: int) -> None:
     if acc["alert_email"]:
         delivered |= _email(acc["alert_email"], f"[RunVouch] {a['kind']}: {name}", a["message"] + "\n\nhttps://runvouch.com/app")
     with tx() as db:
-        db.execute("UPDATE alerts SET delivered=? WHERE id=?", (1 if delivered else 0, alert_id))
+        if delivered:
+            db.execute("UPDATE alerts SET delivered=1 WHERE id=?", (alert_id,))
+        else:
+            att = (a["attempts"] or 0) + 1
+            db.execute("UPDATE alerts SET delivered=0, attempts=?, next_try=? WHERE id=?",
+                       (att, time.time() + _retry_backoff(att), alert_id))
+
+
+RETRY_BACKOFF_S = (60, 300, 900, 3600)   # 1, 5, 15 en 60 minuten
+RETRY_MAX_ATTEMPTS = len(RETRY_BACKOFF_S) + 1
+RETRY_WINDOW_S = 24 * 3600               # ouder dan een dag opnieuw sturen helpt niemand meer
+
+
+def _retry_backoff(attempt: int) -> float:
+    return RETRY_BACKOFF_S[min(attempt, len(RETRY_BACKOFF_S)) - 1]
+
+
+def retry_undelivered(now: Optional[float] = None) -> int:
+    """Alerts die niet bezorgd raakten opnieuw aanbieden.
+
+    Waarom dit bestaat. Op 4 en 6 september 2026 mislukte de Telegram-bezorging van twee
+    DRIFT-alerts voor archiveer-vacatures. Ze werden een keer geprobeerd, kregen delivered=0
+    en daar bleef het bij: ruim drie uur lang stond de bezorging op de statuspagina op falen
+    zonder dat er iemand iets van hoorde. Een waakhond die zijn eigen alarm stil laat vallen
+    verkoopt precies wat hij belooft te voorkomen. delivered=-1 blijft eruit, dat is de
+    afkoelperiode en die hoort niet verstuurd te worden.
+    """
+    now = now or time.time()
+    rijen = qa("SELECT id FROM alerts WHERE delivered=0 AND ts>? AND COALESCE(attempts,0)<? "
+               "AND COALESCE(next_try,0)<=? ORDER BY id LIMIT 50",
+               now - RETRY_WINDOW_S, RETRY_MAX_ATTEMPTS, now)
+    for r in rijen:
+        # Meteen vooruitzetten: de bezorging loopt in een andere draad, en zonder dit zou de
+        # volgende ronde dezelfde alert nog een keer in de wachtrij zetten.
+        with tx() as db:
+            db.execute("UPDATE alerts SET next_try=? WHERE id=?", (now + RETRY_BACKOFF_S[0], r["id"]))
+        _deliver_q.put(r["id"])
+    return len(rijen)
 
 
 def _deliverer():
@@ -766,6 +804,19 @@ HEARTBEAT_KEEP_DAYS = 100
 INCIDENT_GAP_MIN = 3  # minutes without a heartbeat that count as an outage on the public status page
 
 
+def _pkg_version() -> str:
+    """Versie uit packaging/pypi/pyproject.toml: /health, PyPI, npm en de changelog liepen uit de
+    pas (changelog zei 0.2 terwijl /health 0.3.3 gaf, gemeten 7 sep 2026). Eén bron, geen drift."""
+    try:
+        m = re.search(r'^version = "([^"]+)"', (Path(__file__).resolve().parent.parent / "packaging" / "pypi" / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
+
+
+VERSION = _pkg_version()
+
+
 def record_heartbeat(now: Optional[float] = None) -> None:
     """One row per minute the detector loop actually ran; the public status page derives uptime and incidents from it."""
     now = now or time.time()
@@ -798,6 +849,24 @@ def status_summary(now: Optional[float] = None) -> dict:
         prev = r["minute"]
     if prev is not None and cur - prev > INCIDENT_GAP_MIN:
         incidents.append({"start": datetime.utcfromtimestamp(prev * 60).isoformat(timespec="minutes") + "Z", "minutes": cur - prev - 1, "component": "detectors", "ongoing": True})
+    # Minuten waarin de nieuwste alert onbezorgd stond, horen er ook bij. Zonder dit
+    # meldde de pagina "Alert delivery 96.19%" naast "No outages since ...", en dan is
+    # een van de twee een leugen (gemeten 7 sep 2026 door de koperswandeling).
+    run_start = run_prev = None
+    for r in rows + [{"minute": cur + 1, "alerts_ok": 1}]:
+        bad = not r["alerts_ok"]
+        aansluitend = run_prev is not None and r["minute"] == run_prev + 1
+        if bad and aansluitend:
+            run_prev = r["minute"]
+            continue
+        if run_start is not None and run_prev - run_start + 1 > INCIDENT_GAP_MIN:
+            inc = {"start": datetime.utcfromtimestamp(run_start * 60).isoformat(timespec="minutes") + "Z",
+                   "minutes": run_prev - run_start + 1, "component": "alerts"}
+            if run_prev >= cur - 1:
+                inc["ongoing"] = True
+            incidents.append(inc)
+        run_start = run_prev = r["minute"] if bad else None
+    incidents.sort(key=lambda i: i["start"])
     sealed = q1("SELECT COUNT(*) n, MAX(date) d FROM proof_days")
     return {"time": datetime.utcfromtimestamp(now).isoformat(timespec="seconds") + "Z",
             "measured_since": datetime.utcfromtimestamp(first * 60).strftime("%Y-%m-%d"),
@@ -810,6 +879,7 @@ def _sweeper():
     while True:
         try:
             sweep_once()
+            retry_undelivered()
             record_heartbeat()
             owner_digest()
             proof_maintenance()
@@ -910,7 +980,7 @@ def health():
         db_ok = True
     except Exception:
         db_ok = False
-    body = {"status": "ok" if db_ok else "degraded", "service": "RunVouch API", "version": "0.3.3", "time": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    body = {"status": "ok" if db_ok else "degraded", "service": "RunVouch API", "version": VERSION, "time": datetime.utcnow().isoformat(timespec="seconds") + "Z",
             "checks": {"database": "ok" if db_ok else "error", "detectors": "running" if not os.getenv("RUNVOUCH_NO_SWEEP") else "disabled", "alert_delivery": _alert_delivery_status()},
             "docs": "https://runvouch.com/docs", "status_page": "https://runvouch.com/status"}
     return JSONResponse(body, status_code=200 if db_ok else 503)

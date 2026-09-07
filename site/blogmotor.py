@@ -5,7 +5,7 @@ verifies every source link, publishes (build + restart + IndexNow) and notifies 
 Runs weekly under RunVouch itself:  rv run blogmotor --cap-run-cost 3 --evidence-file site/articles.json -- python3 site/blogmotor.py
 Safety: never publishes without >=2 working source links; never repeats a slug; one article per run.
 """
-import json, os, re, subprocess, sys, time, urllib.request, urllib.parse
+import datetime, json, os, re, subprocess, sys, time, urllib.request, urllib.parse
 ROOT = os.path.dirname(os.path.abspath(__file__)); REPO = os.path.dirname(ROOT)
 CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")
 TOPICS = os.path.join(ROOT, "topics.json"); ARTICLES = os.path.join(ROOT, "articles.json")
@@ -54,7 +54,10 @@ bad = [u for u in ext if not link_ok(u)]
 if len(ext) - len(bad) < 2 or bad:
     tg(f"📝 blogmotor HELD '{art['title']}': {len(ext)} sources, broken: {bad[:3]}, not published"); print("held", bad); sys.exit(2)
 art["html"] = art["html"].replace("<pre><code>", "<pre>").replace("</code></pre>", "</pre>")
-arts["articles"].append({k: art[k] for k in ("slug", "title", "description", "html")}); json.dump(arts, open(ARTICLES, "w"), indent=1)
+# Datum vastleggen bij het schrijven: zonder dit veld droeg elk artikel de
+# bouwdatum, en dan gaf feed.xml alle tien items dezelfde pubDate (gemeten 7 sep 2026).
+arts["articles"].append({**{k: art[k] for k in ("slug", "title", "description", "html")},
+                         "date": datetime.date.today().isoformat()}); json.dump(arts, open(ARTICLES, "w"), indent=1)
 subprocess.run([os.path.join(REPO, ".venv/bin/python"), os.path.join(ROOT, "build.py")], check=True)
 subprocess.run(["systemctl", "--user", "restart", "runvouch"], check=False); time.sleep(5)  # let the API come back before rv reports the end
 url = f"https://runvouch.com/blog/{art['slug']}"

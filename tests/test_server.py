@@ -830,3 +830,57 @@ def test_a_sealed_day_keeps_both_runs_that_share_a_run_id(monkeypatch, tmp_path)
         assert pf.apply_path(p["leaf_hash"], [tuple(x) for x in p["merkle_path"]]) == d["root"]
     dj = json.loads((tmp_path / f"{day}.json").read_text())
     assert sorted(l["leaf"] for l in dj["leaves"]) == sorted([pa["leaf_hash"], pb["leaf_hash"]])
+
+
+def test_undelivered_alert_is_retried_and_gives_up():
+    """Een mislukte bezorging moet terugkomen, met backoff en een bovengrens.
+
+    Waarom deze test bestaat: op 4 en 6 september 2026 bleven twee DRIFT-alerts op
+    delivered=0 staan zonder tweede poging, en de statuspagina meldde ruim drie uur
+    falende bezorging zonder dat iemand bericht kreeg.
+    """
+    acc = server.q1("SELECT id FROM accounts ORDER BY id LIMIT 1")["id"]
+    ag = server.q1("SELECT id FROM agents ORDER BY id LIMIT 1")["id"]
+    with server.tx() as db:
+        cur = db.execute("INSERT INTO alerts(account_id, agent_id, run_id, ts, kind, message, delivered, attempts, next_try)"
+                         " VALUES(?,?,?,?,?,?,0,0,0)", (acc, ag, None, time.time(), "FAILED", "bezorging faalde"))
+        aid = cur.lastrowid
+
+    geleverd = []
+    server._deliver_q.put = lambda x: geleverd.append(x)   # de echte bezorging niet aanroepen
+    try:
+        assert server.retry_undelivered() >= 1
+        assert aid in geleverd, "de onbezorgde alert werd niet opnieuw aangeboden"
+        # meteen daarna niet opnieuw: next_try staat vooruit
+        geleverd.clear()
+        server.retry_undelivered()
+        assert aid not in geleverd, "dezelfde alert werd binnen de backoff nog een keer aangeboden"
+
+        # na genoeg pogingen geeft hij het op in plaats van eeuwig te blijven proberen
+        with server.tx() as db:
+            db.execute("UPDATE alerts SET attempts=?, next_try=0 WHERE id=?", (server.RETRY_MAX_ATTEMPTS, aid))
+        geleverd.clear()
+        server.retry_undelivered()
+        assert aid not in geleverd, "alert werd na de bovengrens nog steeds opnieuw geprobeerd"
+
+        # en een alert in de afkoelperiode (delivered=-1) blijft er buiten
+        with server.tx() as db:
+            db.execute("UPDATE alerts SET delivered=-1, attempts=0, next_try=0 WHERE id=?", (aid,))
+        geleverd.clear()
+        server.retry_undelivered()
+        assert aid not in geleverd, "een afgekoelde alert hoort niet verstuurd te worden"
+    finally:
+        del server._deliver_q.put
+
+
+def test_status_lists_alert_delivery_outage():
+    """96 procent bezorging naast 'No outages' is een tegenspraak; die mag niet terugkomen."""
+    cur = int(time.time() // 60)
+    with server.tx() as db:
+        for i in range(120):
+            db.execute("INSERT OR REPLACE INTO heartbeats(minute, alerts_ok) VALUES(?,?)",
+                       (cur - 200 + i, 0 if 20 <= i < 80 else 1))
+    s = server.status_summary()
+    alert_inc = [i for i in s["incidents"] if i["component"] == "alerts"]
+    assert alert_inc, "een gat in de bezorging levert geen incident op"
+    assert max(i["minutes"] for i in alert_inc) >= 55
