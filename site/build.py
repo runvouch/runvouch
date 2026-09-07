@@ -19,7 +19,10 @@ def _pkg_version():
     return m.group(1) if m else "unknown"
 
 VERSION = _pkg_version()
-# verified sources per article (only URLs that resolve); anything we cannot link, we do not claim
+if VERSION == "unknown":
+    # De changelog belooft dat dit hetzelfde getal is als /health, PyPI en npm geven. Kan de
+    # bouw het pakket niet lezen, dan is die belofte niet te houden en publiceren we niets.
+    raise SystemExit("build gestopt: versie niet uit packaging/pypi/pyproject.toml te lezen")
 BASE = "https://runvouch.com"
 API = "https://api.runvouch.com"
 TODAY = datetime.date.today().isoformat()
@@ -42,16 +45,21 @@ elif STRIPE_LIVE:
 else:
     PROCESSOR, SOLO_URL, TEAM_URL, EMAIL_PARAM = ("Lemon Squeezy" if LS_LIVE else "Polar"), "https://runvouch.lemonsqueezy.com/checkout/buy/41587f68-6ccd-490c-b3ca-8cb781045b22", "https://runvouch.lemonsqueezy.com/checkout/buy/f0589446-3a09-469b-9381-c1e1f9af45e9", "checkout[email]"
 
-# Data uit de git-historie van dit archief, niet uit het hoofd.
+# Data en inhoud uit de git-historie van dit archief, niet uit het hoofd. De provider staat
+# er als vaste tekst en niet als PROCESSOR-variabele: die geeft de HUIDIGE provider, en dan
+# leest de regel van 25 augustus alsof Polar er toen al stond (gemeld 7 sep 2026).
 RELEASES = [
     ("0.3.3", "2026-08-26", ["<code>pip install runvouch</code> and <code>npm install runvouch</code>: client plus the <code>rv</code> CLI, hosted API by default.",
-                             "Listed in the MCP registry with a verifiable proof link."]),
+                             "Listed in the MCP registry with a verifiable proof link.",
+                             "Subscriptions moved from Lemon Squeezy to Polar, with billing mail on its webhook."]),
     ("0.3.2", "2026-08-26", ["Claude Code plugin: skill, agent and the <code>/vouch</code> command.",
                              "Claude Desktop bundle (<code>.mcpb</code>)."]),
     ("0.3",   "2026-08-25", ["Public launch on runvouch.com and api.runvouch.com.",
+                             "Dead man's switch, cost cap and outcome check.",
                              "Eight detectors: MISSED, FAILED, NO_EVIDENCE, RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED.",
-                             "MCP server and the zero-dependency <code>rv</code> CLI with fail-open.",
-                             "Hashed keys, rate limits, self-serve signup, subscriptions via " + PROCESSOR + "."]),
+                             "MCP server and the zero-dependency <code>rv</code> CLI with fail-open."]),
+    ("0.2",   "2026-08-25", ["Hashed API keys, rate limits, CORS, self-serve signup and key rotation.",
+                             "Deploy documentation for Cloudflare Tunnel and nginx."]),
 ]
 # Losse pakketten met hun eigen nummering; anders lijkt 0.1.3 een stap terug.
 SIDE_RELEASES = [("n8n-nodes-runvouch 0.1.3", "2026-08-28", "n8n community node, published with provenance.")]
@@ -937,7 +945,7 @@ fetch(SAPI+'/status.json').then(r=>r.json()).then(j=>{
   const t=(j.time||'').replace('T',' ').replace('Z',' UTC');
   document.getElementById('s-meta').textContent=j.measured_since?('Last heartbeat '+(j.last_heartbeat_age_s==null?'unknown':j.last_heartbeat_age_s+' s ago')+', checked '+t+'. Measured since '+j.measured_since+'; windows that start before that date are measured from it.'):'No heartbeat record yet.';
   const inc=j.incidents||[];
-  document.getElementById('s-incidents').innerHTML=inc.length?'<table><tr><th>Started (UTC)</th><th>Component</th><th>Duration</th></tr>'+inc.slice().reverse().map(i=>'<tr><td>'+i.start.replace('T',' ').replace('Z','')+'</td><td>'+i.component+'</td><td>'+i.minutes+' min'+(i.ongoing?' (ongoing)':'')+'</td></tr>').join('')+'</table>':'No outages since measurement began on '+(j.measured_since||'-')+'.';
+  document.getElementById('s-incidents').innerHTML=inc.length?'<table><tr><th>Started (UTC)</th><th>Component</th><th>Duration</th></tr>'+inc.slice().reverse().map(i=>'<tr><td>'+i.start.replace('T',' ').replace('Z','')+'</td><td>'+i.component+'</td><td>'+i.minutes+' min'+(i.ongoing?' (ongoing)':'')+'</td></tr>').join('')+'</table>'+((j.incidents_total||inc.length)>inc.length?'<p class="small muted">Showing the '+inc.length+' most recent of '+j.incidents_total+' recorded outages. Every minute we could not deliver is counted in the percentages above.</p>':''):'No outages since measurement began on '+(j.measured_since||'-')+'.';
   const p=j.sealed_days||{};if(p.count){document.getElementById('s-proof').insertAdjacentHTML('afterbegin',p.count+' sealed days so far, the latest '+p.last+'. ')}
 }).catch(()=>{document.getElementById('s-meta').textContent='The heartbeat record could not be loaded.';document.getElementById('s-incidents').textContent='Unknown: the heartbeat record could not be loaded.'});
 </script>
@@ -955,6 +963,7 @@ page("/changelog", "Changelog | RunVouch", "What's new in RunVouch: releases of 
 ARTICLES = json.loads((ROOT / "articles.json").read_text(encoding="utf-8"))["articles"] if (ROOT / "articles.json").exists() else []
 BLOG_DATE = "2026-08-25"   # terugval voor de eerste lichting artikelen; nieuwe dragen hun eigen "date"
 
+# verified sources per article (only URLs that resolve); anything we cannot link, we do not claim
 SOURCES = {
     "claude-code-cron-unexpected-api-bill-runaway-cost-overnight": [("Claude Code issue #37686: $1,800+ in two days", "https://github.com/anthropics/claude-code/issues/37686"), ("dev.to: \"I let my AI agent run overnight, it cost $437\"", "https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7")],
     "claude-code-routine-failed-silently-scheduled-task-didnt-run": [("Claude Code docs: scheduled tasks, limitations", "https://code.claude.com/docs/en/scheduled-tasks#limitations"), ("Claude Code docs: routines", "https://code.claude.com/docs/en/routines")],
@@ -977,7 +986,7 @@ for art in ARTICLES:
                    "mainEntityOfPage": f"{BASE}/blog/{art['slug']}", "image": BASE + "/og.png"}]
     t = art["title"] if len(art["title"]) <= 62 else art["title"][:59].rsplit(" ", 1)[0] + "…"
     page(f"/blog/{art['slug']}", t, art["description"], body, ld, article=True)
-idx = "".join(f'<a class="card" href="/blog/{a["slug"]}"><h3>{a["title"]}</h3><p>{a["description"]}</p><p class="small muted" style="margin-top:.5rem">{BLOG_DATE}</p></a>' for a in ARTICLES)
+idx = "".join(f'<a class="card" href="/blog/{a["slug"]}"><h3>{a["title"]}</h3><p>{a["description"]}</p><p class="small muted" style="margin-top:.5rem">{a.get("date") or BLOG_DATE}</p></a>' for a in sorted(ARTICLES, key=lambda x: x.get("date") or BLOG_DATE, reverse=True))
 page("/blog/", "RunVouch field notes: unattended agents in practice", "Incident write-ups and guides on scheduled AI agents that fail silently or run up bills, and the checks that catch them.", f'''<main><div class="wrap doc"><h1>Field notes</h1><p class="lead muted">How unattended agents fail in practice, with sources, and the check that catches each one.</p><div class="grid g2">{idx}</div>
 <h2 style="margin-top:2.5rem">Coming up</h2><ul class="muted"><li>Monitoring a headless claude -p job: hooks, exit codes, cost, alerts</li></ul></div></main>''', [ORG_LD])
 
@@ -1039,20 +1048,31 @@ API base: {API} (header X-API-Key).
 """)
 (OUT / ".well-known").mkdir(exist_ok=True)
 (OUT / ".well-known" / "security.txt").write_text(f"Contact: https://runvouch.com/contact?topic=security\nExpires: {datetime.date.today().year+1}-12-31T00:00:00.000Z\nPreferred-Languages: en, nl\nCanonical: {BASE}/.well-known/security.txt\n")
+_RFC_DAY = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_RFC_MON = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
 def _rfc822(d):
     """Datum als RFC 822, zoals RSS eist. Stond hier utcnow(), waardoor alle tien items
-    de bouwtijd droegen en elke lezer dacht dat alles vandaag geplaatst was (gemeten 7 sep 2026)."""
-    return datetime.datetime.strptime(d, "%Y-%m-%d").strftime("%a, %d %b %Y 00:00:00 GMT")
+    de bouwtijd droegen en elke lezer dacht dat alles vandaag geplaatst was (gemeten 7 sep 2026).
+    Namen uit een vaste tabel en niet uit strftime: %a en %b volgen LC_TIME van de bouwomgeving,
+    en een RSS-lezer verwerpt een Nederlandse dagnaam."""
+    dt = datetime.date.fromisoformat(d)
+    return f"{_RFC_DAY[dt.weekday()]}, {dt.day:02d} {_RFC_MON[dt.month - 1]} {dt.year} 00:00:00 GMT"
 
-_items = "".join(
-    f"<item><title>{a['title']}</title><link>{BASE}/blog/{a['slug']}</link>"
-    f"<guid isPermaLink=\"true\">{BASE}/blog/{a['slug']}</guid>"
-    f"<description>{a['description']}</description>"
-    f"<pubDate>{_rfc822(a.get('date') or BLOG_DATE)}</pubDate></item>"
-    for a in sorted(ARTICLES, key=lambda x: x.get("date") or BLOG_DATE, reverse=True))
-_items += (f"<item><title>{RELEASES[0][0]}, latest release</title><link>{BASE}/changelog</link>"
-           f"<guid isPermaLink=\"false\">runvouch-release-{RELEASES[0][0]}</guid>"
-           f"<pubDate>{_rfc822(RELEASES[0][1])}</pubDate></item>")
+_feed_rows = [(a.get("date") or BLOG_DATE,
+               f"<item><title>{a['title']}</title><link>{BASE}/blog/{a['slug']}</link>"
+               f"<guid isPermaLink=\"true\">{BASE}/blog/{a['slug']}</guid>"
+               f"<description>{a['description']}</description>"
+               f"<pubDate>{_rfc822(a.get('date') or BLOG_DATE)}</pubDate></item>")
+              for a in ARTICLES]
+_feed_rows.append((RELEASES[0][1],
+                   f"<item><title>{RELEASES[0][0]}, latest release</title><link>{BASE}/changelog</link>"
+                   f"<guid isPermaLink=\"false\">runvouch-release-{RELEASES[0][0]}</guid>"
+                   f"<pubDate>{_rfc822(RELEASES[0][1])}</pubDate></item>"))
+# Nieuwste eerst, met de releaseregel op zijn eigen datum in de rij; hij stond achteraan
+# na oudere artikelen, waardoor de feed niet meer op datum aflopend was.
+_items = "".join(row for _, row in sorted(_feed_rows, key=lambda x: x[0], reverse=True))
 (OUT / "feed.xml").write_text(f'<?xml version="1.0"?><rss version="2.0"><channel><title>RunVouch changelog</title><link>{BASE}/changelog</link><description>What\'s new in RunVouch</description>' + _items + '</channel></rss>')
 # rv client download
 import shutil

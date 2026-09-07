@@ -54,6 +54,21 @@ PUBLIC_URL = os.getenv("RUNVOUCH_PUBLIC_URL", "http://localhost:8787")
 STORM_THRESHOLD = int(os.getenv("RUNVOUCH_STORM_THRESHOLD", "8"))
 DRIFT_K = float(os.getenv("RUNVOUCH_DRIFT_K", "4.0"))
 SWEEP_SECONDS = int(os.getenv("RUNVOUCH_SWEEP_SECONDS", "30"))
+
+
+def _pkg_version() -> str:
+    """Single source for the version we report. /health used to hardcode it while the changelog
+    said 0.2 and PyPI said 0.3.3, so a buyer could see three different numbers (7 Sep 2026)."""
+    try:
+        m = re.search(r'^version = "([^"]+)"',
+                      (Path(__file__).resolve().parent.parent / "packaging" / "pypi" / "pyproject.toml").read_text(encoding="utf-8"),
+                      re.M)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
+
+
+VERSION = _pkg_version()
 LS_WEBHOOK_SECRET = os.getenv("LS_WEBHOOK_SECRET", "")
 LS_VARIANT_PLANS = {k: v for k, v in (x.split(":") for x in os.getenv("LS_VARIANT_PLANS", "").split(",") if ":" in x)}  # "123:solo,456:team"
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
@@ -405,9 +420,9 @@ def _deliver(alert_id: int) -> None:
                        (att, time.time() + _retry_backoff(att), alert_id))
 
 
-RETRY_BACKOFF_S = (60, 300, 900, 3600)   # 1, 5, 15 en 60 minuten
+RETRY_BACKOFF_S = (60, 300, 900, 3600)   # 1, 5, 15 and 60 minutes
 RETRY_MAX_ATTEMPTS = len(RETRY_BACKOFF_S) + 1
-RETRY_WINDOW_S = 24 * 3600               # ouder dan een dag opnieuw sturen helpt niemand meer
+RETRY_WINDOW_S = 24 * 3600               # resending something older than a day helps nobody
 
 
 def _retry_backoff(attempt: int) -> float:
@@ -415,26 +430,25 @@ def _retry_backoff(attempt: int) -> float:
 
 
 def retry_undelivered(now: Optional[float] = None) -> int:
-    """Alerts die niet bezorgd raakten opnieuw aanbieden.
+    """Offer alerts that never reached anyone to the deliverer again.
 
-    Waarom dit bestaat. Op 4 en 6 september 2026 mislukte de Telegram-bezorging van twee
-    DRIFT-alerts voor archiveer-vacatures. Ze werden een keer geprobeerd, kregen delivered=0
-    en daar bleef het bij: ruim drie uur lang stond de bezorging op de statuspagina op falen
-    zonder dat er iemand iets van hoorde. Een waakhond die zijn eigen alarm stil laat vallen
-    verkoopt precies wat hij belooft te voorkomen. delivered=-1 blijft eruit, dat is de
-    afkoelperiode en die hoort niet verstuurd te worden.
+    On 4 and 6 September 2026 Telegram delivery failed for two DRIFT alerts. They were tried
+    once, stored with delivered=0, and that was it: for over three hours the status page showed
+    failing delivery and nobody was told. A watchdog that lets its own alarm die quietly sells
+    exactly what it promises to prevent. delivered=-1 stays out, that is the cooldown and is
+    not meant to be sent.
     """
     now = now or time.time()
-    rijen = qa("SELECT id FROM alerts WHERE delivered=0 AND ts>? AND COALESCE(attempts,0)<? "
+    rows_due = qa("SELECT id FROM alerts WHERE delivered=0 AND ts>? AND COALESCE(attempts,0)<? "
                "AND COALESCE(next_try,0)<=? ORDER BY id LIMIT 50",
                now - RETRY_WINDOW_S, RETRY_MAX_ATTEMPTS, now)
-    for r in rijen:
-        # Meteen vooruitzetten: de bezorging loopt in een andere draad, en zonder dit zou de
-        # volgende ronde dezelfde alert nog een keer in de wachtrij zetten.
+    for r in rows_due:
+        # Move next_try forward right away: delivery runs on another thread, and without this
+        # the next sweep would queue the same alert a second time.
         with tx() as db:
             db.execute("UPDATE alerts SET next_try=? WHERE id=?", (now + RETRY_BACKOFF_S[0], r["id"]))
         _deliver_q.put(r["id"])
-    return len(rijen)
+    return len(rows_due)
 
 
 def _deliverer():
@@ -802,19 +816,13 @@ def purged_proof(leaf: sqlite3.Row) -> dict:
 
 HEARTBEAT_KEEP_DAYS = 100
 INCIDENT_GAP_MIN = 3  # minutes without a heartbeat that count as an outage on the public status page
+# Alert delivery is judged per minute, not by a gap, so it needs its own floor. Reusing
+# INCIDENT_GAP_MIN hid every run of three minutes or less: a page could show 96 per cent
+# delivery next to "no outages", which is the contradiction the buyer walk rejected on
+# 7 Sep 2026. Every minute we could not deliver is counted, so the table and the
+# percentage can never disagree again.
+ALERT_OUTAGE_MIN_MINUTES = 1
 
-
-def _pkg_version() -> str:
-    """Versie uit packaging/pypi/pyproject.toml: /health, PyPI, npm en de changelog liepen uit de
-    pas (changelog zei 0.2 terwijl /health 0.3.3 gaf, gemeten 7 sep 2026). Eén bron, geen drift."""
-    try:
-        m = re.search(r'^version = "([^"]+)"', (Path(__file__).resolve().parent.parent / "packaging" / "pypi" / "pyproject.toml").read_text(encoding="utf-8"), re.M)
-        return m.group(1) if m else "unknown"
-    except Exception:
-        return "unknown"
-
-
-VERSION = _pkg_version()
 
 
 def record_heartbeat(now: Optional[float] = None) -> None:
@@ -842,26 +850,28 @@ def status_summary(now: Optional[float] = None) -> dict:
         got = [r for r in rows if r["minute"] >= start]
         windows[label] = {"detectors": round(100 * min(len(got), expected) / expected, 2),
                           "alerts": round(100 * min(sum(r["alerts_ok"] for r in got), expected) / expected, 2), "minutes": expected}
+    # Both components report "start" as the first minute that was bad, so one sorted table
+    # does not mix two meanings.
+    def _stamp(minute):
+        return datetime.utcfromtimestamp(minute * 60).isoformat(timespec="minutes") + "Z"
+
     incidents, prev = [], None
     for r in rows:
         if prev is not None and r["minute"] - prev > INCIDENT_GAP_MIN:
-            incidents.append({"start": datetime.utcfromtimestamp(prev * 60).isoformat(timespec="minutes") + "Z", "minutes": r["minute"] - prev - 1, "component": "detectors"})
+            incidents.append({"start": _stamp(prev + 1), "minutes": r["minute"] - prev - 1, "component": "detectors"})
         prev = r["minute"]
     if prev is not None and cur - prev > INCIDENT_GAP_MIN:
-        incidents.append({"start": datetime.utcfromtimestamp(prev * 60).isoformat(timespec="minutes") + "Z", "minutes": cur - prev - 1, "component": "detectors", "ongoing": True})
-    # Minuten waarin de nieuwste alert onbezorgd stond, horen er ook bij. Zonder dit
-    # meldde de pagina "Alert delivery 96.19%" naast "No outages since ...", en dan is
-    # een van de twee een leugen (gemeten 7 sep 2026 door de koperswandeling).
+        incidents.append({"start": _stamp(prev + 1), "minutes": cur - prev - 1, "component": "detectors", "ongoing": True})
+    # Minutes in which the newest alert sat undelivered are outages too. A missing heartbeat
+    # breaks a run because we have no reading for that minute, so it is not counted either way.
     run_start = run_prev = None
     for r in rows + [{"minute": cur + 1, "alerts_ok": 1}]:
         bad = not r["alerts_ok"]
-        aansluitend = run_prev is not None and r["minute"] == run_prev + 1
-        if bad and aansluitend:
+        if bad and run_prev is not None and r["minute"] == run_prev + 1:
             run_prev = r["minute"]
             continue
-        if run_start is not None and run_prev - run_start + 1 > INCIDENT_GAP_MIN:
-            inc = {"start": datetime.utcfromtimestamp(run_start * 60).isoformat(timespec="minutes") + "Z",
-                   "minutes": run_prev - run_start + 1, "component": "alerts"}
+        if run_start is not None and run_prev - run_start + 1 >= ALERT_OUTAGE_MIN_MINUTES:
+            inc = {"start": _stamp(run_start), "minutes": run_prev - run_start + 1, "component": "alerts"}
             if run_prev >= cur - 1:
                 inc["ongoing"] = True
             incidents.append(inc)
@@ -870,7 +880,8 @@ def status_summary(now: Optional[float] = None) -> dict:
     sealed = q1("SELECT COUNT(*) n, MAX(date) d FROM proof_days")
     return {"time": datetime.utcfromtimestamp(now).isoformat(timespec="seconds") + "Z",
             "measured_since": datetime.utcfromtimestamp(first * 60).strftime("%Y-%m-%d"),
-            "windows": windows, "incidents": incidents[-10:], "last_heartbeat_age_s": int(now - prev * 60),
+            "windows": windows, "incidents": incidents[-20:], "incidents_total": len(incidents),
+            "last_heartbeat_age_s": int(now - prev * 60),
             "sealed_days": {"count": sealed["n"], "last": sealed["d"]}}
 
 

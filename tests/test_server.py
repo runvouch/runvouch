@@ -873,14 +873,66 @@ def test_undelivered_alert_is_retried_and_gives_up():
         del server._deliver_q.put
 
 
-def test_status_lists_alert_delivery_outage():
-    """96 procent bezorging naast 'No outages' is een tegenspraak; die mag niet terugkomen."""
+def _vul_heartbeats(paren):
+    """paren: lijst van (minuut_offset_vanaf_nu, alerts_ok). Negatieve offsets liggen in het verleden."""
     cur = int(time.time() // 60)
     with server.tx() as db:
-        for i in range(120):
-            db.execute("INSERT OR REPLACE INTO heartbeats(minute, alerts_ok) VALUES(?,?)",
-                       (cur - 200 + i, 0 if 20 <= i < 80 else 1))
+        db.execute("DELETE FROM heartbeats")
+        for offset, ok in paren:
+            db.execute("INSERT OR REPLACE INTO heartbeats(minute, alerts_ok) VALUES(?,?)", (cur + offset, ok))
+    return cur
+
+
+def _alert_incidenten():
+    return [i for i in server.status_summary()["incidents"] if i["component"] == "alerts"]
+
+
+def test_status_lists_alert_delivery_outage():
+    """96 procent bezorging naast 'No outages' is een tegenspraak; die mag niet terugkomen."""
+    _vul_heartbeats([(-200 + i, 0 if 20 <= i < 80 else 1) for i in range(120)])
+    inc = _alert_incidenten()
+    assert inc, "een aaneengesloten gat in de bezorging levert geen incident op"
+    assert max(i["minutes"] for i in inc) >= 55
+    assert all(i["start"].endswith("Z") for i in inc)
+
+
+def test_short_delivery_outage_is_not_swallowed():
+    """De oude drempel verstopte reeksen van drie minuten of korter, en juist die maakten
+    het beeld dat de koperswandeling afkeurde: een laag percentage naast 'No outages'."""
+    _vul_heartbeats([(-100 + i, 0 if i in (10, 11, 12) else 1) for i in range(100)] )
+    inc = _alert_incidenten()
+    assert len(inc) == 1 and inc[0]["minutes"] == 3, f"korte storing niet gemeld: {inc}"
+    # en een losse minuut ook niet wegmoffelen, want hij zit wel in het percentage
+    _vul_heartbeats([(-100 + i, 0 if i == 40 else 1) for i in range(100)])
+    assert [i["minutes"] for i in _alert_incidenten()] == [1]
+
+
+def test_ongoing_delivery_outage_is_flagged():
+    """Loopt de storing nu nog, dan moet de pagina dat zeggen en niet 'hersteld' suggereren."""
+    _vul_heartbeats([(-40 + i, 0 if i >= 35 else 1) for i in range(41)])
+    inc = _alert_incidenten()
+    assert inc and inc[-1].get("ongoing"), f"lopende storing niet als ongoing gemeld: {inc}"
+
+
+def test_missing_heartbeat_splits_delivery_outage():
+    """Een ontbrekende minuut breekt de reeks: over die minuut is geen meting, dus die telt
+    in geen van beide helften mee. Dat mag, maar de twee helften moeten wel gemeld worden."""
+    paren = [(-100 + i, 1) for i in range(100)]
+    paren = [(o, 0 if 10 <= o + 100 <= 19 else ok) for o, ok in paren]
+    paren = [(o, ok) for o, ok in paren if o + 100 != 15]      # minuut 15 ontbreekt
+    _vul_heartbeats(paren)
+    inc = _alert_incidenten()
+    assert len(inc) == 2, f"verwacht twee helften, kreeg {inc}"
+    assert sum(i["minutes"] for i in inc) == 9, f"gemeten minuten kloppen niet: {inc}"
+
+
+def test_status_reports_total_when_list_is_capped():
+    """Twintig regels op de pagina mogen niet lezen als 'dit was alles'."""
+    paren = []
+    for i in range(300):
+        paren.append((-400 + i, 0 if i % 10 == 0 else 1))
+    _vul_heartbeats(paren)
     s = server.status_summary()
-    alert_inc = [i for i in s["incidents"] if i["component"] == "alerts"]
-    assert alert_inc, "een gat in de bezorging levert geen incident op"
-    assert max(i["minutes"] for i in alert_inc) >= 55
+    assert s["incidents_total"] >= 25
+    assert len(s["incidents"]) <= 20
+    assert s["incidents_total"] > len(s["incidents"])
