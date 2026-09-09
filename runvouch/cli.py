@@ -3,6 +3,7 @@
 rv: RunVouch client CLI. Zero dependencies (stdlib only) so it runs in any cron/agent environment.
 
   rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence]
+  rv agent  NAME --pause | --resume   (stop or resume watching a job you switched off)
   rv run    NAME [--evidence-file PATH] [--evidence-url URL] [--source cron] -- CMD ARGS...
   rv start  NAME            -> prints run_id
   rv tool   RUN_ID TOOL [--input JSON] [--cost X] [--tokens N] [--fail]
@@ -53,6 +54,11 @@ def main(argv=None):
     a = sub.add_parser("agent"); a.add_argument("name"); a.add_argument("--cadence"); a.add_argument("--grace", default="15m")
     a.add_argument("--max-runtime", default="1h"); a.add_argument("--cap-run-cost", type=float); a.add_argument("--cap-day-cost", type=float)
     a.add_argument("--cap-run-tokens", type=int); a.add_argument("--evidence", action="store_true")
+    # Zonder dit kon je een baan alleen via de API laten rusten. Zet je een cron-taak uit,
+    # dan blijft de wacht hem missen: x-queue ging op 1 september 2026 uit de crontab en
+    # meldde daarna negen keer MISSED voor werk dat niemand meer verwachtte.
+    a.add_argument("--pause", action="store_true", help="stop watching this agent (a switched-off job is not a missed job)")
+    a.add_argument("--resume", action="store_true", help="watch it again")
     r = sub.add_parser("run"); r.add_argument("name"); r.add_argument("--evidence-file", action="append", default=[])
     r.add_argument("--evidence-url", action="append", default=[]); r.add_argument("--source", default="cron")
     r.add_argument("--log", help="append the command's stdout+stderr to this file (rv writes it, so it can double as evidence)")
@@ -71,6 +77,9 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     if args.cmd == "agent":
+        if args.pause or args.resume:
+            print(api("POST", f"/v1/agents/{args.name}/pause?paused={'true' if args.pause else 'false'}", {}))
+            return
         print(api("POST", "/v1/agents", {"name": args.name, "cadence_s": dur(args.cadence) if args.cadence else None,
                                          "grace_s": dur(args.grace), "max_runtime_s": dur(args.max_runtime),
                                          "cap_run_cost": args.cap_run_cost, "cap_day_cost": args.cap_day_cost,
