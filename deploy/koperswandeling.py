@@ -63,11 +63,17 @@ def main() -> int:
     path = os.path.join(OUT, time.strftime("%Y-%m-%d") + ".md")
     open(path, "w").write(out + "\n")
     print(out)
+    kon_niet = out.startswith("Koperswandeling kon niet worden afgerond")
     if out.startswith("OK"):
         telegram("Koperswandeling " + time.strftime("%Y-%m-%d") + ": OK, beide sites zonder defecten.")
     else:
         telegram("Koperswandeling " + time.strftime("%Y-%m-%d") + "\n\n" + out)
-    return 0 if out.startswith("OK") else 1
+    # Defecten vinden is het werk, niet een storing. Vroeger gaf dit exit 1, waarna
+    # RunVouch er een FAILED-alarm bovenop deed: twee meldingen voor hetzelfde, en de
+    # tweede leest als een crash terwijl het rapport hierboven gewoon is aangekomen
+    # (gemeld 9 september 2026). Alleen als de wandeling zelf niet kon lopen is er
+    # echt iets stuk, en dan hoort RunVouch het wel te weten.
+    return 1 if kon_niet else 0
 
 
 if __name__ == "__main__":

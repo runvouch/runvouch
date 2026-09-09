@@ -489,9 +489,20 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
         # that takes 2 seconds, or a log line that is 60 bytes longer, is noise, not drift
         floor = 5.0 if label == "duration" else 512.0
         mad = max(_median([abs(x - med) for x in series]), med * 0.1, floor)
-        if abs(cur - med) > DRIFT_K * mad and abs(cur - med) > 0.25 * max(med, 1.0):
-            raise_alert(agent["account_id"], agent["id"], run["id"], "DRIFT",
-                        f"{label} {cur:.0f} vs trailing median {med:.0f} (MAD {mad:.0f}). Task may be silently doing something else.")
+        if abs(cur - med) <= DRIFT_K * mad or abs(cur - med) <= 0.25 * max(med, 1.0):
+            continue
+        # A median plus MAD assumes one normal level. Plenty of real jobs have two:
+        # an incremental pass on most days and a full pass on the others, or a
+        # weekday load and a weekend load. Our own archiveer-vacatures alternates
+        # between roughly 350 and 700 seconds, and it reported DRIFT on every long
+        # run while nothing was wrong (8 Sep 2026). So if this value matches a level
+        # the job has reached more than once before, it is a known mode and not a
+        # deviation. A value the job has never produced still alerts.
+        dichtbij = sum(1 for x in series if abs(x - cur) <= max(mad, 0.1 * max(abs(cur), 1.0)))
+        if dichtbij >= 2:
+            continue
+        raise_alert(agent["account_id"], agent["id"], run["id"], "DRIFT",
+                    f"{label} {cur:.0f} vs trailing median {med:.0f} (MAD {mad:.0f}). Task may be silently doing something else.")
 
 
 def check_budget(agent: sqlite3.Row, run: sqlite3.Row) -> None:

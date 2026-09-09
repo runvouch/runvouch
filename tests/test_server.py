@@ -936,3 +936,29 @@ def test_status_reports_total_when_list_is_capped():
     assert s["incidents_total"] >= 25
     assert len(s["incidents"]) <= 20
     assert s["incidents_total"] > len(s["incidents"])
+
+
+def test_drift_accepts_a_recurring_second_mode():
+    """Een baan met twee normale standen mag niet elke lange ronde alarm slaan.
+
+    Waarom deze test bestaat: archiveer-vacatures wisselt om de dag tussen ongeveer
+    350 en 700 seconden. De mediaan met MAD ziet de lange stand als afwijking en
+    meldde DRIFT op elke lange ronde, terwijl er niets mis was (8 september 2026).
+    """
+    c.post("/v1/agents", json={"name": "bimodaal"}, headers=H)
+    voor = len(alerts("DRIFT"))
+    # afwisselend klein en groot, allebei echte werkstanden
+    for i, n in enumerate((10000, 20000, 10100, 20200, 9900, 19800, 10050)):
+        rid = c.post("/v1/runs/start", json={"agent": "bimodaal"}, headers=H).json()["run_id"]
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": n}, headers=H)
+    assert len(alerts("DRIFT")) == voor, "de tweede werkstand werd als afwijking gemeld"
+
+    # nog een keer de grote stand: bekend, dus stil
+    rid = c.post("/v1/runs/start", json={"agent": "bimodaal"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 20100}, headers=H)
+    assert len(alerts("DRIFT")) == voor, "een bekende werkstand mag geen alarm geven"
+
+    # een waarde die deze baan nooit heeft gehaald, moet wel gemeld worden
+    rid = c.post("/v1/runs/start", json={"agent": "bimodaal"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 200}, headers=H)
+    assert len(alerts("DRIFT")) > voor, "een volledig nieuwe waarde hoort wel alarm te geven"
