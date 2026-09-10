@@ -85,5 +85,33 @@ PY
     post /v1/runs/end "{\"run_id\":\"$RID\",\"status\":\"ok\",\"cost\":$COST,\"tokens\":$TOK,\"evidence\":$EV,\"meta\":{\"cost_source\":\"transcript\"}}" >/dev/null
     rm -f $STATE_GLOB
     ;;
+  fail)
+    # StopFailure: the turn ended on an API error (rate_limit, authentication_failed, billing_error,
+    # server_error and the rest). This is the one an unattended run needs most: an expired session at
+    # 03:00 used to arrive as a finished run, because Stop never fires and nothing else did either.
+    RID=$(cat $STATE_GLOB 2>/dev/null | head -1); [ -z "$RID" ] && exit 0
+    python3 - "$RID" <<'PY' 2>/dev/null | { read -r BODY; [ -n "$BODY" ] && post /v1/runs/end "$BODY" >/dev/null; }
+import json, os, sys
+d = json.loads(os.environ.get("AW_IN") or "{}")
+soort = d.get("error_type") or "unknown"
+tekst = (d.get("error_message") or "")[:400]
+print(json.dumps({"run_id": sys.argv[1], "status": "fail",
+                  "meta": {"error": f"{soort}: {tekst}".strip(": "), "error_type": soort, "source": "StopFailure"}}))
+PY
+    rm -f $STATE_GLOB
+    ;;
+  sessionend)
+    # Only reached with a run still open, so Stop and StopFailure both never came: the session was
+    # killed, cleared or exited mid-turn. A watchdog calls that a failure, not a finished job.
+    RID=$(cat $STATE_GLOB 2>/dev/null | head -1); [ -z "$RID" ] && exit 0
+    python3 - "$RID" <<'PY' 2>/dev/null | { read -r BODY; [ -n "$BODY" ] && post /v1/runs/end "$BODY" >/dev/null; }
+import json, os, sys
+d = json.loads(os.environ.get("AW_IN") or "{}")
+reden = d.get("end_reason") or "other"
+print(json.dumps({"run_id": sys.argv[1], "status": "fail",
+                  "meta": {"error": f"session ended ({reden}) before the turn finished", "source": "SessionEnd"}}))
+PY
+    rm -f $STATE_GLOB
+    ;;
 esac
 exit 0

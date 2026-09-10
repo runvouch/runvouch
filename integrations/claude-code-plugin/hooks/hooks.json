@@ -8,6 +8,12 @@
     ],
     "Stop": [
       { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/rv-hook.sh end" } ] }
+    ],
+    "StopFailure": [
+      { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/rv-hook.sh fail" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/rv-hook.sh sessionend" } ] }
     ]
   }
 }

@@ -1,8 +1,17 @@
 {
   "name": "runvouch",
-  "version": "0.1.0",
-  "description": "The watchdog for scheduled Claude Code agents: proof the run did the job, and an alert the moment it doesn't — missed runs, silent failures (green != done), retry storms, runaway cost, drift. Email/Telegram/Slack/webhook.",
-  "author": { "name": "RunVouch" },
+  "version": "0.2.0",
+  "description": "The watchdog for scheduled Claude Code agents: proof the run did the job, and an alert the moment it does not. Missed runs, silent failures (green is not done), API errors that end the turn, retry storms, runaway cost, drift. Email, Telegram, Slack or webhook.",
+  "author": {
+    "name": "RunVouch"
+  },
   "homepage": "https://runvouch.com",
-  "keywords": ["monitoring", "watchdog", "cost", "routines", "cron", "reliability"]
+  "keywords": [
+    "monitoring",
+    "watchdog",
+    "cost",
+    "routines",
+    "cron",
+    "reliability"
+  ]
 }

@@ -1109,3 +1109,56 @@ def test_ping_url_respects_a_paused_agent():
     c.post("/v1/agents/op-slot/pause", params={"paused": "true"}, headers=H)
     assert c.get(pad).text == "PAUSED"
     assert c.get("/v1/agents/op-slot/runs", headers=H).json() == []
+
+
+# ───────────────────────────── Claude Code plugin: een afgebroken sessie is geen geslaagde run ─────────────────────────────
+def test_plugin_reports_api_failure_and_a_killed_session():
+    """De Stop-hook postte altijd status ok, dus FAILED kon nooit uit de plugin komen (audit 1.3).
+
+    Een verlopen sessie om 03:00 kwam binnen als geslaagde run. Claude Code heeft daar StopFailure
+    voor, met error_type en error_message, en SessionEnd met end_reason voor een sessie die
+    halverwege stopt.
+    """
+    import http.server
+    import subprocess
+    import threading as _th
+
+    ontvangen = []
+
+    class _Vang(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            ontvangen.append((self.path, json.loads(self.rfile.read(n) or b"{}")))
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Vang)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    hook = os.path.join(os.path.dirname(os.path.dirname(__file__)), "integrations/claude-code-plugin/scripts/rv-hook.sh")
+    omgeving = {**os.environ, "RUNVOUCH_KEY": "rv_test", "RUNVOUCH_AGENT": "plugin-proef",
+                "RUNVOUCH_URL": f"http://127.0.0.1:{srv.server_address[1]}", "CLAUDE_SESSION_ID": "s1",
+                "TMPDIR": tempfile.mkdtemp(prefix="runvouch-hook-")}
+
+    def _draai(actie, payload):
+        open(os.path.join(omgeving["TMPDIR"], "runvouch-plugin-proef-1-s1.run"), "w").write("run-42")
+        ontvangen.clear()
+        subprocess.run(["bash", hook, actie], input=json.dumps(payload), text=True, env=omgeving, timeout=30)
+        return ontvangen[-1][1] if ontvangen else None
+
+    try:
+        stuk = _draai("fail", {"hook_event_name": "StopFailure", "error_type": "authentication_failed",
+                               "error_message": "OAuth session expired and could not be refreshed"})
+        assert stuk and stuk["status"] == "fail", "een API-fout mag niet als geslaagde run binnenkomen"
+        assert stuk["meta"]["error_type"] == "authentication_failed"
+        assert "OAuth session expired" in stuk["meta"]["error"]
+
+        gekapt = _draai("sessionend", {"hook_event_name": "SessionEnd", "end_reason": "other"})
+        assert gekapt and gekapt["status"] == "fail" and "other" in gekapt["meta"]["error"]
+
+        klaar = _draai("end", {"hook_event_name": "Stop"})
+        assert klaar and klaar["status"] == "ok", "een normale afronding blijft ok"
+    finally:
+        srv.shutdown()
