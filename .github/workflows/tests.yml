@@ -1,0 +1,30 @@
+# Runs the suite on every push and pull request. The tests need no network and no secrets:
+# they use a temporary SQLite file, keep the sweeper off (RUNVOUCH_NO_SWEEP) and stub the
+# outbound side, so a fork's pull request runs them exactly like we do here.
+#
+# Why this exists: until now the only thing standing between a broken detector and production
+# was somebody remembering to type pytest.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    name: pytest on ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]   # 3.10 is what production runs, 3.13 catches what is coming
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests
