@@ -116,8 +116,23 @@ def main(argv=None):
             return 0
         rid = r0.get("run_id") if r0 else None
         t0 = time.time()
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        # The job gets its own run id, so it can add tool calls or evidence to the run it is already in.
+        env = {**os.environ, "RUNVOUCH_AGENT": args.name, **({"RUNVOUCH_RUN_ID": rid} if rid else {})}
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
         out = (proc.stdout or "") + (proc.stderr or "")
+        # A job that knows what it spent says so on a line of its own: RUNVOUCH_COST=0.82. Without this the
+        # cost caps only work for jobs that speak the API, and ours reported 0.00 on 3733 runs while five of
+        # them were paying for Claude calls. Last line wins, anything unparsable is ignored.
+        cost, tokens = 0.0, 0
+        for line in out.splitlines():
+            k, _, v = line.strip().partition("=")
+            try:
+                if k == "RUNVOUCH_COST":
+                    cost = float(v)
+                elif k == "RUNVOUCH_TOKENS":
+                    tokens = int(v)
+            except ValueError:
+                pass
         if args.log:
             with open(args.log, "a") as lf:
                 lf.write(out)
@@ -130,7 +145,7 @@ def main(argv=None):
         for u in args.evidence_url:
             evidence[f"url:{u}"] = {"type": "url", "url": u, "expect": 200}
         res = rid and api("POST", "/v1/runs/end", {"run_id": rid, "status": "ok" if proc.returncode == 0 else "fail",
-                                           "output_bytes": len(out.encode()), "evidence": evidence,
+                                           "output_bytes": len(out.encode()), "evidence": evidence, "cost": cost, "tokens": tokens,
                                            "meta": {"exit": proc.returncode, "error": (proc.stderr or "")[-500:] if proc.returncode else ""}}, soft=True)
         sys.exit(proc.returncode)
     elif args.cmd == "status":

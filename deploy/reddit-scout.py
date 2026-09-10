@@ -156,6 +156,7 @@ def thread(url: str) -> str:
 
 
 CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")  # same CLI the blog engine uses
+UITGAVEN: list[float] = []   # kosten per Claude-aanroep; rv run leest de som uit RUNVOUCH_COST
 STYLE = """- Plain ASCII, English, 60-140 words, no headings, no emoji, no em dashes, no "---" or other separator lines.
 - Write like a person typing a reply, not like a model: contractions (it's, don't), sentences of uneven length, one concrete
   experience beats three general points, at most one short list and only if it really helps. Avoid stock phrases such as
@@ -213,7 +214,9 @@ def draft(thread_text: str, bron: str = "reddit", followup=None) -> str:
         extra = "" if followup is None else FOLLOWUP + "\n\nREPLY WE RECEIVED (as pasted by the owner, may be empty):\n" + followup
         r = subprocess.run([CLAUDE, "-p", rules + avoid + extra + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
                            capture_output=True, text=True, timeout=240)
-        out = json.loads(r.stdout or "{}").get("result", "").strip()
+        antwoord = json.loads(r.stdout or "{}")
+        UITGAVEN.append(antwoord.get("total_cost_usd", 0) or 0)
+        out = antwoord.get("result", "").strip()
         return "" if (not out or out.upper().startswith("SKIP")) else out
     except Exception as e:
         print("draft:", e, file=sys.stderr)
@@ -310,6 +313,7 @@ def main() -> int:
         seen |= {p["url"] for p in top}
         os.makedirs(os.path.dirname(STATE), exist_ok=True)
         json.dump(sorted(seen)[-2000:], open(STATE, "w"))
+    print(f"RUNVOUCH_COST={round(sum(UITGAVEN), 6)}")
     return 0
 
 

@@ -5,7 +5,7 @@ A weekly job that counts the open roles of the companies you name, straight from
 ## What you need
 
 - An Apify token (free account, no card): `APIFY_TOKEN`. `job_openings` is free within the first 50 MCP calls a month; this job makes one call per company per week, so up to twelve companies stay free. Beyond that it is $0.20 per job row returned, capped by `MAX_JOBS` (200) in the script; `--spend-cap 10` makes the server refuse further calls once your ledger reaches $10.
-- A RunVouch key (free for 3 agents): `RUNVOUCH_KEY`.
+- A RunVouch key (free for 20 agents): `RUNVOUCH_KEY`.
 - Optional: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for the alert. Without them the alert is printed.
 
 ## Setup

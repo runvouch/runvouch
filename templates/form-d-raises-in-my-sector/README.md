@@ -8,7 +8,7 @@ Form D is the filing a company makes when it raises private money. It is public 
 
 - A DataSignals Events API key. There is a permanent free plan: one stream, 250 events a month, 24 hours behind. No card, no Apify account. Request a key for the stream `private_raise` at https://datasignalslab.com/events-api.html#free-key (it arrives by e-mail; or `curl -X POST https://datasignalslab.com/v1/keys/free -H "content-type: application/json" -d '{"email":"you@company.com","stream":"private_raise"}'`) and put it in `DATASIGNALS_KEY`. Paid plans (from $29 a month) give all twelve streams, more volume and webhooks: https://datasignalslab.com/events-api.html
   Two endpoints need no key at all, so you can look before you ask: `curl https://datasignalslab.com/v1/event-types` and `curl https://datasignalslab.com/v1/health`.
-- A RunVouch key (free for 3 agents): `RUNVOUCH_KEY`.
+- A RunVouch key (free for 20 agents): `RUNVOUCH_KEY`.
 - Optional: a Telegram bot token and chat id (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Without them the script prints the message.
 
 Roughly 5 to 30 Form D raises a day pass the actor's fund filter, so 250 events a month on the free plan does not cover every night. The script stops at the quota and keeps the cursor, nothing is skipped: raise `limit` in `fetch()` on a paid plan, or narrow to what you need by upgrading. Check `quota` in the script output.

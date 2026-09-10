@@ -9,7 +9,7 @@ version: 0.1.0
 RunVouch is a dead man's switch, cost cap and outcome check for unattended agents. This skill teaches the agent to check in.
 
 ## Setup (once)
-1. Get a free key at https://runvouch.com (3 agents free).
+1. Get a free key at https://runvouch.com (20 agents free).
 2. Set in the OpenClaw environment: `RUNVOUCH_KEY=rv_...` and `RUNVOUCH_URL=https://api.runvouch.com`.
 3. Register the agent with a cadence and caps:
    `curl -X POST $RUNVOUCH_URL/v1/agents -H "X-API-Key: $RUNVOUCH_KEY" -H "Content-Type: application/json" -d '{"name":"openclaw-main","cadence_s":900,"grace_s":300,"cap_day_cost":10,"evidence_required":true}'`

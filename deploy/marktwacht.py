@@ -71,7 +71,11 @@ def main() -> int:
     r = subprocess.run([CLAUDE, "-p", BRIEF, "--output-format", "json", "--max-turns", "120",
                         "--allowedTools", "WebSearch,WebFetch,Read"], capture_output=True, text=True, timeout=3000, cwd=ROOT)
     try:
-        out = json.loads(r.stdout or "{}").get("result", "").strip()
+        antwoord = json.loads(r.stdout or "{}")
+        out = antwoord.get("result", "").strip()
+        # rv run leest deze regel en zet de kosten op de run, anders staat de BUDGET-detector
+        # bij onze eigen jobs naar een som van 0.00 te kijken
+        print(f"RUNVOUCH_COST={antwoord.get('total_cost_usd', 0)}")
     except Exception:
         out = ""
     if not out:

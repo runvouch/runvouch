@@ -18,6 +18,7 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 env = {l.split("=", 1)[0]: l.split("=", 1)[1].strip() for l in open(os.path.join(REPO, ".env")) if "=" in l and not l.startswith("#")}
 KEY, URL = env["RUNVOUCH_KEY"], "http://127.0.0.1:8787"
 CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")
+UITGAVEN: list[float] = []   # kosten per herstelpoging; rv run leest de som uit RUNVOUCH_COST
 STATE = os.path.join(REPO, "data", "remediated.json")
 LOCK = os.path.join(REPO, "data", "remediator.lock")
 RETRY_EVERY = 24 * 3600          # one retry + one repair attempt per agent per day
@@ -146,7 +147,9 @@ def repair(agent: str, alert: dict, ctx: dict) -> tuple[str, str]:
         r = subprocess.run([CLAUDE, "-p", prompt, "--output-format", "json", "--max-turns", "60",
                             "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash"],
                            cwd=ctx["repo"], capture_output=True, text=True, timeout=1800)
-        out = json.loads(r.stdout or "{}").get("result", "") or r.stderr[-800:]
+        antwoord = json.loads(r.stdout or "{}")
+        UITGAVEN.append(antwoord.get("total_cost_usd", 0) or 0)
+        out = antwoord.get("result", "") or r.stderr[-800:]
     except subprocess.TimeoutExpired:
         return "FAILED", "de herstelpoging duurde langer dan 30 minuten en is afgebroken"
     except Exception as e:
@@ -208,6 +211,7 @@ def main() -> int:
         api("POST", f"/v1/alerts/{a['id']}/ack"); seen.add(a["id"]); done += 1
     json.dump({"seen": sorted(seen)[-500:], "last": last, "repairs": repairs, "mens": st.get("mens", {})}, open(STATE, "w"))
     print(f"handled {done} of {len(alerts)} open alerts")
+    print(f"RUNVOUCH_COST={round(sum(UITGAVEN), 6)}")
     return 0
 
 

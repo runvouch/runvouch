@@ -9,7 +9,7 @@ Two ways to run it. Both write the same file and use the same RunVouch agent.
 
 ## What you need
 
-- A RunVouch key (free for 3 agents): `export RUNVOUCH_KEY=rv_...`
+- A RunVouch key (free for 20 agents): `export RUNVOUCH_KEY=rv_...`
 - An Apify token (free account, no card) for the DataSignals MCP server: `export APIFY_TOKEN=apify_api_...`
   The 13F tool is free for the first 50 MCP calls a month, which covers one call a night. After that it is $0.20 per result on your Apify account. `--spend-cap 5` makes the server refuse calls once your ledger reaches $5.
 - `rv`: `pip install runvouch` or `curl -fsSL https://runvouch.com/rv -o ~/bin/rv && chmod +x ~/bin/rv`

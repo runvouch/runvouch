@@ -1162,3 +1162,26 @@ def test_plugin_reports_api_failure_and_a_killed_session():
         assert klaar and klaar["status"] == "ok", "een normale afronding blijft ok"
     finally:
         srv.shutdown()
+
+
+def test_rv_run_picks_up_a_cost_the_job_reports():
+    """Zonder dit melden alleen jobs die de API zelf spreken kosten, en stond onze eigen som op 0.00
+    terwijl vijf jobs Claude-aanroepen betaalden (audit 6 september 2026, punt 4)."""
+    import runvouch.cli as cli
+    echte_api = cli.api
+    verstuurd = []
+
+    def _vang(method, path, body=None, params=None, soft=False, **kw):
+        verstuurd.append((path, body))
+        return {"run_id": "r1"} if path.endswith("/start") else {}
+
+    cli.api = _vang
+    try:
+        try:
+            cli.main(["run", "kostenpost", "--", "printf", "regel\\nRUNVOUCH_COST=1.25\\nRUNVOUCH_TOKENS=4100\\n"])
+        except SystemExit as e:
+            assert e.code == 0
+    finally:
+        cli.api = echte_api
+    eind = [b for p, b in verstuurd if p.endswith("/end")][0]
+    assert eind["cost"] == 1.25 and eind["tokens"] == 4100
