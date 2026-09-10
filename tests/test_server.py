@@ -1,5 +1,6 @@
 import os, sys, time, json
 import tempfile
+import pytest
 os.environ["RUNVOUCH_DB"] = os.path.join(tempfile.mkdtemp(prefix="runvouch-test-"), "test.db")
 os.environ["RUNVOUCH_NO_SWEEP"] = "1"
 os.environ["RUNVOUCH_ADMIN_TOKEN"] = "adm"
@@ -1008,3 +1009,43 @@ def test_drift_accepts_a_recurring_second_mode():
     rid = c.post("/v1/runs/start", json={"agent": "bimodaal"}, headers=H).json()["run_id"]
     c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 200}, headers=H)
     assert len(alerts("DRIFT")) > voor, "een volledig nieuwe waarde hoort wel alarm te geven"
+
+
+# ───────────────────────────── evidence url: de server mag niet naar binnen bellen ─────────────────────────────
+def test_evidence_url_reaches_no_private_address():
+    """Elke gratis sleutel kiest hier ons uitgaande doel en leest true of false terug.
+
+    Zonder rem is dat een poortscanner voor alles op deze machine plus de metadata-dienst op
+    169.254.169.254 (audit 6 september 2026). De proef zet een echte server op localhost neer
+    en telt de verzoeken: die teller moet nul blijven.
+    """
+    import http.server
+    import threading as _th
+
+    geraakt = []
+
+    class _Teller(http.server.BaseHTTPRequestHandler):
+        def do_HEAD(self):
+            geraakt.append(self.path); self.send_response(200); self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Teller)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    poort = srv.server_address[1]
+    try:
+        ok, detail = server.evaluate_evidence({"intern": {"type": "url", "url": f"http://127.0.0.1:{poort}/geheim"}})
+        assert ok is False and detail["intern"] is False
+        assert geraakt == [], f"de server heeft het interne adres toch benaderd: {geraakt}"
+    finally:
+        srv.shutdown()
+
+    for adres in ("http://10.0.0.1/", "http://192.168.1.1/", "http://169.254.169.254/latest/meta-data/",
+                  "http://[::1]/", "http://localhost/", "file:///etc/passwd", "gopher://example.com/",
+                  "http://0.0.0.0/"):
+        with pytest.raises(ValueError):
+            server.public_url(adres)
+
+    # een publiek adres blijft gewoon toegestaan (letterlijk IP, dus geen DNS en geen netwerk in de test)
+    assert server.public_url("https://93.184.216.34/report.html")

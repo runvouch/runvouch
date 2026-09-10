@@ -26,10 +26,12 @@ from __future__ import annotations
 import calendar
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
 import secrets
+import socket
 import sqlite3
 import subprocess
 import threading
@@ -541,6 +543,36 @@ def check_storm(agent: sqlite3.Row, run_id: str, input_hash: str, tool: str) -> 
                     f"tool '{tool}' called {n}x with identical input in one run. Each call looks fine; together it's a loop.")
 
 
+def public_url(raw: str) -> str:
+    """Refuse an evidence URL that does not point at a public http(s) address.
+
+    This is the one place where a stranger picks our outbound target: any free key may hand us a
+    URL and read back true or false. Without this check that is a port scanner for everything on
+    this machine and for the cloud metadata service on 169.254.169.254, one HEAD at a time.
+    Residual risk: a name whose DNS answer changes between this check and the request itself.
+    """
+    u = urllib.parse.urlparse(raw)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise ValueError("evidence url must be http or https")
+    port = u.port or (443 if u.scheme == "https" else 80)
+    for family, _, _, _, sockaddr in socket.getaddrinfo(u.hostname, port, proto=socket.IPPROTO_TCP):
+        ip = ipaddress.ip_address(sockaddr[0])
+        if not ip.is_global or ip.is_multicast:
+            raise ValueError(f"evidence url resolves to non-public address {ip}")
+    return raw
+
+
+class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect must not walk into the private network that public_url just kept us out of."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        public_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_EVIDENCE_OPENER = urllib.request.build_opener(_GuardedRedirect)
+
+
 def evaluate_evidence(evidence: dict[str, Any]) -> tuple[bool, dict]:
     """
     Evidence is a dict of named assertions the CLIENT already evaluated (bool), or
@@ -554,7 +586,8 @@ def evaluate_evidence(evidence: dict[str, Any]) -> tuple[bool, dict]:
             ok = spec
         elif isinstance(spec, dict) and spec.get("type") == "url":
             try:
-                r = urllib.request.urlopen(urllib.request.Request(spec["url"], method="HEAD"), timeout=10)
+                url = public_url(spec["url"])
+                r = _EVIDENCE_OPENER.open(urllib.request.Request(url, method="HEAD"), timeout=10)
                 ok = r.status == int(spec.get("expect", 200))
             except Exception:
                 ok = False
