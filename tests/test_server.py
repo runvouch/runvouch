@@ -62,12 +62,58 @@ def test_budget():
     c.post("/v1/runs/tool", json={"run_id": rid, "tool": "llm", "input": 2, "cost": 0.6}, headers=H)
     assert alerts("BUDGET_RUN")
     c.post("/v1/runs/end", json={"run_id": rid, "status": "ok"}, headers=H)
+    # a cap that only sends a message is not a cap: the agent is paused and the next start is refused
+    assert _agent_row("spender")["paused"] is True
+    refused = c.post("/v1/runs/start", json={"agent": "spender"}, headers=H).json()
+    assert refused == {"paused": True, "agent": "spender", "reason": "BUDGET_RUN"}
+    assert server.q1("SELECT COUNT(*) n FROM runs WHERE agent_id=? AND started>?",
+                     server.q1("SELECT id FROM agents WHERE name='spender'")["id"], 0)["n"] == 1, "no run row for a refused start"
+    c.post("/v1/agents/spender/pause", params={"paused": "false"}, headers=H)
+
     rid = c.post("/v1/runs/start", json={"agent": "spender"}, headers=H).json()["run_id"]
     c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "cost": 0.9}, headers=H)
     assert not alerts("BUDGET_DAY")
+    assert _agent_row("spender")["paused"] is False, "under the cap nothing is paused"
     rid = c.post("/v1/runs/start", json={"agent": "spender"}, headers=H).json()["run_id"]
     c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "cost": 0.9}, headers=H)
     assert alerts("BUDGET_DAY")
+    assert _agent_row("spender")["paused"] is True
+    assert "--resume" in alerts("BUDGET_DAY")[0]["message"], "the alert says how to get the job running again"
+
+
+def _agent_row(name):
+    return [a for a in c.get("/v1/agents", headers=H).json() if a["name"] == name][0]
+
+
+def test_rv_run_skips_a_paused_agent_but_never_an_outage():
+    """The brake works in the client, so it must not slam on for anything but an explicit pause."""
+    import runvouch.cli as cli
+    echte_api, echte_run = cli.api, cli.subprocess.run
+    started = []
+
+    class _Proc:
+        returncode = 0
+        stdout = stderr = ""
+
+    def _fake_run(cmd, **kw):
+        started.append(cmd); return _Proc()
+
+    def _with(answer):
+        started.clear()
+        cli.subprocess.run = _fake_run
+        cli.api = lambda method, path, body=None, params=None, soft=False, **kw: answer if path.endswith("/start") else {}
+        try:
+            cli.main(["run", "spender", "--", "echo", "hi"])
+        except SystemExit as e:
+            assert e.code == 0
+        return list(started)
+
+    try:
+        assert _with({"paused": True, "agent": "spender", "reason": "BUDGET_DAY"}) == [], "paused: the command stays down"
+        assert _with(None) == [["echo", "hi"]], "API unreachable: the job runs unmonitored"
+        assert _with({"run_id": "abc123"}) == [["echo", "hi"]]
+    finally:
+        cli.api, cli.subprocess.run = echte_api, echte_run
 
 
 def test_missed_and_stalled():

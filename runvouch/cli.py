@@ -3,7 +3,7 @@
 rv: RunVouch client CLI. Zero dependencies (stdlib only) so it runs in any cron/agent environment.
 
   rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence]
-  rv agent  NAME --pause | --resume   (stop or resume watching a job you switched off)
+  rv agent  NAME --pause | --resume   (a paused agent starts nothing and is never reported missed)
   rv run    NAME [--evidence-file PATH] [--evidence-url URL] [--source cron] -- CMD ARGS...
   rv start  NAME            -> prints run_id
   rv tool   RUN_ID TOOL [--input JSON] [--cost X] [--tokens N] [--fail]
@@ -67,7 +67,11 @@ def main(argv=None):
     t.add_argument("--tokens", type=int, default=0); t.add_argument("--fail", action="store_true")
     e = sub.add_parser("end"); e.add_argument("run_id"); e.add_argument("--status", default="ok"); e.add_argument("--cost", type=float, default=0)
     e.add_argument("--tokens", type=int, default=0); e.add_argument("--evidence"); e.add_argument("--output-bytes", type=int)
-    sub.add_parser("status")
+    stp = sub.add_parser("status")
+    # Machineleesbaar, zodat een ander script de vloot kan uitlezen zonder zelf met
+    # jouw sleutel om te gaan: rv laadt die al uit de omgeving.
+    stp.add_argument("--json", action="store_true", dest="as_json",
+                     help="raw JSON instead of the table")
     al = sub.add_parser("alerts"); al.add_argument("--ack", type=int)
     pr = sub.add_parser("proof"); pr.add_argument("run_id"); pr.add_argument("--verify", action="store_true")
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -99,6 +103,13 @@ def main(argv=None):
             sys.exit("rv run NAME -- CMD ...")
         args.evidence_file = [os.path.abspath(f) for f in args.evidence_file]
         r0 = api("POST", "/v1/runs/start", {"agent": args.name, "source": args.source, "meta": {"cmd": " ".join(cmd)}}, soft=True)
+        if r0 and r0.get("paused"):
+            # The only answer that stops the command: the server says this agent is paused, because a
+            # cost cap was crossed or you paused it yourself. An outage, a timeout or a 500 leaves r0
+            # None and the job runs unmonitored, which is the rule everywhere else in this file.
+            sys.stderr.write(f"runvouch: agent '{args.name}' is paused ({r0.get('reason')}), command not started. "
+                             f"Resume with: rv agent {args.name} --resume\n")
+            return 0
         rid = r0.get("run_id") if r0 else None
         t0 = time.time()
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -119,7 +130,11 @@ def main(argv=None):
                                            "meta": {"exit": proc.returncode, "error": (proc.stderr or "")[-500:] if proc.returncode else ""}}, soft=True)
         sys.exit(proc.returncode)
     elif args.cmd == "status":
-        for ag in api("GET", "/v1/agents"):
+        agents = api("GET", "/v1/agents")
+        if getattr(args, "as_json", False):
+            print(json.dumps(agents))
+            return
+        for ag in agents:
             l = ag["last_run"]
             print(f"{ag['name']:24s} {ag['state']:9s} last={time.strftime('%m-%d %H:%M', time.localtime(l['started'])) if l else '-':12s} "
                   f"cost24h={ag['cost_24h']:<8} alerts={ag['open_alerts']}")

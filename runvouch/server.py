@@ -505,19 +505,33 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
                     f"{label} {cur:.0f} vs trailing median {med:.0f} (MAD {mad:.0f}). Task may be silently doing something else.")
 
 
+def pause_for_cap(agent: sqlite3.Row) -> str:
+    """Stop the schedule of an agent that crossed its cost cap, and say so in the alert.
+
+    A cap that only sends a message is not a cap. The run that crossed the line has already
+    finished, so this brake works on the next run: /v1/runs/start refuses it and the client
+    skips the command. Setting a cap is opt-in, resuming is one call.
+    """
+    if agent["paused"]:
+        return ""
+    with tx() as db:
+        db.execute("UPDATE agents SET paused=1 WHERE id=?", (agent["id"],))
+    return f" Agent paused, next run is refused. Resume with: rv agent {agent['name']} --resume"
+
+
 def check_budget(agent: sqlite3.Row, run: sqlite3.Row) -> None:
     if agent["cap_run_cost"] and run["cost"] > agent["cap_run_cost"]:
         raise_alert(agent["account_id"], agent["id"], run["id"], "BUDGET_RUN",
-                    f"run cost {run['cost']:.2f} > cap {agent['cap_run_cost']:.2f}")
+                    f"run cost {run['cost']:.2f} > cap {agent['cap_run_cost']:.2f}." + pause_for_cap(agent))
     if agent["cap_run_tokens"] and run["tokens"] > agent["cap_run_tokens"]:
         raise_alert(agent["account_id"], agent["id"], run["id"], "BUDGET_RUN",
-                    f"run tokens {run['tokens']} > cap {agent['cap_run_tokens']}")
+                    f"run tokens {run['tokens']} > cap {agent['cap_run_tokens']}." + pause_for_cap(agent))
     if agent["cap_day_cost"]:
         day0 = time.time() - 86400
         tot = q1("SELECT COALESCE(SUM(cost),0) s FROM runs WHERE agent_id=? AND started>?", agent["id"], day0)["s"]
         if tot > agent["cap_day_cost"]:
             raise_alert(agent["account_id"], agent["id"], run["id"], "BUDGET_DAY",
-                        f"24h cost {tot:.2f} > daily cap {agent['cap_day_cost']:.2f}")
+                        f"24h cost {tot:.2f} > daily cap {agent['cap_day_cost']:.2f}." + pause_for_cap(agent))
 
 
 def check_storm(agent: sqlite3.Row, run_id: str, input_hash: str, tool: str) -> None:
@@ -1539,6 +1553,11 @@ def _state(a, last, open_alerts) -> str:
 @app.post("/v1/runs/start")
 def run_start(s: StartIn, acc=Depends(account_from_key)):
     a = _agent(acc, s.agent)
+    if a["paused"]:
+        # No run row, no run_id: this is the brake behind the cost cap and behind rv agent --pause.
+        # The client skips the command on this answer alone, never on an error or an outage.
+        open_alert = q1("SELECT kind FROM alerts WHERE agent_id=? AND acked=0 ORDER BY ts DESC LIMIT 1", a["id"])
+        return {"paused": True, "agent": a["name"], "reason": open_alert["kind"] if open_alert else "paused"}
     rid = s.run_id or secrets.token_hex(8)
     now = time.time()
     with tx() as db:

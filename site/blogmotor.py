@@ -59,7 +59,9 @@ art["html"] = art["html"].replace("<pre><code>", "<pre>").replace("</code></pre>
 arts["articles"].append({**{k: art[k] for k in ("slug", "title", "description", "html")},
                          "date": datetime.date.today().isoformat()}); json.dump(arts, open(ARTICLES, "w"), indent=1)
 subprocess.run([os.path.join(REPO, ".venv/bin/python"), os.path.join(ROOT, "build.py")], check=True)
-subprocess.run(["systemctl", "--user", "restart", "runvouch"], check=False); time.sleep(5)  # let the API come back before rv reports the end
+# Geen herstart van de API: de server leest site/public per verzoek van schijf, dus een nieuw
+# artikel staat er meteen. Uit cron ontbrak de sessiebus toch, dus dit gaf alleen
+# "Failed to connect to bus: No medium found" in het log (gezien 8 september 2026).
 url = f"https://runvouch.com/blog/{art['slug']}"
 try:
     key = env["INDEXNOW_KEY"]; body = json.dumps({"host": "runvouch.com", "key": key, "keyLocation": f"https://runvouch.com/{key}.txt", "urlList": [url, "https://runvouch.com/blog/"]}).encode()

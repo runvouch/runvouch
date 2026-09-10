@@ -27,7 +27,7 @@ Mechanism and limits: https://runvouch.com/docs/proof · who needs it: https://r
 | `FAILED` | run ended non-zero / status=fail |
 | `NO_EVIDENCE` | run said ok but required proof (file written, URL 200, assertion) is missing, *green ≠ done* |
 | `RETRY_STORM` | same tool + identical input ≥ N times in one run (the invisible loop that costs $437) |
-| `BUDGET_RUN` / `BUDGET_DAY` | cost or tokens over the cap you set |
+| `BUDGET_RUN` / `BUDGET_DAY` | cost or tokens over the cap you set; the agent is paused and its next run is refused until `rv agent NAME --resume` |
 | `DRIFT` | duration / output size off its 7-run baseline (robust MAD), silently doing something else |
 | `STALLED` | started, no end and no heartbeat past max runtime |
 
