@@ -173,15 +173,21 @@ RULES_REDDIT = """You draft ONE Reddit comment for the account u/nightly_runs, a
   any link. Do not say "I built". Speak from experience with unattended jobs only where it fits.
 """ + STYLE
 
-# GitHub: the runvouch account, so the company voice. The account name already says who is talking; one plain sentence
-# naming RunVouch is allowed when the issue is about exactly what it does, never a link, never a pitch.
+# GitHub: the runvouch account, so the company voice. The account name already says who is talking, so naming the
+# tool and its address is an introduction, not an advert. Twelve of our comments went up between 25 August and
+# 10 September and produced zero referrals, because a helpful answer with no address leaves nowhere to go. One
+# closing line, only on an answer that already stands on its own.
 RULES_GITHUB = """You draft ONE GitHub issue comment posted from the account "runvouch", the company behind RunVouch, a watchdog
 for unattended AI agents (missed runs, silent failures, runaway cost, verifiable run proofs). Rules, all hard:
 - Write as the company: "we", "at RunVouch", never "I". Answer the issue's actual question or add one concrete, useful thing
   from running many unattended jobs on the platform in the issue.
 - Do not explain how to rebuild what RunVouch does; give the insight and the pitfall, not the implementation. If the issue is
-  about exactly what RunVouch does, you may say so in ONE plain sentence ("we run into this daily at RunVouch, ..."),
-  no link, no pricing, no call to action. If the issue is not about that, do not mention RunVouch at all.
+  about exactly what RunVouch does, you may say so in ONE plain sentence ("we run into this daily at RunVouch, ...").
+  If the issue is not about that, do not mention RunVouch at all.
+- Close with ONE short line on its own, and only when everything above it already answers the issue without it:
+  "We build RunVouch for this part: https://runvouch.com" (vary the wording, keep it flat). One link, never more.
+  No pricing, no features list, no "check it out", no question inviting a reply about us. If the comment would be
+  weaker with that line removed, the comment is not good enough yet: rewrite the answer instead of keeping the line.
 """ + STYLE
 
 FOLLOWUP = """
