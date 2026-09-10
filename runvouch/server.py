@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS agents(
   id INTEGER PRIMARY KEY, account_id INTEGER, name TEXT, created REAL,
   cadence_s INTEGER, grace_s INTEGER DEFAULT 900, max_runtime_s INTEGER DEFAULT 3600,
   cap_run_cost REAL, cap_day_cost REAL, cap_run_tokens INTEGER,
-  evidence_required INTEGER DEFAULT 0, paused INTEGER DEFAULT 0,
+  evidence_required INTEGER DEFAULT 0, paused INTEGER DEFAULT 0, ping_token TEXT,
   UNIQUE(account_id, name));
 -- run ids are namespaced per account: the client picks the id, so "nightly-2026-09-06" belongs to
 -- whoever sent it and to nobody else. Uniqueness is (account_id, id), never id on its own.
@@ -182,11 +182,15 @@ with _lock:
         except sqlite3.OperationalError:
             pass
     for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER"),
-                     ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL")):
+                     ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL"),
+                     ("agents", "ping_token TEXT")):
         try:
             _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
         except sqlite3.OperationalError:
             pass
+    for _r in _db.execute("SELECT id FROM agents WHERE ping_token IS NULL").fetchall():
+        _db.execute("UPDATE agents SET ping_token=? WHERE id=?", (secrets.token_urlsafe(18), _r["id"]))
+    _db.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_ping ON agents(ping_token)")
     _db.execute("CREATE INDEX IF NOT EXISTS ix_tool_run_acc ON tool_events(account_id, run_id, input_hash)")
     _db.execute("DROP INDEX IF EXISTS ix_tool_run")  # superseded: a run id says nothing without its account
     if _db.execute("SELECT 1 FROM tool_events WHERE account_id IS NULL LIMIT 1").fetchone():
@@ -275,7 +279,7 @@ def rotate_key(account_id: int) -> str:
     return key
 
 
-PLAN_LIMITS = {"free": 3, "solo": 15, "team": 100}
+PLAN_LIMITS = {"free": 20, "solo": 100, "team": 1000}
 RETENTION_DAYS = {"free": 7, "solo": 90, "team": 90}  # runs, tool events and acked alerts older than this are purged daily
 
 
@@ -1302,7 +1306,7 @@ def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, 
                 f"If anything is unclear, reply to this mail - it reaches a person." + sig)
     if kind == "signup":
         return ("Your RunVouch key and a 2-minute start",
-                f"Hi,\n\nWelcome to RunVouch. Your account is on the Free plan: 3 agents, all eight detectors, alerts via Telegram, Slack, e-mail or webhook.\n\n"
+                f"Hi,\n\nWelcome to RunVouch. Your account is on the Free plan: 20 agents, all eight detectors, alerts via Telegram, Slack, e-mail or webhook.\n\n"
                 f"Your API key (keep it private):\n\n    {api_key}\n\n"
                 f"Start in two minutes:\n  1. pip install runvouch   (or: npm install -g runvouch)\n  2. export RUNVOUCH_KEY={api_key}\n"
                 f"  3. rv run nightly-report --evidence-file out/report.html -- your-command\n\n"
@@ -1315,13 +1319,13 @@ def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, 
     if kind == "canceled":
         return (f"Your RunVouch {name} subscription is canceled",
                 f"Hi,\n\nWe have received your cancellation. Your RunVouch {name} plan stays fully active until {_fmt_date(ends_at)}; "
-                f"after that your account moves to the Free plan (3 agents, all detectors) - nothing is deleted and your key keeps working.\n\n"
+                f"after that your account moves to the Free plan (20 agents, all detectors) - nothing is deleted and your key keeps working.\n\n"
                 f"Changed your mind? You can resume from the link in your Polar receipt before that date and nothing changes.\n\n"
                 f"Thank you for using RunVouch. If something made you leave, we would honestly like to know - just reply to this mail. We hope to see you again." + sig)
     if kind == "ended":
         return (f"Your RunVouch {name} plan has ended",
-                f"Hi,\n\nYour RunVouch {name} subscription ended today. Your account is now on the Free plan: 3 agents, all eight detectors, 7-day history. "
-                f"Your API key and agents are untouched; if you have more than 3 agents, the oldest 3 stay monitored.\n\n"
+                f"Hi,\n\nYour RunVouch {name} subscription ended today. Your account is now on the Free plan: 20 agents, all eight detectors, 7-day history. "
+                f"Your API key and agents are untouched; if you have more than 20 agents, the oldest 20 stay monitored.\n\n"
                 f"Thank you for the time you spent with us. Whenever your agents outgrow the free plan again, upgrading takes one click: https://runvouch.com/pricing\n\n"
                 f"We hope to see you again." + sig)
     if kind == "refunded":
@@ -1544,14 +1548,17 @@ def upsert_agent(a: AgentIn, acc=Depends(account_from_key)):
     if not exists and n >= PLAN_LIMITS.get(acc["plan"], 3):
         raise HTTPException(402, f"plan '{acc['plan']}' allows {PLAN_LIMITS.get(acc['plan'],3)} agents")
     with tx() as db:
-        db.execute("""INSERT INTO agents(account_id,name,created,cadence_s,grace_s,max_runtime_s,cap_run_cost,cap_day_cost,cap_run_tokens,evidence_required)
-                      VALUES(?,?,?,?,?,?,?,?,?,?)
+        # ping_token survives an update: the URL is pasted into crontabs and workflows elsewhere,
+        # so re-registering an agent must not silently break every job that pings it.
+        db.execute("""INSERT INTO agents(account_id,name,created,cadence_s,grace_s,max_runtime_s,cap_run_cost,cap_day_cost,cap_run_tokens,evidence_required,ping_token)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?)
                       ON CONFLICT(account_id,name) DO UPDATE SET cadence_s=excluded.cadence_s, grace_s=excluded.grace_s,
                       max_runtime_s=excluded.max_runtime_s, cap_run_cost=excluded.cap_run_cost, cap_day_cost=excluded.cap_day_cost,
-                      cap_run_tokens=excluded.cap_run_tokens, evidence_required=excluded.evidence_required""",
+                      cap_run_tokens=excluded.cap_run_tokens, evidence_required=excluded.evidence_required,
+                      ping_token=COALESCE(agents.ping_token, excluded.ping_token)""",
                    (acc["id"], a.name, time.time(), a.cadence_s, a.grace_s, a.max_runtime_s, a.cap_run_cost, a.cap_day_cost,
-                    a.cap_run_tokens, int(a.evidence_required)))
-    return {"ok": True, "agent": a.name}
+                    a.cap_run_tokens, int(a.evidence_required), secrets.token_urlsafe(18)))
+    return {"ok": True, "agent": a.name, "ping_url": ping_url(_agent(acc, a.name))}
 
 
 @app.get("/v1/agents")
@@ -1563,7 +1570,7 @@ def list_agents(acc=Depends(account_from_key)):
         cost24 = q1("SELECT COALESCE(SUM(cost),0) s FROM runs WHERE agent_id=? AND started>?", a["id"], time.time() - 86400)["s"]
         out.append({"name": a["name"], "cadence_s": a["cadence_s"], "paused": bool(a["paused"]),
                     "last_run": dict(last) if last else None, "open_alerts": open_alerts, "cost_24h": round(cost24, 4),
-                    "state": _state(a, last, open_alerts)})
+                    "state": _state(a, last, open_alerts), "ping_url": ping_url(a)})
     return out
 
 
@@ -1657,6 +1664,73 @@ def run_end(e: EndIn, acc=Depends(account_from_key)):
     if e.status == "ok":
         check_drift(a, run)
     return {"ok": True, "evidence_ok": ev_ok, "evidence": ev_detail}
+
+
+# ───────────────────────────── ping URLs: reporting without a client ─────────────────────────────
+PING_PER_MINUTE = int(os.getenv("RUNVOUCH_PING_PER_MINUTE", "10"))
+_ping_hits: dict[int, list[float]] = {}
+
+
+def ping_url(a: sqlite3.Row) -> Optional[str]:
+    return f"{PUBLIC_URL}/ping/{a['ping_token']}" if a["ping_token"] else None
+
+
+def _ping_target(token: str):
+    """A ping URL is a write-only secret for one agent: it reports runs for that agent and can do
+    nothing else, so it may sit in a crontab, a workflow node or a Docker HEALTHCHECK where an
+    account key never should. Unknown token is a flat 404, so the URL space says nothing about
+    which agents exist.
+    """
+    a = q1("SELECT * FROM agents WHERE ping_token=?", token) if token else None
+    if not a:
+        raise HTTPException(404, "unknown ping url")
+    now = time.time()
+    hits = [t for t in _ping_hits.get(a["id"], []) if t > now - 60]
+    if len(hits) >= PING_PER_MINUTE:
+        raise HTTPException(429, f"too many pings for this agent, max {PING_PER_MINUTE} per minute")
+    _ping_hits[a["id"]] = hits + [now]
+    return a, q1("SELECT * FROM accounts WHERE id=?", a["account_id"])
+
+
+async def _ping(token: str, signal: str, request: Request):
+    a, acc = _ping_target(token)
+    body = (await request.body())[:100_000] if request.method == "POST" else b""
+    if signal == "start":
+        r = run_start(StartIn(agent=a["name"], source="ping"), acc)
+        return PlainTextResponse("PAUSED" if r.get("paused") else "OK")
+    if signal == "fail":
+        status = "fail"
+    elif signal.isdigit():
+        status = "ok" if int(signal) == 0 else "fail"   # the exit code of the job, like $? in a shell
+    elif signal:
+        raise HTTPException(404, "unknown ping signal, use /start, /fail or an exit code")
+    else:
+        status = "ok"
+    # A bare ping without a preceding /start is a heartbeat: one run that begins and ends now. That is
+    # what makes a one-line crontab change enough to catch a job that stops showing up.
+    open_run = q1("SELECT * FROM runs WHERE agent_id=? AND ended IS NULL ORDER BY started DESC LIMIT 1", a["id"])
+    if open_run:
+        rid = open_run["id"]
+    else:
+        r = run_start(StartIn(agent=a["name"], source="ping"), acc)
+        if r.get("paused"):
+            return PlainTextResponse("PAUSED")
+        rid = r["run_id"]
+    meta: dict[str, Any] = {"exit": int(signal)} if signal.isdigit() else {}
+    if status != "ok" and body:
+        meta["error"] = body.decode("utf-8", "replace")[-500:]
+    run_end(EndIn(run_id=rid, status=status, output_bytes=len(body) or None, meta=meta), acc)
+    return PlainTextResponse("OK")
+
+
+@app.api_route("/ping/{token}", methods=["GET", "POST", "HEAD"])
+async def ping(token: str, request: Request):
+    return await _ping(token, "", request)
+
+
+@app.api_route("/ping/{token}/{signal}", methods=["GET", "POST", "HEAD"])
+async def ping_signal(token: str, signal: str, request: Request):
+    return await _ping(token, signal, request)
 
 
 @app.get("/v1/alerts")

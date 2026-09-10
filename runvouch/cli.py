@@ -84,10 +84,14 @@ def main(argv=None):
         if args.pause or args.resume:
             print(api("POST", f"/v1/agents/{args.name}/pause?paused={'true' if args.pause else 'false'}", {}))
             return
-        print(api("POST", "/v1/agents", {"name": args.name, "cadence_s": dur(args.cadence) if args.cadence else None,
-                                         "grace_s": dur(args.grace), "max_runtime_s": dur(args.max_runtime),
-                                         "cap_run_cost": args.cap_run_cost, "cap_day_cost": args.cap_day_cost,
-                                         "cap_run_tokens": args.cap_run_tokens, "evidence_required": args.evidence}))
+        r = api("POST", "/v1/agents", {"name": args.name, "cadence_s": dur(args.cadence) if args.cadence else None,
+                                       "grace_s": dur(args.grace), "max_runtime_s": dur(args.max_runtime),
+                                       "cap_run_cost": args.cap_run_cost, "cap_day_cost": args.cap_day_cost,
+                                       "cap_run_tokens": args.cap_run_tokens, "evidence_required": args.evidence})
+        print(r)
+        if r and r.get("ping_url"):
+            # For anything that can only call a URL: a crontab line, an n8n node, a Docker HEALTHCHECK.
+            print(f"ping url: {r['ping_url']}   (append /start, /fail or the exit code)")
     elif args.cmd == "start":
         print(api("POST", "/v1/runs/start", {"agent": args.name, "source": args.source})["run_id"])
     elif args.cmd == "tool":

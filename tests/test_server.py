@@ -5,6 +5,7 @@ os.environ["RUNVOUCH_DB"] = os.path.join(tempfile.mkdtemp(prefix="runvouch-test-
 os.environ["RUNVOUCH_NO_SWEEP"] = "1"
 os.environ["RUNVOUCH_ADMIN_TOKEN"] = "adm"
 os.environ["RUNVOUCH_STORM_THRESHOLD"] = "5"
+os.environ["RUNVOUCH_PING_PER_MINUTE"] = "5"
 for f in (os.environ["RUNVOUCH_DB"], os.environ["RUNVOUCH_DB"] + "-wal", os.environ["RUNVOUCH_DB"] + "-shm"):
     if os.path.exists(f): os.remove(f)
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -146,8 +147,8 @@ def test_drift():
 
 def test_plan_limit_and_state():
     fk = c.post("/admin/accounts", params={"name": "free"}, headers={"X-Admin-Token": "adm"}).json()["api_key"]
-    for n in ("a1", "a2", "a3"):
-        assert c.post("/v1/agents", json={"name": n}, headers={"X-API-Key": fk}).status_code == 200
+    for n in range(server.PLAN_LIMITS["free"]):
+        assert c.post("/v1/agents", json={"name": f"a{n}"}, headers={"X-API-Key": fk}).status_code == 200
     assert c.post("/v1/agents", json={"name": "one-too-many"}, headers={"X-API-Key": fk}).status_code == 402
     st = {a["name"]: a["state"] for a in c.get("/v1/agents", headers=H).json()}
     assert st["stable"] == "alert" and st["hourly"] in ("alert", "running")
@@ -1049,3 +1050,62 @@ def test_evidence_url_reaches_no_private_address():
 
     # een publiek adres blijft gewoon toegestaan (letterlijk IP, dus geen DNS en geen netwerk in de test)
     assert server.public_url("https://93.184.216.34/report.html")
+
+
+# ───────────────────────────── ping-URL: melden zonder client ─────────────────────────────
+def _ping_url(naam, **kw):
+    r = c.post("/v1/agents", json={"name": naam, **kw}, headers=H).json()
+    return r["ping_url"].replace(server.PUBLIC_URL, "")
+
+
+def test_ping_url_records_a_run_without_a_key():
+    """Een regel in de crontab moet genoeg zijn. Healthchecks wint hierop en wij hadden alleen POST met header."""
+    pad = _ping_url("kale-cron")
+    assert c.get(pad).text == "OK"
+    runs = c.get("/v1/agents/kale-cron/runs", headers=H).json()
+    assert len(runs) == 1 and runs[0]["status"] == "ok" and runs[0]["source"] == "ping"
+    assert runs[0]["ended"] is not None, "een kale ping is een hartslag: begint en eindigt meteen"
+
+    # start en klaar horen bij elkaar: een run, met een duur
+    pad2 = _ping_url("lange-klus")
+    assert c.get(pad2 + "/start").text == "OK"
+    lopend = c.get("/v1/agents/lange-klus/runs", headers=H).json()
+    assert len(lopend) == 1 and lopend[0]["ended"] is None
+    c.get(pad2)
+    klaar = c.get("/v1/agents/lange-klus/runs", headers=H).json()
+    assert len(klaar) == 1 and klaar[0]["ended"] is not None, "de tweede ping sluit de lopende run, niet een nieuwe"
+
+
+def test_ping_url_reports_failure_and_exit_codes():
+    pad = _ping_url("kan-stuk")
+    voor = len(alerts("FAILED"))
+    c.post(pad + "/fail", content=b"traceback: alles kapot")
+    assert len(alerts("FAILED")) == voor + 1
+    laatste = c.get("/v1/agents/kan-stuk/runs", headers=H).json()[0]
+    assert laatste["status"] == "fail" and "alles kapot" in (laatste["meta_json"] or "")
+
+    pad2 = _ping_url("exitcode")
+    c.get(pad2 + "/0")
+    assert c.get("/v1/agents/exitcode/runs", headers=H).json()[0]["status"] == "ok"
+    c.get(pad2 + "/17")
+    assert c.get("/v1/agents/exitcode/runs", headers=H).json()[0]["status"] == "fail"
+
+
+def test_ping_url_is_write_only_and_rate_limited():
+    pad = _ping_url("begrensd")
+    assert c.get("/ping/bestaat-niet").status_code == 404, "een onbekend token mag niets prijsgeven"
+    assert c.get(pad + "/onzin").status_code == 404
+    for _ in range(int(os.environ["RUNVOUCH_PING_PER_MINUTE"])):
+        c.get(pad)
+    assert c.get(pad).status_code == 429, "een open eindpunt zonder rem is een schrijfbare deur"
+
+    # het token blijft hetzelfde als je de agent opnieuw registreert: de URL staat in andermans crontab
+    zelfde = _ping_url("begrensd", cadence_s=3600)
+    assert zelfde == pad
+
+
+def test_ping_url_respects_a_paused_agent():
+    pad = _ping_url("op-slot")
+    c.post("/v1/agents/op-slot/pause", params={"paused": "true"}, headers=H)
+    assert c.get(pad).text == "PAUSED"
+    assert c.get("/v1/agents/op-slot/runs", headers=H).json() == []

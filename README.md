@@ -12,6 +12,12 @@ rv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence
 rv run nightly-report --evidence-file out/report.html -- claude -p "build tonight's report"
 ```
 
+No client, no header: every agent also has a ping URL, so anything that can call a URL can report.
+```
+0 3 * * * /usr/local/bin/nightly.sh; curl -fsS -m 10 https://api.runvouch.com/ping/<token>/$?
+```
+Nothing for success, `/start` to open a run, `/fail`, or the exit code. `rv agent NAME` prints the URL.
+
 ## Verifiable runs
 Every finished run gets a sha256 record, every UTC day a Merkle root chained to the previous day and stamped in Bitcoin with OpenTimestamps. The day files are public at https://api.runvouch.com/proof/ and `templates/verify_proof.py` (stdlib only) checks a proof without our code. On every plan, Free included.
 ```
@@ -68,7 +74,7 @@ MCP: `claude mcp add runvouch -e RUNVOUCH_KEY=... -- python3 integrations/mcp/ru
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Hosted vs self-host
-Hosted at [runvouch.com](https://runvouch.com): free for 3 agents, $9 Solo, $29 Team, alerts, dashboard, backups, EU hosting. Self-host: this repo, MIT. Same code.
+Hosted at [runvouch.com](https://runvouch.com): free for 20 agents, $9 Solo, $29 Team, alerts, dashboard, backups, EU hosting. Self-host: this repo, MIT. Same code.
 
 ## Compare
 [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)
