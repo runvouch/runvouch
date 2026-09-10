@@ -173,12 +173,21 @@ def main(argv=None):
 def verify_proof(pf):
     """Same rules as templates/verify_proof.py: recompute leaf and path locally, then compare with the public day file."""
     sha = lambda x: hashlib.sha256(x.encode()).hexdigest()
-    leaf = sha(json.dumps(pf["record"], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    purged = bool(pf.get("purged"))
+    if purged:
+        # Past your plan's retention the record is gone and pf["record"] is null. Hashing that gives a
+        # leaf that was never in the tree, so the old code printed MISMATCH over a proof that is fine:
+        # the leaf was sealed into the day and everything above it still verifies.
+        leaf, leaf_says = pf["leaf_hash"], "sealed (no record left to recompute it from)"
+        print("record purged:", pf.get("note", "history retention removed the run record"))
+    else:
+        leaf = sha(json.dumps(pf["record"], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        leaf_says = "ok" if leaf == pf["leaf_hash"] else "MISMATCH"
     h = leaf
     for sib, side in pf["merkle_path"]:
         h = sha(sib + h) if side == "left" else sha(h + sib)
-    ok = leaf == pf["leaf_hash"] and h == pf["root"]
-    print("leaf", "ok" if leaf == pf["leaf_hash"] else "MISMATCH", "| path to root", "ok" if h == pf["root"] else "MISMATCH")
+    ok = (purged or leaf == pf["leaf_hash"]) and h == pf["root"]
+    print("leaf", leaf_says, "| path to root", "ok" if h == pf["root"] else "MISMATCH")
     if not pf.get("sealed"):
         print("day not sealed yet: the root above is live and may still change; run again after the UTC day ends")
         return False

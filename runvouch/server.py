@@ -661,6 +661,28 @@ def weekly_report(now: Optional[float] = None) -> int:
     return sent
 
 
+def owner_ping(text: str) -> bool:
+    """One line to the owner for things no customer will ever see, like a payment we could not map.
+    Same account lookup as owner_digest, and it inherits that lookup's flaw of picking the lowest
+    id that happens to carry a Telegram token."""
+    owner = q1("SELECT telegram_token, telegram_chat FROM accounts WHERE telegram_token IS NOT NULL ORDER BY id LIMIT 1")
+    return bool(owner) and _telegram(owner["telegram_token"], owner["telegram_chat"], text)
+
+
+def plan_for_product(mapping: dict, product: str, shop: str) -> Optional[str]:
+    """No default plan for a product id we do not know.
+
+    order.paid used to fall back to "solo", so one wrong environment variable or one new product in
+    the same shop handed out a paid plan that nobody ordered and nobody noticed. Now the webhook is
+    still stored, the account stays where it is, and the owner hears about it within the minute.
+    """
+    plan = mapping.get(product)
+    if not plan:
+        owner_ping(f"RunVouch: betaling van {shop} met onbekend product '{product}'. Plan niet gewijzigd. "
+                   f"Zet het product in de plan-mapping en pas het account met de hand aan.")
+    return plan
+
+
 def owner_digest(now: Optional[float] = None) -> bool:
     """Once a day (first sweep after 07:00 UTC): one Telegram line to the owner, only when there were signups."""
     now = now or time.time()
@@ -1211,7 +1233,7 @@ async def ls_webhook(request: Request):
     plan = None
     if name in ("subscription_created", "subscription_updated", "subscription_resumed", "subscription_unpaused", "order_created"):
         if status in ("", "active", "on_trial", "paid", "past_due"):
-            plan = LS_VARIANT_PLANS.get(variant, "solo")
+            plan = plan_for_product(LS_VARIANT_PLANS, variant, "Lemon Squeezy")
     if name in ("subscription_cancelled", "subscription_expired", "subscription_paused", "order_refunded") or status in ("expired", "cancelled"):
         plan = "free"
     acc = q1("SELECT * FROM accounts WHERE email=?", email) if email else None
@@ -1385,11 +1407,11 @@ async def polar_webhook(request: Request):
     sub_id = str(obj.get("subscription_id") or (obj.get("id") if name.startswith("subscription.") else "") or "") or None
     plan = None
     if name in ("order.paid", "order.created") and obj.get("status", "paid") in ("paid", "") and obj.get("billing_reason", "purchase") != "subscription_cycle":
-        plan = POLAR_PRODUCT_PLANS.get(product, "solo") if obj.get("paid", True) else None
+        plan = plan_for_product(POLAR_PRODUCT_PLANS, product, "Polar") if obj.get("paid", True) else None
     elif name in ("subscription.active", "subscription.created", "subscription.updated", "subscription.uncanceled"):
         st = obj.get("status", "active")
         if st in ("active", "trialing", "past_due"):
-            plan = POLAR_PRODUCT_PLANS.get(product)
+            plan = plan_for_product(POLAR_PRODUCT_PLANS, product, "Polar")
         elif st in ("canceled", "unpaid", "incomplete_expired") and not obj.get("ends_at"):
             plan = "free"
     elif name in ("subscription.revoked",) or (name == "subscription.canceled" and obj.get("status") == "canceled" and not obj.get("current_period_end")):

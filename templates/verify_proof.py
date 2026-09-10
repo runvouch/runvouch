@@ -60,8 +60,14 @@ def main(argv):
         ok &= bool(cond)
         print(("PASS " if cond else "FAIL ") + name + (("  " + detail) if detail and not cond else ""))
 
-    leaf = sha256(canonical(proof["record"]))
-    check("leaf hash matches the record", leaf == proof["leaf_hash"], f"computed {leaf}")
+    if proof.get("purged"):
+        # Past the plan's retention the record is gone: proof["record"] is null and there is nothing
+        # left to hash. The leaf was sealed into the day, so every check from here up still holds.
+        leaf = proof["leaf_hash"]
+        print("NOTE  " + proof.get("note", "the run record was removed by history retention; the leaf and its path remain"))
+    else:
+        leaf = sha256(canonical(proof["record"]))
+        check("leaf hash matches the record", leaf == proof["leaf_hash"], f"computed {leaf}")
     h = leaf
     for sib, side in proof["merkle_path"]:
         h = sha256(sib + h) if side == "left" else sha256(h + sib)

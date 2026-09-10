@@ -279,6 +279,38 @@ def test_polar_webhook():
     assert server.q1("SELECT plan FROM accounts WHERE email='polar.first@example.com'")["plan"] == "free"
 
 
+def test_unknown_product_never_grants_a_paid_plan(monkeypatch):
+    """order.paid viel terug op "solo" bij een product dat we niet kennen.
+
+    Een verkeerd gezette omgevingsvariabele of een nieuw product in dezelfde winkel gaf zo een
+    betaald plan dat niemand besteld had en niemand zag (audit 6 september 2026, punt 1.8).
+    """
+    import hmac, hashlib, base64
+    server.POLAR_WEBHOOK_SECRET = "polar-test-secret"
+    server.POLAR_PRODUCT_PLANS = {"prod-solo": "solo", "prod-team": "team"}
+    gepingd = []
+    monkeypatch.setattr(server, "owner_ping", lambda tekst: gepingd.append(tekst) or True)
+
+    # rechtstreeks aanmaken: /signup knijpt per IP af en in de volle suite is dat quotum al op
+    with server.tx() as db:
+        db.execute("INSERT OR IGNORE INTO accounts(name, api_key, created, plan, email) VALUES(?,?,?,?,?)",
+                   ("vreemd", server.key_hash("rv_vreemd_test"), time.time(), "free", "vreemd.product@example.com"))
+    body = json.dumps({"type": "order.paid", "data": {"id": "o-vreemd", "status": "paid", "paid": True,
+                                                      "billing_reason": "purchase", "product_id": "prod-onbekend",
+                                                      "customer": {"id": "c9", "email": "vreemd.product@example.com"}}}).encode()
+    wid, ts = "msg_vreemd", str(int(time.time()))
+    sig = base64.b64encode(hmac.new(b"polar-test-secret", f"{wid}.{ts}.".encode() + body, hashlib.sha256).digest()).decode()
+    r = c.post("/webhooks/polar", content=body,
+               headers={"webhook-id": wid, "webhook-timestamp": ts, "webhook-signature": "v1," + sig, "Content-Type": "application/json"})
+
+    assert r.status_code == 200 and r.json()["plan"] is None, "een onbekend product mag geen plan toekennen"
+    assert server.q1("SELECT plan FROM accounts WHERE email='vreemd.product@example.com'")["plan"] == "free"
+    assert gepingd and "prod-onbekend" in gepingd[0], "de eigenaar hoort dit binnen de minuut te weten"
+    # een product dat we wel kennen blijft gewoon werken
+    assert server.plan_for_product(server.POLAR_PRODUCT_PLANS, "prod-team", "Polar") == "team"
+    assert len(gepingd) == 1, "een bekend product hoort geen melding te geven"
+
+
 def test_polar_billing_mails(monkeypatch):
     sent = []
     monkeypatch.setattr(server, "_send_billing", lambda kind, to, plan, ends_at=None, api_key=None: sent.append((kind, to, plan, ends_at, bool(api_key))))
@@ -568,6 +600,32 @@ def test_retention_purge_keeps_proof(monkeypatch, tmp_path):
         db.execute("DELETE FROM proof_days")
     assert server.seal_days(now=now) >= 1
     assert server.q1("SELECT root FROM proof_days WHERE date=?", day_old)["root"] == day["root"]
+    # rv proof --verify op een gewiste run: geen MISMATCH over een bewijs dat gewoon klopt.
+    # De client hashte json.dumps(None) en riep dan NOT VERIFIED, terwijl blad, pad, root en
+    # keten alle vier in orde waren (audit 6 september 2026, punt 1.4).
+    import io, contextlib
+    import runvouch.cli as cli
+
+    class _Antwoord:
+        def __init__(self, data): self._d = data
+        def read(self): return self._d
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    echte_urlopen = cli.urllib.request.urlopen
+    cli.urllib.request.urlopen = lambda req, timeout=None: _Antwoord(
+        json.dumps(c.get(f"/proof/days/{day_old}.json").json()).encode())
+    try:
+        uit = io.StringIO()
+        with contextlib.redirect_stdout(uit):
+            geldig = cli.verify_proof(after)
+        tekst = uit.getvalue()
+    finally:
+        cli.urllib.request.urlopen = echte_urlopen
+    assert geldig is True, f"gewiste run wordt niet geverifieerd:\n{tekst}"
+    assert "MISMATCH" not in tekst, tekst
+    assert "record purged" in tekst and "VERIFIED" in tekst
+
     # second purge on the same day is a no-op; the daily wrapper runs once per UTC day
     assert server.purge_once(now)["runs"] == 0
     server._last_purge_day = ""
