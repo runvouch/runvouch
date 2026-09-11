@@ -209,7 +209,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/how-often-jobs-fail">How often jobs fail</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/observability-or-watchdog">Which tool do I need</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/how-often-jobs-fail">How often jobs fail</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
 
 
@@ -865,7 +865,7 @@ vs("agentops", "AgentOps", "AgentOps is session replay and analytics for agent f
 vs("langsmith", "LangSmith", "LangSmith is LangChain's tracing, evaluation and prompt platform. RunVouch is the outside watchdog for the scheduled run: missed, failed, empty, looping or over budget.",
    [("Traces, evals, prompt hub, datasets", "yes", "no"), ("Requires SDK / callbacks", "yes", "no"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in the trace", "automatic"), ("Hard cost cap + pause", "no", "yes"), ("Works without LangChain", "partially", "yes, any command"), ("Self-host", "enterprise", "yes (MIT)")],
    "<p>They are complementary and many LangGraph users will want both: LangSmith for the trace, RunVouch for the alert that there is something to trace.</p>")
-page("/vs/", "RunVouch compared", "How RunVouch compares to Healthchecks.io, Cronitor, Dead Man's Snitch, Sentry Crons, Better Stack, Uptime Kuma, Cronhub, Langfuse, Helicone, AgentOps and LangSmith for monitoring scheduled AI agents.", """<main><div class="wrap doc"><h1>Compare</h1><p class="lead muted">Feature tables, kept honest: where the other tool is better, it says so.</p><div class="grid g3"><a class="card" href="/vs/healthchecks"><h3>vs Healthchecks.io</h3><p>Ping monitor vs outcome watchdog.</p></a><a class="card" href="/vs/cronitor"><h3>vs Cronitor</h3><p>Ops monitoring vs agent monitoring.</p></a><a class="card" href="/vs/langfuse"><h3>vs Langfuse</h3><p>Tracing vs watchdog, complementary.</p></a><a class="card" href="/vs/dead-mans-snitch"><h3>vs Dead Man's Snitch</h3><p>Heartbeat vs heartbeat plus outcome.</p></a><a class="card" href="/vs/sentry-crons"><h3>vs Sentry Crons</h3><p>Exceptions vs silent failures.</p></a><a class="card" href="/vs/better-stack"><h3>vs Better Stack</h3><p>One vendor for uptime vs one job done well.</p></a><a class="card" href="/vs/uptime-kuma"><h3>vs Uptime Kuma</h3><p>Self-hosted push monitor vs agent watchdog.</p></a><a class="card" href="/vs/cronhub"><h3>vs Cronhub</h3><p>Cron monitor vs LLM job monitor.</p></a><a class="card" href="/vs/helicone"><h3>vs Helicone</h3><p>LLM proxy vs outside watchdog.</p></a><a class="card" href="/vs/agentops"><h3>vs AgentOps</h3><p>Session replay vs pager.</p></a><a class="card" href="/vs/langsmith"><h3>vs LangSmith</h3><p>Tracing vs the alert that there is something to trace.</p></a><a class="card" href="/vs/traceseal"><h3>vs Traceseal</h3><p>Signed receipt per invocation vs watchdog plus proof.</p></a><a class="card" href="/vs/traccia"><h3>vs Traccia</h3><p>Control plane inside the stack vs watchdog outside it.</p></a></div></div></main>""", [ORG_LD])
+page("/vs/", "RunVouch compared", "How RunVouch compares to Healthchecks.io, Cronitor, Dead Man's Snitch, Sentry Crons, Better Stack, Uptime Kuma, Cronhub, Langfuse, Helicone, AgentOps and LangSmith for monitoring scheduled AI agents.", """<main><div class="wrap doc"><h1>Compare</h1><p class="lead muted">Feature tables, kept honest: where the other tool is better, it says so.</p><p>Not sure which category you need at all? Start at <a href="/observability-or-watchdog">observability, a heartbeat, or a watchdog</a>.</p><div class="grid g3"><a class="card" href="/vs/healthchecks"><h3>vs Healthchecks.io</h3><p>Ping monitor vs outcome watchdog.</p></a><a class="card" href="/vs/cronitor"><h3>vs Cronitor</h3><p>Ops monitoring vs agent monitoring.</p></a><a class="card" href="/vs/langfuse"><h3>vs Langfuse</h3><p>Tracing vs watchdog, complementary.</p></a><a class="card" href="/vs/dead-mans-snitch"><h3>vs Dead Man's Snitch</h3><p>Heartbeat vs heartbeat plus outcome.</p></a><a class="card" href="/vs/sentry-crons"><h3>vs Sentry Crons</h3><p>Exceptions vs silent failures.</p></a><a class="card" href="/vs/better-stack"><h3>vs Better Stack</h3><p>One vendor for uptime vs one job done well.</p></a><a class="card" href="/vs/uptime-kuma"><h3>vs Uptime Kuma</h3><p>Self-hosted push monitor vs agent watchdog.</p></a><a class="card" href="/vs/cronhub"><h3>vs Cronhub</h3><p>Cron monitor vs LLM job monitor.</p></a><a class="card" href="/vs/helicone"><h3>vs Helicone</h3><p>LLM proxy vs outside watchdog.</p></a><a class="card" href="/vs/agentops"><h3>vs AgentOps</h3><p>Session replay vs pager.</p></a><a class="card" href="/vs/langsmith"><h3>vs LangSmith</h3><p>Tracing vs the alert that there is something to trace.</p></a><a class="card" href="/vs/traceseal"><h3>vs Traceseal</h3><p>Signed receipt per invocation vs watchdog plus proof.</p></a><a class="card" href="/vs/traccia"><h3>vs Traccia</h3><p>Control plane inside the stack vs watchdog outside it.</p></a></div></div></main>""", [ORG_LD])
 
 
 # ───────────────────────── STATS (real numbers from our own fleet, rebuilt weekly) ─────────────────────────
@@ -961,6 +961,47 @@ if _st:
 <p>Wrap one job and you have a baseline within a week. Free for 20 agents, all detectors on, no card: <a href="/#signup">get a free key</a>.</p>
 <p class="small muted">Figures from the production database on {TODAY}, over the preceding 30 days. TEST alerts excluded. Nothing on this page is typed in by hand.</p>
 </div></main>"""
+    # ── Observability of waakhond ──────────────────────────────────────────────
+    # Dertien vs-pagina's vergelijken ons met een genoemd product. Geen enkele beantwoordt de vraag die daarvoor
+    # komt: welk soort gereedschap heb ik hier eigenlijk nodig. Die vraag stelt iedereen die drie tabbladen open
+    # heeft met Langfuse, Healthchecks en ons, en niemand beantwoordt hem neutraal omdat iedereen een van de drie
+    # verkoopt. Deze pagina wijst mensen ook naar de anderen, en dat is niet grootmoedig maar rekenwerk: wie hier
+    # met de verkeerde behoefte binnenkomt, zegt binnen een maand op.
+    _keuze = f"""<main><div class="wrap doc"><h1>Observability, a heartbeat, or a watchdog?</h1>
+<p class="lead muted">Three categories get sold as if they compete. They solve different problems, and the one you need depends on a question nobody asks you first: who is watching when this runs?</p>
+
+<h2>The three, in one line each</h2>
+<p><b>Tracing and observability</b> (Langfuse, LangSmith, Helicone, Arize) record what happened inside a run: prompts, tokens, latency, tool calls, the chain of thought. They are built for the run you are already looking at, while you are building it.</p>
+<p><b>A heartbeat monitor</b> (Healthchecks.io, Dead Man's Snitch, Cronitor) records that a run checked in. They are built for the schedule, not for the work: the job pings, the page stays green.</p>
+<p><b>A watchdog</b> (this) records whether the work got done, for runs nobody is looking at. Start, end, cost, evidence, and an alert when any of it is missing or wrong.</p>
+
+<h2>Three questions that put you in one box</h2>
+<p><b>Are you debugging, or are you asleep?</b> If you are iterating on a prompt and want to see why the model did something, you want tracing. Buy Langfuse or LangSmith, not us. We store no prompts and no outputs on purpose, so we cannot help you with that and never will.</p>
+<p><b>Is checking in enough?</b> If the only thing that can go wrong is that the job does not run, a heartbeat is the right tool and Healthchecks.io is free, open source and excellent. Use it. You do not need us.</p>
+<p><b>Can the job finish and still have failed?</b> This is the one that decides. A scraper that returns an empty list, a report builder whose upstream went quiet, an agent that hit a rate limit and gave up gracefully. All three exit zero, ping their monitor and show green. If that is your situation, neither of the first two categories will tell you.</p>
+
+<h2>What that looks like in numbers</h2>
+<p>Over 30 days our own fleet of {_st["agents30"]} scheduled jobs produced {sum(dict(_st["kinds"]).values())} alerts across {_st["runs30"]:,} runs. {dict(_st["kinds"]).get("MISSED", 0)} of them were "the run never started", which is the part a heartbeat catches. The rest were not: failures with an exit code, cost or duration drifting away from a job's own baseline, and runs that reported success while the file they promised was missing.</p>
+<p>Full breakdown with what each kind means: <a href="/how-often-jobs-fail">how often does an unattended job actually fail</a>.</p>
+
+<h2>They stack, and that is normal</h2>
+<p>Tracing and a watchdog are not alternatives. Tracing answers "why did this run do that", a watchdog answers "should someone look at this run at all". Plenty of setups have both, with the watchdog as the thing that pages you and the tracer as the thing you open once it has.</p>
+<p>The one pairing that is genuinely redundant is two heartbeat monitors. Pick one.</p>
+
+<h2>The part only one of the three has</h2>
+<p>A record you can prove was not edited afterwards. Every finished run here is hashed, every day of hashes sealed into a Merkle root, every root chained to the day before and anchored in Bitcoin. No tracer and no heartbeat does this, because their record is a row in their own database and you are asked to trust it.</p>
+<p>That matters in exactly one situation: when someone other than you has to believe the record. <a href="/verify">Recompute a real run yourself</a>, no account, and see <a href="/eu-ai-act">what it does and does not cover</a> for the EU AI Act.</p>
+
+<h2>Compare us against a specific tool</h2>
+<p>Each of these says where the other one is better, because a comparison that never does is an advert: <a href="/vs/">all comparisons</a>.</p>
+<p class="small muted">If you read this and conclude you need one of the others, that is a good outcome. Somebody who arrives with the wrong need cancels within a month, and we would rather not have the month.</p>
+</div></main>"""
+    page("/observability-or-watchdog", "Observability, a heartbeat, or a watchdog? Which one you actually need",
+         "Tracing tells you what happened inside a run. A heartbeat tells you it checked in. A watchdog tells you "
+         "whether the work got done while nobody was looking. Three questions that decide which one you need, and "
+         "when the answer is one of the others.",
+         _keuze, [ORG_LD], article=True)
+
     page("/how-often-jobs-fail", "How often does an unattended job actually fail? Real numbers from 4,000 runs",
          f"Measured over {_st['runs30']:,} runs by {_st['agents30']} scheduled agents in 30 days: {_fp:.1f} percent failed, "
          f"{_tot_alerts} alerts in total, broken out by kind. The rarest failure is the one no heartbeat monitor can see.",
@@ -1392,6 +1433,7 @@ API base: {API} (header X-API-Key).
 - [RunVouch and the EU AI Act]({BASE}/eu-ai-act): which part of Article 12 and Article 26 a run record covers, and which part it does not
 - [A live fleet]({BASE}/fleet/datasignals): 31 real scheduled agents with their state and success rate, read live from the public endpoint
 - [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
+- [Observability, a heartbeat, or a watchdog?]({BASE}/observability-or-watchdog): which of the three categories a given situation needs, including when the answer is one of the others
 - [How often does an unattended job actually fail?]({BASE}/how-often-jobs-fail): measured over 4,000 real runs, every alert broken out by kind, rebuilt weekly from the production database
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing]({BASE}/pricing) · [Security]({BASE}/security) · [Privacy]({BASE}/privacy) · [Changelog]({BASE}/changelog)
