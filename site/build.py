@@ -209,7 +209,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
 
 
@@ -1158,6 +1158,44 @@ for _slug, _title in _fl:
          _FLEET_BODY.replace("__TITLE__", _title).replace("__SLUG__", _slug).replace("__API__", API)
          + _FLEET_JS.replace("__API__", API).replace("__SLUG__", _slug), [ORG_LD])
 
+# ───────────────────── EU AI ACT (the obligation is live, the standard is not) ─────────────────────
+# Annex III obligations apply since 2 August 2026 and Article 26 makes a deployer keep its own logs for at least six
+# months, while the technical standards for Article 12 (prEN 18229-1, ISO/IEC DIS 24970) are still drafts. A page that
+# says plainly what a run record does and does not cover is worth more to that reader than a page that claims
+# compliance, which no tool can deliver. Everything here is what the product does today; nothing is promised.
+_ACT = """<main><div class="wrap doc"><h1>RunVouch and the EU AI Act</h1>
+<p class="lead muted">Article 12 wants automatic records of what an AI system did. Article 26 makes the organisation using it keep those records for at least six months. This page says exactly which part of that a RunVouch run record covers, and which part it does not.</p>
+<p>The obligations for the systems in Annex III apply since 2 August 2026. The technical standards that will say how to satisfy Article 12 are still drafts (prEN 18229-1, ISO/IEC DIS 24970), so what exists in the meantime is the text of the regulation and whatever your records can actually show.</p>
+
+<h2>What a run record contains</h2>
+<table><tr><th>The regulation asks for</th><th>What RunVouch records, automatically</th></tr>
+<tr><td>Automatic logging over the lifetime of the system, not documentation written by hand (Art. 12(1))</td><td>Every run reports itself: the client wraps the command, or the job calls a ping URL. Nothing is typed by a person.</td></tr>
+<tr><td>The period of each use: start and end date and time (Art. 12(2), for the systems where that list applies)</td><td><code>started</code> and <code>ended</code> per run, to the second, plus the exit status and the duration.</td></tr>
+<tr><td>Data for operational monitoring by the deployer (Art. 12(2)(c))</td><td>Cost, token count, tool calls, output size, and the evidence verdict: whether the file, URL or assertion the run promised was actually there.</td></tr>
+<tr><td>Records a deployer keeps under its own control (Art. 26(6))</td><td>Export of every run as CSV or JSON on the Team plan, so the record lives in your systems and not only in ours.</td></tr>
+<tr><td>Records that can be relied on afterwards</td><td>The part no log file has: each finished run is hashed into a daily Merkle root, chained to the day before and anchored in Bitcoin. A record cannot be edited after the fact, by you or by us, and anyone can recompute it. <a href="/verify">Try it on a real run.</a></td></tr></table>
+
+<h2>What it does not cover</h2>
+<p>Being straight about this is the whole point of a page like this.</p>
+<ul>
+<li><b>Not the content of the work.</b> RunVouch never stores prompts, model outputs, or the contents of the files a run reads or writes. It stores that they happened, their sizes and their hashes. Where Article 12 asks for input data or a reference database for a specific class of system, a run record does not give you that.</li>
+<li><b>Not a conformity assessment.</b> No tool makes a system compliant. This is a record of execution, one input to whatever your assessment needs.</li>
+<li><b>Not six months by default.</b> Full run records are kept 7 days on Free and 90 days on Solo and Team. If you need to hold six months or more, export them: Team gives CSV and JSON of every run, and the per-run hash stays in the public proof chain permanently, so an exported record can still be proved unaltered years later, after we no longer hold the detail ourselves.</li>
+<li><b>Not legal advice.</b> Whether your system falls under Annex III, and what your records must contain, is a question for your own counsel.</li>
+</ul>
+
+<h2>Why the hash matters here</h2>
+<p>A log file proves what a system wrote down. It does not prove that nobody changed it afterwards, and a record that can be edited is worth what the auditor thinks of the person holding it. RunVouch seals each day of runs into a Merkle root, chains that root to the previous day, and stamps it with OpenTimestamps into the Bitcoin blockchain. To alter one run after the fact you would have to alter every day since, and the anchor makes even that visible.</p>
+<p>Nothing in that chain requires trusting us: the day files are public, the rules are 90 lines of standard-library Python, and <a href="/verify">the verification runs in your browser</a> with no account.</p>
+
+<h2>Where to start</h2>
+<p>Take a free key, wrap one scheduled job, and look at what the record contains before you decide it is useful: <a href="/#signup">get a free key</a>. The mechanism is on <a href="/docs/proof">docs/proof</a>, a live fleet is on <a href="/fleet/datasignals">a real fleet</a>, and our own 30-day numbers are on <a href="/stats">in numbers</a>.</p>
+<p class="small muted">Sources: <a href="https://artificialintelligenceact.eu/article/12/">Article 12, record-keeping</a> and <a href="https://artificialintelligenceact.eu/article/26/">Article 26, obligations of deployers</a>. Read them yourself; this page is a description of a product, not of the law.</p>
+</div></main>"""
+page("/eu-ai-act", "RunVouch and the EU AI Act: what a run record proves",
+     "Article 12 wants automatic records of what an AI system did and Article 26 makes the deployer keep them for six months. What a RunVouch run record covers, what it does not, and why a tamper-evident hash matters for a log.",
+     _ACT, [ORG_LD], article=True)
+
 page("/contact", "Contact | RunVouch", "Questions, bugs, security reports or partnership ideas, reach the RunVouch team.", '''<main><div class="wrap doc"><h1>Contact</h1><p class="lead muted">Support, billing, security or just an idea. Replies within one working day.</p>
 <form id="cf" onsubmit="return sendContact(event)"><p><select id="ct" style="padding:.8rem;border-radius:10px;background:#040308;color:var(--fg);border:1px solid var(--line2);font:inherit"><option value="support">Support</option><option value="billing">Billing</option><option value="security">Security report</option><option value="partnership">Partnership / integration</option></select></p>
 <p><input id="ce" type="email" required placeholder="you@company.com" style="width:100%;padding:.85rem 1rem;border:1px solid var(--line2);border-radius:12px;font:inherit;background:#040308;color:var(--fg)"></p>
@@ -1299,6 +1337,7 @@ API base: {API} (header X-API-Key).
 """ + "".join(f"- [vs {b}]({BASE}/vs/{a}): {c}\n" for a, b, c in VS_LIST) + f"""
 
 ## Other
+- [RunVouch and the EU AI Act]({BASE}/eu-ai-act): which part of Article 12 and Article 26 a run record covers, and which part it does not
 - [A live fleet]({BASE}/fleet/datasignals): 31 real scheduled agents with their state and success rate, read live from the public endpoint
 - [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
