@@ -1,0 +1,7 @@
+[Unit]
+Description=Daily PR watch for the RunVouch account
+[Timer]
+OnCalendar=*-*-* 08:40
+Persistent=true
+[Install]
+WantedBy=timers.target

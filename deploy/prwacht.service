@@ -1,0 +1,6 @@
+[Unit]
+Description=RunVouch PR watch (open pull requests where the ball is with us)
+[Service]
+Type=oneshot
+WorkingDirectory=%h/runvouch
+ExecStart=%h/bin/rv run prwacht --source systemd --log %h/runvouch/data/prwacht.log -- /usr/bin/python3 %h/runvouch/deploy/prwacht.py

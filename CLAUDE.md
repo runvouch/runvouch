@@ -24,6 +24,7 @@ python3 runvouch/cli.py status                        # the rv client straight f
 Production runs as systemd user units on this machine: `runvouch.service` (the API, wraps run.sh),
 `runvouch-site.timer` (weekly site rebuild), `statuswacht.timer` (external check of the status page
 every minute), `pushwacht.timer` (hourly: pushes main to GitHub when the whole suite is green),
+`prwacht.timer` (daily 08:40: open pull requests where the ball is with us),
 `cloudflared.service` (tunnel). After a server change: `systemctl --user restart runvouch`.
 A site change needs `site/build.py` and no restart; the server serves `site/public/` from disk.
 Deploy details in deploy/DEPLOY.md.
@@ -80,7 +81,7 @@ source links). Adding an integration page means adding a dict to `INTEGRATIONS`.
 `.env` for billing switches (POLAR_LIVE, STRIPE_LIVE, LS_LIVE) and analytics.json for the counter.
 
 **Operational scripts** (`remediator.py`, `deploy/statuswacht.py`, `deploy/marktwacht.py`,
-`deploy/koperswandeling.py`, `deploy/reddit-scout.py`, `deploy/telegram-antwoord.py`) run the
+`deploy/koperswandeling.py`, `deploy/reddit-scout.py`, `deploy/telegram-antwoord.py`, `deploy/prwacht.py`) run the
 business around the product and dogfood RunVouch via `rv run`. `remediator.py` re-runs failed cron
 jobs and hands persistent failures to the local Claude CLI with a repair brief; it has a never-list
 for jobs that send mail or touch money. `data/` is the production database, proof files, logs and
