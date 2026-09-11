@@ -209,7 +209,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
 
 
@@ -913,7 +913,7 @@ if _st:
              f'<p class="muted">What the kinds mean is on the <a href="/docs/alerts">alerts page</a>. TEST alerts are excluded. Numbers come straight from the production database at build time; nothing is edited by hand.</p>'
              f'<h2>How to read this</h2>'
              f'<p>The failure rate is what you would expect from a fleet of scrapers and LLM jobs hitting external sources: most failures are an upstream 5xx or a rate limit, and the interesting number is not the rate but the time it took to know. The evidence figure is the one a heartbeat monitor cannot produce at all: those runs would have been green.</p>'
-             f'<p>If you publish your own numbers from RunVouch and want them linked here, <a href="/contact">say so</a>.</p></div></main>')
+             f'<p>The same fleet, live and per agent instead of totalled: <a href="/fleet/datasignals">a live fleet</a>. If you publish your own numbers from RunVouch and want them linked here, <a href="/contact">say so</a>.</p></div></main>')
     page("/stats", "RunVouch in numbers: our own agents, last 30 days",
          f"Real figures from the fleet that runs RunVouch itself: {_st['runs30']} runs by {_st['agents30']} agents in 30 days, {_pct:.1f}% failed, {_st['noev']} green runs without evidence, median time to alert {_lag}. Updated weekly.",
          _body, [ORG_LD])
@@ -1085,6 +1085,79 @@ python3 verify_proof.py proof.json day.json</code></pre>
          "One real sealed run from our own fleet: recompute its hash, walk the Merkle path, rebuild the day root from every published leaf and check the chain. Edit a field and watch it break. No account, nothing leaves your browser.",
          _VERIFY_BODY, [ORG_LD])
 
+# ───────────────────── PUBLIC FLEET (a real fleet, live, no account) ─────────────────────
+# The fleet endpoint has been public JSON since the start and nothing rendered it, so the only place a stranger could
+# see RunVouch actually running was a screenshot. A screenshot of a dashboard with no data is worse than none: the one
+# in the directory listings showed 48 agents all waiting, zero cost, zero alerts. This page is the live thing instead,
+# and it doubles as the status page a Team customer can point their own users at.
+def _fleets():
+    import sqlite3
+    db = ROOT.parent / "data" / "runvouch.db"
+    if not db.exists():
+        return []
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        return [(r[0], r[1]) for r in c.execute("SELECT slug, title FROM public_fleets ORDER BY slug")]
+    except sqlite3.OperationalError:
+        return []
+
+
+_FLEET_JS = r"""
+<script>
+const A='__API__', SLUG='__SLUG__';
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function ago(ts){if(!ts)return 'never';const s=Math.max(0,Date.now()/1000-ts);
+ if(s<90)return Math.round(s)+' s ago';if(s<5400)return Math.round(s/60)+' min ago';
+ if(s<172800)return Math.round(s/3600)+' h ago';return Math.round(s/86400)+' days ago'}
+function every(s){if(!s)return 'on demand';if(s%86400===0)return s/86400+' d';if(s%3600===0)return s/3600+' h';return Math.round(s/60)+' min'}
+function pct(r){return !r||!r.runs?'-':Math.round(100*r.ok/r.runs)+'% of '+r.runs}
+function state(a){
+ if(a.paused)return ['paused','muted'];
+ if(a.open_alert)return [String(a.open_alert.kind||'alert').toLowerCase(),'bad'];
+ if(a.late)return ['late','warn'];
+ if(a.last_run&&a.last_run.status==='fail')return ['failed','bad'];
+ if(a.last_run&&a.last_run.ended)return ['vouched','ok'];
+ return ['waiting','muted']}
+fetch(A+'/public/fleet/'+SLUG+'.json').then(r=>r.json()).then(j=>{
+ const ags=j.agents||[];
+ const open=ags.filter(a=>a.open_alert).length, late=ags.filter(a=>a.late&&!a.open_alert).length;
+ const runs30=ags.reduce((n,a)=>n+((a.rates&&a.rates['30d']&&a.rates['30d'].runs)||0),0);
+ const ok30=ags.reduce((n,a)=>n+((a.rates&&a.rates['30d']&&a.rates['30d'].ok)||0),0);
+ document.getElementById('f-cards').innerHTML=
+   '<div class="card"><div class="big grad">'+ags.length+'</div><h3>agents watched</h3></div>'+
+   '<div class="card"><div class="big grad">'+runs30.toLocaleString('en')+'</div><h3>runs in 30 days</h3><p>'+(runs30?Math.round(100*ok30/runs30):0)+'% ended ok.</p></div>'+
+   '<div class="card"><div class="big grad">'+open+'</div><h3>open alerts</h3><p>'+late+' late right now.</p></div>';
+ document.getElementById('f-rows').innerHTML=ags.map(a=>{
+   const [lab,cls]=state(a);
+   return '<tr><td><b>'+esc(a.name)+'</b><div class="small muted">'+esc(a.label||'')+'</div></td>'+
+   '<td><span class="pill '+cls+'">'+esc(lab)+'</span></td>'+
+   '<td class="small">'+every(a.cadence_s)+'</td>'+
+   '<td class="small">'+(a.last_run?ago(a.last_run.ended||a.last_run.started):'never')+'</td>'+
+   '<td class="small">'+pct(a.rates&&a.rates['7d'])+'</td>'+
+   '<td class="small">'+pct(a.rates&&a.rates['30d'])+'</td></tr>'}).join('');
+ document.getElementById('f-time').textContent='Read from the public endpoint at '+(j.time||'').replace('T',' ').replace('Z',' UTC')+'.';
+}).catch(()=>{document.getElementById('f-time').textContent='The public endpoint could not be reached from your browser right now. The raw data is one click away below.'});
+</script>"""
+
+_FLEET_BODY = """<main><div class="wrap doc"><h1>__TITLE__</h1>
+<p class="lead muted">A real fleet, watched by RunVouch, live on this page. No account, no login, nothing cached: your browser reads the same public endpoint anyone can read.</p>
+<div class="grid g3" id="f-cards"></div>
+<h2>Every agent</h2>
+<table><tr><th>Agent</th><th>State</th><th>Every</th><th>Last run</th><th>7 days</th><th>30 days</th></tr><tbody id="f-rows"></tbody></table>
+<p class="small muted" id="f-time">Loading...</p>
+<h2>What you are looking at</h2>
+<p>These are scheduled jobs that run whether anyone is watching or not: scrapers, report builders, refreshes, monitors. <b>Vouched</b> means the run finished and left the evidence it promised. <b>Late</b> means the next run is past its cadence plus grace and nobody has seen it yet. A failure or a run without evidence raises an alert within minutes, and the owner hears about it on Telegram, Slack, e-mail or a webhook.</p>
+<p>Every finished run in this list also has a tamper-evident proof. Pick one apart yourself on <a href="/verify">verify a run</a>, or read the raw feed behind this page: <a class="mono" href="__API__/public/fleet/__SLUG__.json">__API__/public/fleet/__SLUG__.json</a></p>
+<p class="muted">Any account can publish a fleet like this. It is the same data the owner sees, minus everything private: no costs, no run contents, no agent the owner did not mark public. Our own 30-day numbers are on <a href="/stats">in numbers</a>.</p>
+</div></main>"""
+
+_fl = _fleets()
+for _slug, _title in _fl:
+    page(f"/fleet/{_slug}", f"{_title}: a real fleet watched by RunVouch, live",
+         f"Live public status of {_title}: every scheduled agent with its state, cadence, last run and success rate over 7 and 30 days, read straight from the public endpoint. No account needed.",
+         _FLEET_BODY.replace("__TITLE__", _title).replace("__SLUG__", _slug).replace("__API__", API)
+         + _FLEET_JS.replace("__API__", API).replace("__SLUG__", _slug), [ORG_LD])
+
 page("/contact", "Contact | RunVouch", "Questions, bugs, security reports or partnership ideas, reach the RunVouch team.", '''<main><div class="wrap doc"><h1>Contact</h1><p class="lead muted">Support, billing, security or just an idea. Replies within one working day.</p>
 <form id="cf" onsubmit="return sendContact(event)"><p><select id="ct" style="padding:.8rem;border-radius:10px;background:#040308;color:var(--fg);border:1px solid var(--line2);font:inherit"><option value="support">Support</option><option value="billing">Billing</option><option value="security">Security report</option><option value="partnership">Partnership / integration</option></select></p>
 <p><input id="ce" type="email" required placeholder="you@company.com" style="width:100%;padding:.85rem 1rem;border:1px solid var(--line2);border-radius:12px;font:inherit;background:#040308;color:var(--fg)"></p>
@@ -1226,6 +1299,7 @@ API base: {API} (header X-API-Key).
 """ + "".join(f"- [vs {b}]({BASE}/vs/{a}): {c}\n" for a, b, c in VS_LIST) + f"""
 
 ## Other
+- [A live fleet]({BASE}/fleet/datasignals): 31 real scheduled agents with their state and success rate, read live from the public endpoint
 - [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing]({BASE}/pricing) · [Security]({BASE}/security) · [Privacy]({BASE}/privacy) · [Changelog]({BASE}/changelog)
