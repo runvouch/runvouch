@@ -2,5 +2,5 @@
 Description=RunVouch push watch (keeps GitHub level with this machine, tests must be green)
 [Service]
 Type=oneshot
-WorkingDirectory=/home/krtradingpro/runvouch
-ExecStart=/home/krtradingpro/bin/rv run pushwacht --source systemd --log /home/krtradingpro/runvouch/data/pushwacht.log -- /home/krtradingpro/runvouch/.venv/bin/python /home/krtradingpro/runvouch/deploy/pushwacht.py
+WorkingDirectory=%h/runvouch
+ExecStart=%h/bin/rv run pushwacht --source systemd --log %h/runvouch/data/pushwacht.log -- %h/runvouch/.venv/bin/python %h/runvouch/deploy/pushwacht.py
