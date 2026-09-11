@@ -23,13 +23,14 @@ python3 runvouch/cli.py status                        # the rv client straight f
 
 Production runs as systemd user units on this machine: `runvouch.service` (the API, wraps run.sh),
 `runvouch-site.timer` (weekly site rebuild), `statuswacht.timer` (external check of the status page
-every minute), `cloudflared.service` (tunnel). After a server change: `systemctl --user restart runvouch`.
+every minute), `pushwacht.timer` (hourly: pushes main to GitHub when the whole suite is green),
+`cloudflared.service` (tunnel). After a server change: `systemctl --user restart runvouch`.
 A site change needs `site/build.py` and no restart; the server serves `site/public/` from disk.
 Deploy details in deploy/DEPLOY.md.
 
 Packaging (`packaging/pypi/build.sh`, `packaging/npm/build.sh`) copies the client sources at build time
 and rewrites the default URL to the hosted API. Publishing is a separate explicit step; never do it
-from a session. `git push` is denied by .claude/settings.json; the owner pushes.
+from a session. `git push` is denied by .claude/settings.json, so a session commits and never pushes; `deploy/pushwacht.py` pushes main hourly, but only with the whole test suite green, and it stops and reports when this machine is behind origin. Tags and releases stay manual.
 
 ## Architecture
 

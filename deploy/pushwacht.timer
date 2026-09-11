@@ -1,0 +1,7 @@
+[Unit]
+Description=Hourly push watch for the RunVouch repository
+[Timer]
+OnCalendar=*-*-* *:17:00
+Persistent=true
+[Install]
+WantedBy=timers.target
