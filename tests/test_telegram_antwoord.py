@@ -173,7 +173,7 @@ def test_een_klantmail_wordt_klaargezet_om_te_versturen(T, tmp_path, monkeypatch
 
 def test_ons_eigen_adres_wordt_nooit_de_ontvanger(T):
     """Een doorgestuurde mail staat vol met support@runvouch.com. Daar antwoorden we niet naartoe."""
-    assert T._aan_wie("From: support@runvouch.com\nTo: keith\n\nfwd van iemand@klant.nl") == "iemand@klant.nl"
+    assert T._aan_wie("From: support@runvouch.com\nTo: ons\n\nfwd van iemand@klant.nl") == "iemand@klant.nl"
     assert T._aan_wie("geen enkel adres hier") == ""
 
 
