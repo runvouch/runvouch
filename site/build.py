@@ -209,7 +209,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/how-often-jobs-fail">How often jobs fail</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
 
 
@@ -895,6 +895,17 @@ def _stats():
     return dict(runs30=runs30, fails30=fails30, runs7=runs7, agents30=agents30, kinds=kinds, noev=noev, ok30=ok30,
                 lag=lag, days=len(days), anchored=anchored, day_runs=sum(d[1] for d in days), first_day=days[0][0] if days else None)
 
+_KIND_UITLEG = {
+    "FAILED": "exited non-zero, or the client reported failure",
+    "DRIFT": "cost or duration moved away from this job's own baseline, while nothing failed",
+    "MISSED": "the run never started: dead scheduler, expired auth, crash before the first line",
+    "NO_EVIDENCE": "reported success, but the file, URL or assertion it promised was missing",
+    "STALLED": "started and then stopped reporting before it ended",
+    "RETRY_STORM": "the same tool with the same input, over and over, inside one run",
+    "BUDGET_RUN": "one run went over its cost cap",
+    "BUDGET_DAY": "one agent went over its daily cost cap",
+}
+
 _st = _stats()
 if _st:
     _rows = "".join(f"<tr><td><b>{k}</b></td><td>{n}</td></tr>" for k, n in _st["kinds"]) or "<tr><td colspan=2>none</td></tr>"
@@ -914,6 +925,47 @@ if _st:
              f'<h2>How to read this</h2>'
              f'<p>The failure rate is what you would expect from a fleet of scrapers and LLM jobs hitting external sources: most failures are an upstream 5xx or a rate limit, and the interesting number is not the rate but the time it took to know. The evidence figure is the one a heartbeat monitor cannot produce at all: those runs would have been green.</p>'
              f'<p>The same fleet, live and per agent instead of totalled: <a href="/fleet/datasignals">a live fleet</a>. If you publish your own numbers from RunVouch and want them linked here, <a href="/contact">say so</a>.</p></div></main>')
+    # ── Hoe vaak faalt een onbewaakte taak eigenlijk ───────────────────────────
+    # Niemand publiceert dit. De concurrentie verkoopt monitoring en laat de koper zelf raden hoe vaak er iets
+    # misgaat, en de koper raadt te laag: hij denkt aan crashes en die zijn juist zeldzaam. Wij hebben 4.000 echte
+    # runs liggen met de soorten erbij. Dezelfde cijfers als /stats, want ze komen uit dezelfde meting, maar hier
+    # als antwoord op een vraag die iemand intypt in plaats van als dashboard.
+    _soorten = dict(_st["kinds"])
+    _tot_alerts = sum(_soorten.values())
+    _fp = 100 * _st["fails30"] / _st["runs30"]
+    _rij = "".join(
+        f'<tr><td><b>{k}</b></td><td>{n}</td><td>{_KIND_UITLEG.get(k, "")}</td></tr>'
+        for k, n in _st["kinds"])
+    _faal = f"""<main><div class="wrap doc"><h1>How often does an unattended job actually fail?</h1>
+<p class="lead muted">Nobody publishes this, so here are our own numbers: {_st["runs30"]:,} runs by {_st["agents30"]} scheduled agents over 30 days, with every alert broken out by kind. Measured, not estimated, and rebuilt from the production database every week.</p>
+
+<h2>The rate is boring. The kinds are not.</h2>
+<p>{_fp:.1f} percent of runs ended in failure: {_st["fails30"]} out of {_st["runs30"]:,}. If you were expecting worse, that matches most fleets, and it is also why people underestimate the problem. A crash is loud, rare and easy to catch. It is not what costs you a night.</p>
+<p>Those {_st["runs30"]:,} runs produced {_tot_alerts} alerts in total. Here is what they were:</p>
+<table><tr><th>Kind</th><th>Count</th><th>What it means</th></tr>{_rij}</table>
+
+<h2>Read that table from the bottom up</h2>
+<p><b>The rarest one is the one nothing else catches.</b> {_soorten.get("NO_EVIDENCE", 0)} runs reported success while the file, URL or assertion they promised was not there. Every heartbeat monitor in this category would have counted those as green, because the job did check in. It just did not do anything. That is the failure mode people only discover downstream, when someone asks where the data went.</p>
+<p><b>The second most common one has no category.</b> {_soorten.get("DRIFT", 0)} alerts were drift: cost or duration moving away from the job's own baseline while nothing failed at all. No exception, no missed run, no red status. A job that quietly starts taking four times as long is the earliest warning you get, and almost nothing watches for it.</p>
+<p><b>Only {_soorten.get("MISSED", 0)} were the one everybody monitors.</b> A run that never started is what a dead man's switch is for, and it is the minority of what actually goes wrong.</p>
+
+<h2>What these numbers are not</h2>
+<p>This is one fleet: {_st["agents30"]} scheduled jobs that run a data business, mostly small scrapers, refreshes, health checks and report builders, plus a handful of LLM jobs. The median run takes about a second. A fleet of long agent sessions would fail more often and differently, and anyone who tells you there is one industry failure rate is selling something.</p>
+<p>Two more honest limits. The record is built from what each client reported, so a client that lies about its own cost produces a faithful record of the lie. And a job nobody registered produces no alerts at all, which is the one failure mode monitoring can never see.</p>
+
+<h2>Why we can publish this at all</h2>
+<p>Because the runs behind it cannot be edited afterwards. Each finished run is hashed, each day of hashes is sealed into a Merkle root, and each root is chained to the day before and anchored in Bitcoin. So this page is not a marketing claim about our own reliability, it is a number you can recompute: <a href="/verify">verify a real run yourself</a>, no account needed.</p>
+<p>The dashboard version of the same measurement, with the median time to alert and the proof chain, is on <a href="/stats">in numbers</a>. The fleet itself is live on <a href="/fleet/datasignals">a real fleet</a>.</p>
+
+<h2>If you want your own numbers</h2>
+<p>Wrap one job and you have a baseline within a week. Free for 20 agents, all detectors on, no card: <a href="/#signup">get a free key</a>.</p>
+<p class="small muted">Figures from the production database on {TODAY}, over the preceding 30 days. TEST alerts excluded. Nothing on this page is typed in by hand.</p>
+</div></main>"""
+    page("/how-often-jobs-fail", "How often does an unattended job actually fail? Real numbers from 4,000 runs",
+         f"Measured over {_st['runs30']:,} runs by {_st['agents30']} scheduled agents in 30 days: {_fp:.1f} percent failed, "
+         f"{_tot_alerts} alerts in total, broken out by kind. The rarest failure is the one no heartbeat monitor can see.",
+         _faal, [ORG_LD], article=True)
+
     page("/stats", "RunVouch in numbers: our own agents, last 30 days",
          f"Real figures from the fleet that runs RunVouch itself: {_st['runs30']} runs by {_st['agents30']} agents in 30 days, {_pct:.1f}% failed, {_st['noev']} green runs without evidence, median time to alert {_lag}. Updated weekly.",
          _body, [ORG_LD])
@@ -1340,6 +1392,7 @@ API base: {API} (header X-API-Key).
 - [RunVouch and the EU AI Act]({BASE}/eu-ai-act): which part of Article 12 and Article 26 a run record covers, and which part it does not
 - [A live fleet]({BASE}/fleet/datasignals): 31 real scheduled agents with their state and success rate, read live from the public endpoint
 - [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
+- [How often does an unattended job actually fail?]({BASE}/how-often-jobs-fail): measured over 4,000 real runs, every alert broken out by kind, rebuilt weekly from the production database
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing]({BASE}/pricing) · [Security]({BASE}/security) · [Privacy]({BASE}/privacy) · [Changelog]({BASE}/changelog)
 """)

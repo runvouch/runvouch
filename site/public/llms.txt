@@ -96,5 +96,6 @@ API base: https://api.runvouch.com (header X-API-Key).
 - [RunVouch and the EU AI Act](https://runvouch.com/eu-ai-act): which part of Article 12 and Article 26 a run record covers, and which part it does not
 - [A live fleet](https://runvouch.com/fleet/datasignals): 31 real scheduled agents with their state and success rate, read live from the public endpoint
 - [Verify a run yourself](https://runvouch.com/verify): one real sealed run, hashes recomputed in your browser, no account
+- [How often does an unattended job actually fail?](https://runvouch.com/how-often-jobs-fail): measured over 4,000 real runs, every alert broken out by kind, rebuilt weekly from the production database
 - [RunVouch in numbers](https://runvouch.com/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing](https://runvouch.com/pricing) · [Security](https://runvouch.com/security) · [Privacy](https://runvouch.com/privacy) · [Changelog](https://runvouch.com/changelog)
