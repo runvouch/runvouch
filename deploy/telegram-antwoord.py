@@ -196,11 +196,20 @@ def handle(text: str) -> list[str]:
         except FileNotFoundError:
             pass
         return ["Losgekoppeld. Wat je nu plakt staat op zichzelf. Stuur een link om een nieuwe thread vast te zetten."]
-    if los in ("ja", "plaats", "post", "doe maar", "akkoord"):
+    if los in ("ja", "plaats", "post", "doe maar", "akkoord", "verstuur"):
+        # Eerst mail, dan GitHub: een mailantwoord is vers en een PR-concept kan een dag oud zijn.
+        if klaar_mail().get("naar"):
+            return verstuur_mail_antwoord()
         return plaats_pr_antwoord()
-    if los in ("nee", "niet doen", "laat maar") and klaargezet().get("url"):
-        open(PR_STATE, "w").write("{}")
-        return ["Niet geplaatst, het concept is weg."]
+    if los in ("nee", "niet doen", "laat maar"):
+        weg = []
+        if klaar_mail().get("naar"):
+            open(MAIL_STATE, "w").write("{}")
+            weg.append("het mailantwoord")
+        if klaargezet().get("url"):
+            open(PR_STATE, "w").write("{}")
+            weg.append("het GitHub-antwoord")
+        return [("Weggegooid: " + " en ".join(weg) + ".") if weg else "Er stond niets klaar."]
     if los in ("thread", "status", "waar", "?"):
         st = vastgezet()
         return [f"Vastgezet: {kort(st['url'])}\n{st['url']}" if st else "Geen thread vastgezet.\n" + HELP]
@@ -225,6 +234,81 @@ sign as "The RunVouch team", support@runvouch.com). Rules, all hard:
 - Then a blank line, then the reply text only (with the sign-off). If no reply is warranted, output only: NOREPLY - <why>"""
 
 
+MAIL_STATE = os.path.join(ROOT, "data", "mailantwoord.json")
+# Twee bedrijven, twee Resend-sleutels, twee afzenders. Versturen vanuit Gmail met een van deze adressen in de
+# From-regel faalt: geen van beide domeinen noemt Google in zijn SPF, runvouch.com staat op p=quarantine en
+# datasignalslab.com zelfs op p=reject. Via Resend wordt het ondertekend als het eigen domein en komt het aan.
+AFZENDERS = {
+    "RunVouch": ("RunVouch <support@runvouch.com>", os.path.join(ROOT, ".env")),
+    "DataSignals Lab": ("DataSignals Lab <support@datasignalslab.com>",
+                        os.path.expanduser("~/apify/landing/config/secrets" + ".env")),
+}
+ADRES_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+ONDERWERP_RE = re.compile(r"^\s*(?:subject|onderwerp)\s*:\s*(.+)$", re.I | re.M)
+EIGEN_DOMEINEN = ("runvouch.com", "datasignalslab.com")
+
+
+def _resend_sleutel(pad: str) -> str:
+    """De sleutel uit een omgevingsbestand, zonder hem ooit af te drukken."""
+    try:
+        regels = [l for l in open(pad) if "=" in l and not l.lstrip().startswith("#")]
+    except Exception:
+        return ""
+    for l in regels:
+        naam, _, waarde = l.partition("=")
+        if naam.strip() == "RESEND_API_KEY":
+            return waarde.strip().strip('"').strip("'")
+    return ""
+
+
+def _aan_wie(tekst: str) -> str:
+    """Het adres van de afzender uit de geplakte mail. Onze eigen adressen tellen niet mee."""
+    # Lui en niet gulzig: met [^<\n]* at "From: someone@acme.com" zijn eigen begin op en bleef er e@acme.com over.
+    m = re.search(r"(?:^|\n)\s*(?:from|van)\s*:\s*[^<\n]*?<?([\w.+-]+@[\w-]+\.[\w.-]+)", tekst, re.I)
+    if m and not any(d in m.group(1).lower() for d in EIGEN_DOMEINEN):
+        return m.group(1)
+    for adres in ADRES_RE.findall(tekst):
+        if not any(d in adres.lower() for d in EIGEN_DOMEINEN):
+            return adres
+    return ""
+
+
+def klaar_mail() -> dict:
+    try:
+        with open(MAIL_STATE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def verstuur_mail_antwoord(tekst: str = "") -> list[str]:
+    """Het klaargezette mailantwoord versturen. De sessie schrijft, de eigenaar drukt af."""
+    d = klaar_mail()
+    if not d.get("naar"):
+        return ["Er staat geen mailantwoord klaar."]
+    body = (tekst or d.get("tekst", "")).strip()
+    if not body:
+        return ["Het klaargezette antwoord is leeg, er is niets verstuurd."]
+    van, envpad = AFZENDERS.get(d.get("company", ""), AFZENDERS["RunVouch"])
+    sleutel = _resend_sleutel(envpad)
+    if not sleutel:
+        return [f"Geen verzendsleutel gevonden voor {d.get('company')}, niets verstuurd."]
+    adres = van.split("<")[-1].rstrip(">")
+    payload = json.dumps({"from": van, "to": [d["naar"]], "subject": d.get("onderwerp") or "Re: your message",
+                          "text": body + "\n", "reply_to": adres}).encode()
+    req = urllib.request.Request("https://api.resend.com/emails", payload,
+                                 {"Authorization": "Bearer " + sleutel, "Content-Type": "application/json",
+                                  "User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            antwoord = json.load(r)
+    except Exception as e:
+        detail = e.read().decode("utf-8", "replace")[:200] if hasattr(e, "read") else ""
+        return [f"Versturen mislukt: {type(e).__name__} {detail}"]
+    open(MAIL_STATE, "w").write("{}")
+    return [f"Verstuurd aan {d['naar']} namens {d.get('company')}.\nid {antwoord.get('id')}"]
+
+
 def mail_reply(text: str) -> list[str]:
     try:
         r = subprocess.run([S.CLAUDE, "-p", MAIL_RULES + "\n\nINCOMING MESSAGE:\n" + text[:6000], "--output-format", "json", "--max-turns", "1"],
@@ -239,7 +323,18 @@ def mail_reply(text: str) -> list[str]:
     addr = "support@datasignalslab.com" if "DataSignals" in company else "support@runvouch.com"
     with open(S.HISTORY, "a") as f:
         f.write(json.dumps({"ts": time.time(), "sub": "mail " + company, "url": "", "text": body.strip()}) + "\n")
-    return [body.strip(), f"^ ANTWOORD namens {company}\nKopieer het bericht hierboven en verstuur het in Gmail als {addr} (of plak het in de console van het platform)."]
+    naar = _aan_wie(text)
+    m = ONDERWERP_RE.search(text)
+    onderwerp = m.group(1).strip()[:120] if m else ""
+    if onderwerp and not onderwerp.lower().startswith("re:"):
+        onderwerp = "Re: " + onderwerp
+    if not naar:
+        return [body.strip(), f"^ ANTWOORD namens {company}\nGeen afzenderadres in de tekst gevonden, dus versturen "
+                              f"kan ik niet. Kopieer het bericht hierboven en verstuur het als {addr}."]
+    with open(MAIL_STATE, "w") as f:
+        json.dump({"naar": naar, "company": company, "onderwerp": onderwerp, "tekst": body.strip()}, f)
+    return [body.strip(), f"^ ANTWOORD namens {company}, aan {naar}\nAntwoord 'ja' om dit zo te versturen vanaf "
+                          f"{addr}, of plak je eigen versie met mail: ervoor."]
 
 
 def main() -> int:

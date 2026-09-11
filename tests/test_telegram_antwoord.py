@@ -144,10 +144,60 @@ def test_nee_gooit_het_concept_weg_zonder_te_plaatsen(T, tmp_path, monkeypatch):
     open(T.PR_STATE, "w").write(_j.dumps({"url": "https://github.com/a/b/pull/1", "repo": "a/b", "tekst": "x"}))
     monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("mag niet plaatsen")))
     uit = T.handle("nee")
-    assert "Niet geplaatst" in uit[0]
+    assert "Weggegooid" in uit[0] and "GitHub" in uit[0]
     assert _j.load(open(T.PR_STATE)) == {}
 
 
 def test_ja_zonder_klaargezet_antwoord_doet_niets(T, tmp_path):
     T.PR_STATE = str(tmp_path / "leeg.json")
     assert "geen GitHub-antwoord" in T.handle("ja")[0]
+
+
+def test_een_klantmail_wordt_klaargezet_om_te_versturen(T, tmp_path, monkeypatch):
+    """Vroeger eindigde dit met 'kopieer dit en verstuur het in Gmail'. Dat kostte tijd en het faalde op DMARC:
+    geen van beide domeinen noemt Google in zijn SPF."""
+    import json as _j
+    T = laad()          # een verse module, want de fixture vervangt mail_reply door een stub
+    T.MAIL_STATE = str(tmp_path / "mail.json")
+    T.S.HISTORY = str(tmp_path / "drafts.jsonl")
+    monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: type("R", (), {
+        "stdout": _j.dumps({"result": "COMPANY: RunVouch\n\nThanks for writing, the free plan covers 20 agents."}),
+        "returncode": 0})())
+    uit = T.mail_reply("From: someone@acme.com\nSubject: How many agents on the free plan?\n\nHi, quick question.")
+    assert "20 agents" in uit[0]
+    assert "someone@acme.com" in uit[1] and "ja" in uit[1]
+    d = _j.load(open(T.MAIL_STATE))
+    assert d["naar"] == "someone@acme.com" and d["company"] == "RunVouch"
+    assert d["onderwerp"] == "Re: How many agents on the free plan?"
+
+
+def test_ons_eigen_adres_wordt_nooit_de_ontvanger(T):
+    """Een doorgestuurde mail staat vol met support@runvouch.com. Daar antwoorden we niet naartoe."""
+    assert T._aan_wie("From: support@runvouch.com\nTo: keith\n\nfwd van iemand@klant.nl") == "iemand@klant.nl"
+    assert T._aan_wie("geen enkel adres hier") == ""
+
+
+def test_ja_verstuurt_de_klaargezette_mail(T, tmp_path, monkeypatch):
+    import json as _j
+    T.MAIL_STATE = str(tmp_path / "mail.json")
+    T.PR_STATE = str(tmp_path / "pr.json")
+    open(T.MAIL_STATE, "w").write(_j.dumps({"naar": "someone@acme.com", "company": "RunVouch",
+                                            "onderwerp": "Re: vraag", "tekst": "Het antwoord."}))
+    monkeypatch.setattr(T, "_resend_sleutel", lambda pad: "re_test")
+    verstuurd = {}
+
+    class Antwoord:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"id":"abc"}'
+
+    def nep(req, timeout=0):
+        verstuurd["body"] = _j.loads(req.data)
+        return Antwoord()
+
+    monkeypatch.setattr(T.urllib.request, "urlopen", nep)
+    uit = T.handle("ja")
+    assert "Verstuurd aan someone@acme.com" in uit[0]
+    assert verstuurd["body"]["from"].endswith("<support@runvouch.com>")
+    assert verstuurd["body"]["subject"] == "Re: vraag"
+    assert _j.load(open(T.MAIL_STATE)) == {}
