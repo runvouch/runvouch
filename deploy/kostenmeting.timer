@@ -1,0 +1,7 @@
+[Unit]
+Description=Once, on 19 September 2026: is there enough cost data for the page yet
+[Timer]
+OnCalendar=2026-09-19 09:00
+Persistent=true
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=RunVouch cost measurement (one shot, a week after the reporting gaps were closed)
+[Service]
+Type=oneshot
+WorkingDirectory=%h/runvouch
+ExecStart=/usr/bin/python3 %h/runvouch/deploy/kostenmeting.py
