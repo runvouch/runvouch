@@ -209,7 +209,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/observability-or-watchdog">Which tool do I need</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/how-often-jobs-fail">How often jobs fail</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/observability-or-watchdog">Which tool do I need</a><a href="/self-hosted">Self-hosted</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/how-often-jobs-fail">How often jobs fail</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
 
 
@@ -906,6 +906,30 @@ _KIND_UITLEG = {
     "BUDGET_DAY": "one agent went over its daily cost cap",
 }
 
+def _aantal_tests():
+    """Hoeveel tests de suite telt, geteld in plaats van ingetypt: dat laatste loopt altijd achter.
+
+    Vragen aan pytest en niet zelf 'def test_' tellen, want een geparametriseerde test is er een per geval: het
+    verschil was 95 tegen 99. Mislukt het verzamelen, dan valt hij terug op tellen, want een pagina die niet bouwt
+    is erger dan een getal dat vier te laag staat."""
+    import re as _re
+    import subprocess as _sp
+    try:
+        r = _sp.run([str(ROOT.parent / ".venv" / "bin" / "python"), "-m", "pytest", "--collect-only", "-q", "tests"],
+                    cwd=ROOT.parent, capture_output=True, text=True, timeout=120)
+        m = _re.search(r"(\d+) tests? collected", r.stdout)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    n = 0
+    for f in (ROOT.parent / "tests").glob("test_*.py"):
+        n += len(_re.findall(r"^def test_", f.read_text(encoding="utf-8"), _re.M))
+    return n
+
+
+_TESTS = _aantal_tests()
+
 _st = _stats()
 if _st:
     _rows = "".join(f"<tr><td><b>{k}</b></td><td>{n}</td></tr>" for k, n in _st["kinds"]) or "<tr><td colspan=2>none</td></tr>"
@@ -996,6 +1020,51 @@ if _st:
 <p>Each of these says where the other one is better, because a comparison that never does is an advert: <a href="/vs/">all comparisons</a>.</p>
 <p class="small muted">If you read this and conclude you need one of the others, that is a good outcome. Somebody who arrives with the wrong need cancels within a month, and we would rather not have the month.</p>
 </div></main>"""
+    # ── Zelf hosten ────────────────────────────────────────────────────────────
+    # De grootste groep in dit hokje host zelf: Uptime Kuma staat op 91.257 sterren in vier jaar en Healthchecks
+    # op 10.320 in elf. Die mensen zoeken letterlijk op self-hosted, ze proberen het dezelfde avond, en ze vertellen
+    # het door. Wij stonden er met een zin op de prijspagina. Deze pagina geeft ze de commando's, en zegt eerlijk
+    # wanneer Healthchecks de betere keuze is: wie met de verkeerde verwachting begint, is binnen een week weg.
+    _zelf = f"""<main><div class="wrap doc"><h1>Run it yourself</h1>
+<p class="lead muted">MIT licensed, one server file, one client file and a SQLite database. No external service is required to run it, and the hosted version and the self-hosted one are the same code.</p>
+
+<h2>Five commands</h2>
+<pre><code>git clone https://github.com/runvouch/runvouch &amp;&amp; cd runvouch
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r requirements.txt
+cp .env.example .env          # nothing in it is required to boot
+.venv/bin/uvicorn runvouch.server:app --host 127.0.0.1 --port 8787
+curl localhost:8787/health</code></pre>
+<p>That is a working install. The database creates itself on first start under <code>data/</code>, every setting has a default, and the detectors begin sweeping straight away. Put it behind nginx or a tunnel when you want it reachable, and set <code>RUNVOUCH_PUBLIC_URL</code> so the proof files point at the right host.</p>
+
+<h2>What runs where</h2>
+<p><b>The server</b> is <code>runvouch/server.py</code>: the API, the detectors, the alert delivery, the proof chain and the dashboard, in one file on FastAPI and SQLite. Two dependencies, pinned.</p>
+<p><b>The client</b> is <code>runvouch/cli.py</code>: standard library only, no dependencies, ever. Copy that one file onto a machine and <code>rv run</code> works. It also fails open, so a monitoring outage can never take down the job it watches.</p>
+<p><b>The proof rules</b> are <code>runvouch/proof.py</code>, and <code>templates/verify_proof.py</code> repeats them on purpose so a reader can check a run without importing anything of ours.</p>
+<p>Nothing calls home. Alerts go where you point them: e-mail through your own Resend key, Telegram, Slack, a webhook, or nowhere at all.</p>
+
+<h2>What you give up, honestly</h2>
+<p><b>The Bitcoin anchor needs one more package.</b> The hash chain works out of the box; anchoring the daily root with OpenTimestamps needs the <code>ots</code> client installed. Without it the chain still seals and still verifies, it just has no third party attesting to the date.</p>
+<p><b>Alerting needs a channel.</b> Self-hosted with no Resend key and no Telegram token means the detectors fire and nobody hears it. Set one before you rely on it.</p>
+<p><b>You are the uptime.</b> A watchdog on the same machine as the jobs it watches shares their fate. That is fine for a homelab and wrong for anything that matters: run it somewhere else, or let us run it.</p>
+
+<h2>When Healthchecks.io is the better answer</h2>
+<p>If what you need is "tell me when cron did not fire", Healthchecks.io has done exactly that since 2015, it is open source, it is excellent, and it has eleven years of people finding its edge cases. Use it. We would rather say that here than have you find out in a month.</p>
+<p>Where this one differs is what it does after the job checks in: evidence that the work actually happened, cost and duration drift against the job's own baseline, retry storms, and a per-run record that cannot be edited afterwards. The full comparison, including where they win: <a href="/vs/healthchecks">vs Healthchecks.io</a>.</p>
+
+<h2>Tests are part of the deal</h2>
+<p>The suite is {_TESTS} tests and runs in under half a minute with no network. If you fork this, that suite is how you know your change did not break a detector.</p>
+<pre><code>.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q tests</code></pre>
+
+<h2>The hosted version</h2>
+<p>Same code, and free for 20 agents with every detector on. The reason to use it is that somebody else is awake when your machine is not: <a href="/#signup">get a free key</a>. Moving between the two is a change of one environment variable, because the client only knows a URL and a key.</p>
+<p class="small muted">MIT. Source on <a href="https://github.com/runvouch/runvouch">GitHub</a>. Issues and pull requests are read by a person.</p>
+</div></main>"""
+    page("/self-hosted", "Self-hosted cron and AI agent monitoring: run RunVouch yourself",
+         "MIT licensed, one server file and a SQLite database, five commands to a working install. What you give up "
+         "when you self-host, and when Healthchecks.io is the better answer.",
+         _zelf, [ORG_LD], article=True)
+
     page("/observability-or-watchdog", "Observability, a heartbeat, or a watchdog? Which one you actually need",
          "Tracing tells you what happened inside a run. A heartbeat tells you it checked in. A watchdog tells you "
          "whether the work got done while nobody was looking. Three questions that decide which one you need, and "
@@ -1433,6 +1502,7 @@ API base: {API} (header X-API-Key).
 - [RunVouch and the EU AI Act]({BASE}/eu-ai-act): which part of Article 12 and Article 26 a run record covers, and which part it does not
 - [A live fleet]({BASE}/fleet/datasignals): 31 real scheduled agents with their state and success rate, read live from the public endpoint
 - [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
+- [Run it yourself]({BASE}/self-hosted): MIT, one server file and SQLite, five commands, and when Healthchecks.io is the better answer
 - [Observability, a heartbeat, or a watchdog?]({BASE}/observability-or-watchdog): which of the three categories a given situation needs, including when the answer is one of the others
 - [How often does an unattended job actually fail?]({BASE}/how-often-jobs-fail): measured over 4,000 real runs, every alert broken out by kind, rebuilt weekly from the production database
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
