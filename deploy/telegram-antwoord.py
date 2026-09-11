@@ -43,6 +43,18 @@ def send(tok: str, chat: str, text: str) -> None:
 
 
 MAIL_RE = re.compile(r"(^|\n)\s*(from|van|subject|onderwerp|to|aan)\s*:", re.I)
+# A GitHub notification mail pasted from the phone: the addresses sit behind "view it on GitHub" and do not survive the
+# copy, so the source has to be read from the wording. Every marker below is GitHub's own, none of it appears in a
+# Reddit thread or a customer mail, and it is checked before the mail test because the mail test sees notifications@github.com
+# as an address and would answer the robot instead of the person.
+GH_TEXT_RE = re.compile(r"(view it on github|@(?:reply\.)?github\.com|github\.com/|#issuecomment|"
+                        r"\bcommented on (?:this )?(?:pull request|issue|discussion)\b|"
+                        r"\bopened this (?:issue|discussion|pull request)\b|\brequested (?:your |a )?review\b)", re.I)
+# "github:" was the only accepted form, so "Github Re: ..." and "Runvouch ..." fell through to the Reddit persona
+PREFIX_RE = re.compile(r"^(mail|reddit|github|gh)\b[\s:;,.-]*", re.I)
+# the first github.com address in a notification mail is usually a profile or an unsubscribe address, and thread_github
+# only understands a thread address, so look for the thread first and take any link only when there is none
+THREAD_RE = re.compile(r"https?://(?:[a-z0-9-]+\.)?github\.com/[^/\s]+/[^/\s]+/(?:issues|pull|discussions)/\d+\S*", re.I)
 
 
 def looks_like_mail(text: str) -> bool:
@@ -50,49 +62,121 @@ def looks_like_mail(text: str) -> bool:
     return bool(MAIL_RE.search(text)) or bool(re.search(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", text, re.I))
 
 
-def pasted_reply(text: str, bron: str) -> list[str]:
-    """Pasted thread text without a link: draft as the same persona as with a link, and say where it goes."""
-    draft = S.draft(text, bron)
-    if not draft:
-        return ["Geen reactie geschreven: er valt niets echts toe te voegen aan deze tekst."]
+KOP = {"github": "GITHUB - reageer als account runvouch (niet je eigen)",
+       "reddit": "REDDIT - reageer als u/nightly_runs, nooit RunVouch noemen"}
+HELP = ("Stuur de link van de thread, dan lees ik hem helemaal. Daarna hoef je alleen nog te plakken wat je krijgt: "
+        "dat hang ik automatisch aan die thread.\nZonder link werkt ook, dan zie ik alleen jouw tekst. Voorvoegsel "
+        "github:, reddit: of mail: dwingt af hoe ik het lees. 'nieuw' laat de vastgezette thread los, 'thread' laat "
+        "zien welke er staat.")
+# The owner works from a phone: in the GitHub app a single comment can be copied, the thread cannot. So the link is
+# sent once and stays pinned here, and every pasted fragment after it is read as the newest reply in that thread.
+THREAD_STATE = os.path.join(ROOT, "data", "telegram-thread.json")
+THREAD_TTL = 14 * 86400
+
+
+def onthoud(url: str, bron: str) -> None:
+    with open(THREAD_STATE, "w") as f:
+        json.dump({"url": url, "bron": bron, "ts": time.time()}, f)
+
+
+def vastgezet() -> dict:
+    """The pinned thread, or {} when there is none or it went stale (a fortnight without a link is a new subject)."""
+    try:
+        with open(THREAD_STATE) as f:
+            d = json.load(f)
+    except Exception:
+        return {}
+    return d if d.get("url") and time.time() - d.get("ts", 0) < THREAD_TTL else {}
+
+
+def kort(url: str) -> str:
+    m = re.search(r"github\.com/([^/]+/[^/]+)/(?:issues|pull|discussions)/(\d+)", url, re.I)
+    if m:
+        return f"{m.group(1)}#{m.group(2)}"
+    m = re.search(r"reddit\.com/(r/[^/]+)/", url, re.I)
+    return m.group(1) if m else url
+
+
+def onze_eerdere(url: str) -> str:
+    """What our own account already wrote in this exact thread: a follow-up has to build on it, not repeat it."""
+    if not url:
+        return ""
+    rijen = [r for r in S.recent_drafts(400) if r.get("url") == url]
+    return "\n---\n".join(r.get("text", "") for r in rijen[-4:])
+
+
+def bewaar(sub: str, url: str, tekst: str) -> None:
     with open(S.HISTORY, "a") as f:
-        f.write(json.dumps({"ts": time.time(), "sub": bron + " reply (geplakt)", "url": "", "text": draft}) + "\n")
-    kop = "GITHUB - reageer als account runvouch (niet je eigen)" if bron == "github" else "REDDIT - reageer als u/nightly_runs, nooit RunVouch noemen"
-    return [draft, f"^ {kop}\nKopieer het bericht hierboven en plak het als reply in de thread. (Volgende keer de link meesturen, dan lees ik de hele thread.)"]
+        f.write(json.dumps({"ts": time.time(), "sub": sub, "url": url, "text": tekst}) + "\n")
+
+
+def met_link(text: str, m) -> list[str]:
+    """A link was sent: read the whole thread, pin it, and treat anything typed around the link as the reply received."""
+    url = m.group(0).rstrip(").,")
+    rest = (text[:m.start()] + text[m.end():]).strip()
+    bron = "github" if "github.com" in url.lower() else "reddit"
+    try:
+        th = S.thread(url)
+    except Exception as e:
+        return [f"Kon de thread niet lezen: {e or type(e).__name__}\n{url}\nPlak anders de tekst zelf hier, met github: of reddit: ervoor."]
+    concept = S.draft(th, bron, followup=rest, ours=onze_eerdere(url))
+    if not concept:
+        return [f"Geen reactie geschreven: er valt niets echts toe te voegen (of de thread was leeg). {url}"]
+    onthoud(url, bron)
+    bewaar(bron + " reply", url, concept)
+    return [concept, f"^ {KOP[bron]}\nHele thread gelezen ({kort(url)}) en vastgezet: plak vanaf nu gewoon het antwoord "
+                     f"dat je krijgt, zonder link.\n{url}"]
+
+
+def zonder_link(text: str, forced) -> list[str]:
+    """Pasted text. With a pinned thread of the same source the conversation is read from that link again and this text
+    goes in as the newest reply, so the draft sees what came before. Without one it is this fragment and nothing else."""
+    if len(text.split()) < 12:
+        return [HELP]
+    bron = forced or ("github" if GH_TEXT_RE.search(text) else "mail" if looks_like_mail(text) else "reddit")
+    if bron == "mail":
+        return mail_reply(text)
+    st = vastgezet()
+    th, url, mislukt = "", "", ""
+    if st.get("bron") == bron:
+        try:
+            th, url = S.thread(st["url"]), st["url"]
+        except Exception as e:
+            mislukt = f"\nDe vastgezette thread {kort(st['url'])} kon ik nu niet lezen ({type(e).__name__})."
+    concept = S.draft(th, bron, followup=text, ours=onze_eerdere(url)) if th else S.draft(text, bron)
+    if not concept:
+        return ["Geen reactie geschreven: er valt niets echts toe te voegen aan deze tekst."]
+    bewaar(bron + (" reply" if th else " reply (geplakt)"), url, concept)
+    if th:
+        staart = (f"^ {KOP[bron]}\nGehangen aan {kort(url)}, de hele thread is meegelezen"
+                  + (" plus wat wij daar zelf al schreven" if onze_eerdere(url) else "") +
+                  f".\nKlopt die thread niet, stuur 'nieuw' en daarna de goede link.\n{url}")
+    else:
+        staart = (f"^ {KOP[bron]}\nAlleen jouw tekst gelezen, geen thread eronder.{mislukt}\n"
+                  "Stuur een keer de link van de thread, daarna hoef je alleen nog te plakken.")
+    return [concept, staart]
 
 
 def handle(text: str) -> list[str]:
     """One incoming message -> the messages to send back. Pure: no Telegram inside, so it is testable."""
-    text = text or ""
+    text = (text or "").lstrip()
+    los = text.strip().lower()
+    if los in ("nieuw", "reset", "vergeet", "los", "stop"):
+        try:
+            os.remove(THREAD_STATE)
+        except FileNotFoundError:
+            pass
+        return ["Losgekoppeld. Wat je nu plakt staat op zichzelf. Stuur een link om een nieuwe thread vast te zetten."]
+    if los in ("thread", "status", "waar", "?"):
+        st = vastgezet()
+        return [f"Vastgezet: {kort(st['url'])}\n{st['url']}" if st else "Geen thread vastgezet.\n" + HELP]
     forced = None
-    low = text.lstrip().lower()
-    for pre in ("mail:", "reddit:", "github:"):
-        if low.startswith(pre):
-            forced = pre[:-1]
-            text = text.lstrip()[len(pre):].strip()
-            break
-    m = URL_RE.search(text)
-    if not m:
-        if len(text.split()) < 12:
-            return ["Stuur een Reddit- of GitHub-link (met daaronder het antwoord dat je kreeg), of plak de tekst zelf. Zonder link: begin met reddit:, github: of mail: om te zeggen wat het is; zonder voorvoegsel is het Reddit, tenzij het er als een mail uitziet."]
-        kind = forced or ("mail" if looks_like_mail(text) else "reddit")
-        if kind == "mail":
-            return mail_reply(text)
-        return pasted_reply(text, kind)
-    url = m.group(0).rstrip(").,")
-    rest = (text[:m.start()] + text[m.end():]).strip()
-    bron = "github" if "github.com" in url else "reddit"
-    try:
-        th = S.thread(url)
-    except Exception as e:
-        return [f"Kon de thread niet lezen: {e or type(e).__name__}\n{url}\nPlak anders de tekst van de thread hier, met reddit: ervoor."]
-    draft = S.draft(th, bron, followup=rest)
-    if not draft:
-        return [f"Geen reactie geschreven: er valt niets echts toe te voegen (of de thread was leeg). {url}"]
-    with open(S.HISTORY, "a") as f:
-        f.write(json.dumps({"ts": time.time(), "sub": bron + " reply", "url": url, "text": draft}) + "\n")
-    kop = "GITHUB - reageer als account runvouch (niet je eigen)" if bron == "github" else "REDDIT - reageer als u/nightly_runs"
-    return [draft, f"^ {kop}\nKopieer het bericht hierboven, tik de link, plak als reply:\n{url}"]
+    pre = PREFIX_RE.match(text)
+    if pre:
+        forced = "github" if pre.group(1).lower() == "gh" else pre.group(1).lower()
+        text = text[pre.end():].strip()
+    m = THREAD_RE.search(text) or URL_RE.search(text)
+    return met_link(text, m) if m else zonder_link(text, forced)
 
 
 MAIL_RULES = """You draft ONE reply to an incoming message (an e-mail or a marketplace/console message) for a small company.

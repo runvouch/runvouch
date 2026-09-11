@@ -79,18 +79,63 @@ def feed_github(repo: str) -> list[dict]:
             for i in items if "pull_request" not in i]
 
 
-def thread_github(url: str) -> str:
-    owner_repo_num = re.search(r"github\.com/([^/]+/[^/]+)/issues/(\d+)", url)
-    if not owner_repo_num:
-        return ""
-    base = f"https://api.github.com/repos/{owner_repo_num.group(1)}/issues/{owner_repo_num.group(2)}"
+GH_THREAD_RE = re.compile(r"github\.com/([^/\s]+)/([^/\s#?]+)/(issues|pull|discussions)/(\d+)", re.I)
+DISC_BODY_RE = re.compile(r'(?is)<td[^>]*\bcomment-body\b[^>]*>(.*?)</td>')
+DISC_TITLE_RE = re.compile(r'(?is)<(?:h1|bdi)[^>]*class="[^"]*(?:gh-header-title|js-issue-title)[^"]*"[^>]*>(.*?)</')
+
+
+def gh_json(url: str):
     h = {"User-Agent": UA, "Accept": "application/vnd.github+json"}
-    with urllib.request.urlopen(urllib.request.Request(base, headers=h), timeout=20) as r:
-        issue = json.load(r)
-    with urllib.request.urlopen(urllib.request.Request(base + "/comments?per_page=30", headers=h), timeout=20) as r:
-        comments = json.load(r)
-    parts = ["POST " + issue.get("user", {}).get("login", "?") + ": " + strip(issue.get("title", "")) + "\n" + strip(issue.get("body") or "")[:2500]]
-    parts += [f"COMMENT {c.get('user', {}).get('login', '?')}: " + strip(c.get("body") or "")[:1200] for c in comments]
+    with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=20) as r:
+        return json.load(r)
+
+
+def html_text(raw: str) -> str:
+    """Page HTML -> readable text, with the line breaks kept: strip() would glue a whole comment into one line."""
+    raw = re.sub(r"(?is)<(script|style|svg|template|noscript)[^>]*>.*?</\1>", " ", raw)
+    raw = re.sub(r"(?i)<(br|/p|/li|/h[1-6]|/div|/tr)\b[^>]*>", "\n", raw)
+    txt = html.unescape(re.sub(r"<[^>]+>", "", raw))
+    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", txt)).strip()
+
+
+def thread_discussion(url: str) -> str:
+    """A discussion has no REST endpoint and the GraphQL one needs a token, so the public page is read and the comment
+    bodies are cut out of it. Author names are not paired reliably in that markup, so only the order is kept."""
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=25) as r:
+        page = r.read().decode("utf-8", "replace")
+    bodies = [t for t in (html_text(b) for b in DISC_BODY_RE.findall(page)) if t]
+    if not bodies:
+        raise ValueError("kon de discussion niet lezen (besloten repo, of GitHub veranderde de pagina): " + url)
+    t = DISC_TITLE_RE.search(page)
+    titel = strip(t.group(1)) if t else ""
+    parts = ["POST: " + (titel + "\n" if titel else "") + bodies[0][:2500]]
+    parts += ["COMMENT: " + b[:1200] for b in bodies[1:25]]
+    return "\n\n".join(parts)
+
+
+def thread_github(url: str) -> str:
+    """An issue, a pull request or a discussion -> the whole conversation as plain text.
+
+    /issues/<n> serves issues and pull requests both, so a PR needs no second call for its conversation; its inline
+    review comments do come from /pulls/<n>/comments and are marked REVIEW because they hang on a file, not on the
+    thread. A link that is neither raises, so the caller can say so instead of drafting on an empty thread."""
+    m = GH_THREAD_RE.search(url)
+    if not m:
+        raise ValueError("geen GitHub-thread in deze link (verwacht /issues/, /pull/ of /discussions/ met een nummer): " + url)
+    repo, soort, nummer = f"{m.group(1)}/{m.group(2)}", m.group(3).lower(), m.group(4)
+    if soort == "discussions":
+        return thread_discussion(f"https://github.com/{repo}/discussions/{nummer}")
+    issue = gh_json(f"https://api.github.com/repos/{repo}/issues/{nummer}")
+    parts = ["POST " + (issue.get("user") or {}).get("login", "?") + ": " + strip(issue.get("title", "")) +
+             "\n" + strip(issue.get("body") or "")[:2500]]
+    parts += ["COMMENT " + (c.get("user") or {}).get("login", "?") + ": " + strip(c.get("body") or "")[:1200]
+              for c in gh_json(f"https://api.github.com/repos/{repo}/issues/{nummer}/comments?per_page=30")]
+    if soort == "pull":
+        try:
+            parts += [f"REVIEW {(c.get('user') or {}).get('login', '?')} on {c.get('path') or '?'}: " + strip(c.get("body") or "")[:800]
+                      for c in gh_json(f"https://api.github.com/repos/{repo}/pulls/{nummer}/comments?per_page=20")]
+        except Exception as e:
+            print("review comments:", e, file=sys.stderr)
     return "\n\n".join(parts)
 
 
@@ -203,7 +248,7 @@ def recent_drafts(n: int = 12) -> list[dict]:
     return rows[-n:]
 
 
-def draft(thread_text: str, bron: str = "reddit", followup=None) -> str:
+def draft(thread_text: str, bron: str = "reddit", followup=None, ours: str = "") -> str:
     """Ask the local Claude Code CLI (same as the blog engine) for a comment draft; returns '' when it declines.
     The last twelve drafts go along so the new one does not reuse their openings, examples, numbers or structure:
     readers of these threads overlap, and the same anecdote twice reads as a campaign."""
@@ -218,7 +263,10 @@ def draft(thread_text: str, bron: str = "reddit", followup=None) -> str:
         rules = RULES_GITHUB if bron == "github" else RULES_REDDIT
         # followup=None: a fresh comment; followup="" or text: a reply to a response we got (text = what the owner pasted)
         extra = "" if followup is None else FOLLOWUP + "\n\nREPLY WE RECEIVED (as pasted by the owner, may be empty):\n" + followup
-        r = subprocess.run([CLAUDE, "-p", rules + avoid + extra + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
+        # our own earlier comments in this exact thread: without them a follow-up repeats what we already said there
+        eigen = ("\n\nWHAT OUR OWN ACCOUNT ALREADY POSTED IN THIS THREAD (build on it, never repeat it, never contradict it):\n"
+                 + ours[:3000]) if ours else ""
+        r = subprocess.run([CLAUDE, "-p", rules + avoid + extra + eigen + "\n\nTHREAD:\n" + thread_text[:6000], "--output-format", "json", "--max-turns", "1"],
                            capture_output=True, text=True, timeout=240)
         antwoord = json.loads(r.stdout or "{}")
         UITGAVEN.append(antwoord.get("total_cost_usd", 0) or 0)
