@@ -96,7 +96,11 @@ def schrijf(context: str) -> str:
         r = subprocess.run([S.CLAUDE, "-p", REGELS + "\n\nTHREAD:\n" + context[:9000],
                             "--output-format", "json", "--max-turns", "1"],
                            capture_output=True, text=True, timeout=240)
-        return json.loads(r.stdout or "{}").get("result", "").strip()
+        antwoord = json.loads(r.stdout or "{}")
+        # In dezelfde pot als de scout, want die wordt onderaan als RUNVOUCH_COST afgedrukt. Zonder deze regel
+        # telt de som nul en is elk concept gratis in de cijfers, precies de fout die we net bij de vloot vonden.
+        S.UITGAVEN.append(antwoord.get("total_cost_usd", 0) or 0)
+        return antwoord.get("result", "").strip()
     except Exception as e:
         print("schrijven mislukt:", e, file=sys.stderr)
         return ""
@@ -132,6 +136,9 @@ def main() -> int:
             bewaar({"url": url, "repo": repo, "reden": reden, "laatste": laatste, "tekst": tekst})
             W.telegram(f"{tekst}\n\n^ GITHUB {repo}\n{reden}\n{url}\n\nAntwoord 'ja' om dit zo te plaatsen, of "
                        f"schrijf je eigen versie en plak die hier met 'github:' ervoor.")
+            # rv run leest deze regel en zet het bedrag op de run, zodat de BUDGET-detectoren ook bij
+            # onze eigen schrijfwerk iets te vergelijken hebben. Zonder dit is elk concept gratis in de cijfers.
+            print(f"RUNVOUCH_COST={round(sum(S.UITGAVEN), 6)}")
             print(f"concept klaar voor {url}")
             return 0
     print("niets openstaand")

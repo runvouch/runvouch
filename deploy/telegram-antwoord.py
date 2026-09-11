@@ -313,7 +313,9 @@ def mail_reply(text: str) -> list[str]:
     try:
         r = subprocess.run([S.CLAUDE, "-p", MAIL_RULES + "\n\nINCOMING MESSAGE:\n" + text[:6000], "--output-format", "json", "--max-turns", "1"],
                            capture_output=True, text=True, timeout=240)
-        out = json.loads(r.stdout or "{}").get("result", "").strip()
+        antwoord = json.loads(r.stdout or "{}")
+        S.UITGAVEN.append(antwoord.get("total_cost_usd", 0) or 0)   # anders is een mailconcept gratis in de cijfers
+        out = antwoord.get("result", "").strip()
     except Exception as e:
         return [f"Concept mislukt: {type(e).__name__}"]
     if not out or out.upper().startswith("NOREPLY"):
@@ -335,6 +337,29 @@ def mail_reply(text: str) -> list[str]:
         json.dump({"naar": naar, "company": company, "onderwerp": onderwerp, "tekst": body.strip()}, f)
     return [body.strip(), f"^ ANTWOORD namens {company}, aan {naar}\nAntwoord 'ja' om dit zo te versturen vanaf "
                           f"{addr}, of plak je eigen versie met mail: ervoor."]
+
+
+RV = os.path.expanduser("~/bin/rv")
+
+
+def meld_run(kosten: float, bron: str) -> None:
+    """Een bericht afgehandeld is een eenheid werk, dus meld het als run met wat het kostte.
+
+    Deze wacht is een daemon, dus rv run kan er niet omheen staan en de kosten landden nergens. En juist hier
+    wordt het meeste uitgegeven: elk concept is een Claude-aanroep, en op een dag met veel berichten is dat meer
+    dan alle nachtelijke taken samen. Zonder deze melding keken de BUDGET-detectoren naar nul terwijl de rekening
+    wel liep. Faalt het melden, dan gaat het antwoord gewoon door: bewaking mag het werk nooit breken.
+    """
+    try:
+        r = subprocess.run([RV, "start", "telegram-antwoord", "--source", "daemon"],
+                           capture_output=True, text=True, timeout=20)
+        rid = (json.loads(r.stdout or "{}") or {}).get("run_id") or (r.stdout or "").strip()
+        if not rid:
+            return
+        subprocess.run([RV, "end", rid, "--status", "ok", "--cost", f"{kosten:.6f}"],
+                       capture_output=True, text=True, timeout=20)
+    except Exception as e:
+        print("kosten melden overgeslagen:", type(e).__name__, str(e)[:120], flush=True)
 
 
 def main() -> int:
@@ -359,8 +384,12 @@ def main() -> int:
                 if not text or text.startswith("Reddit en GitHub vandaag") or text.startswith("^ "):
                     continue
                 print(time.strftime("%H:%M"), "bericht:", text[:80], flush=True)
+                voor = sum(S.UITGAVEN)
                 for out in handle(text):
                     send(tok, chat, out)
+                kosten = sum(S.UITGAVEN) - voor
+                if kosten > 0:
+                    meld_run(kosten, "telegram")
         except KeyboardInterrupt:
             return 0
         except Exception as e:

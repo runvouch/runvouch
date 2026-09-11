@@ -201,3 +201,20 @@ def test_ja_verstuurt_de_klaargezette_mail(T, tmp_path, monkeypatch):
     assert verstuurd["body"]["from"].endswith("<support@runvouch.com>")
     assert verstuurd["body"]["subject"] == "Re: vraag"
     assert _j.load(open(T.MAIL_STATE)) == {}
+
+
+def test_een_mailconcept_boekt_wat_het_kostte(T, tmp_path, monkeypatch):
+    """Van 4.098 runs meldden er twee een bedrag, terwijl deze wacht de grootste Claude-verbruiker van het huis is.
+
+    Elk concept is een aanroep. Zonder deze boeking keken de BUDGET-detectoren naar nul terwijl de rekening liep.
+    """
+    import json as _j
+    T = laad()
+    T.MAIL_STATE = str(tmp_path / "mail.json")
+    T.S.HISTORY = str(tmp_path / "drafts.jsonl")
+    T.S.UITGAVEN.clear()
+    monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: type("R", (), {
+        "stdout": _j.dumps({"result": "COMPANY: RunVouch\n\nAntwoord.", "total_cost_usd": 0.0413}),
+        "returncode": 0})())
+    T.mail_reply("From: iemand@acme.com\nSubject: vraag\n\nHoi")
+    assert T.S.UITGAVEN == [0.0413], "het bedrag van de aanroep hoort in dezelfde pot als de scout"
