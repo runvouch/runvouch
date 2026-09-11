@@ -34,3 +34,27 @@ def test_built_site_has_no_em_dash_except_the_quote():
     for f in pub.rglob("*.html"):
         t = f.read_text(encoding="utf-8").replace("the routine ran — it does not mean", "")
         assert "—" not in t, f.relative_to(pub)
+
+
+def test_published_verify_sample_still_verifies():
+    """/verify hands a stranger a real sealed run. A sample that does not verify is worse than no page at all.
+
+    Same four checks the page does in the browser and verify_proof.py does on the command line, here against the
+    hashing rules in runvouch/proof.py. Skipped when the site has not been built (CI has no production database).
+    """
+    import json
+    f = ROOT / "site" / "public" / "verify-sample.json"
+    if not f.exists():
+        return
+    sys.path.insert(0, str(ROOT))
+    from runvouch import proof as pf
+    p = json.loads(f.read_text(encoding="utf-8"))
+    assert pf.leaf_hash(p["record"]) == p["leaf_hash"], "record does not hash to its leaf"
+    assert json.loads(p["record_text"]) == p["record"], "the text shown differs from the record hashed"
+    h = p["leaf_hash"]
+    for sib, side in p["merkle_path"]:
+        h = pf.sha256(sib + h if side == "left" else h + sib)
+    assert h == p["root"], "merkle path does not lead to the root"
+    assert pf.merkle_root([x["leaf"] for x in p["leaves"]]) == p["root"], "published leaves do not give the root"
+    assert any(x["run_id"] == p["run_id"] and x["leaf"] == p["leaf_hash"] for x in p["leaves"]), "run not in the day"
+    assert pf.chain_hash(p["prev"], p["date"], p["root"]) == p["chain_hash"], "day is not in the chain"

@@ -1,30 +1,95 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0B1020">
-<title>Monitor Claude Code Routines & headless claude -p runs | RunVouch docs</title><meta name="description" content="Install the RunVouch plugin so every scheduled Claude Code run reports start, tool calls, cost and outcome. Catch silent failures, retry storms and runaway cost."><link rel="canonical" href="https://runvouch.com/docs/claude-code">
-<meta property="og:type" content="article"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="Monitor Claude Code Routines & headless claude -p runs | RunVouch docs"><meta property="og:description" content="Install the RunVouch plugin so every scheduled Claude Code run reports start, tool calls, cost and outcome. Catch silent failures, retry storms and runaway cost."><meta property="og:url" content="https://runvouch.com/docs/claude-code"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
+<title>Verify a RunVouch run yourself, in your browser</title><meta name="description" content="One real sealed run from our own fleet: recompute its hash, walk the Merkle path, rebuild the day root from every published leaf and check the chain. Edit a field and watch it break. No account, nothing leaves your browser."><link rel="canonical" href="https://runvouch.com/verify">
+<meta property="og:type" content="website"><meta property="og:site_name" content="RunVouch"><meta property="og:title" content="Verify a RunVouch run yourself, in your browser"><meta property="og:description" content="One real sealed run from our own fleet: recompute its hash, walk the Merkle path, rebuild the day root from every published leaf and check the chain. Edit a field and watch it break. No account, nothing leaves your browser."><meta property="og:url" content="https://runvouch.com/verify"><meta property="og:image" content="https://runvouch.com/og.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/logo.svg?v=fe8058f4" type="image/svg+xml"><link rel="icon" href="/favicon.png?v=fe8058f4" type="image/png" sizes="64x64"><link rel="apple-touch-icon" href="/favicon.png?v=fe8058f4"><link rel="alternate" type="application/rss+xml" title="RunVouch changelog" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Figtree:wght@400;500;600&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.2e9386af.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}, {"@context": "https://schema.org", "@type": "HowTo", "name": "Claude Code: Routines, headless runs and hooks", "step": [{"@type": "HowToStep", "name": "Install the plugin", "text": "Add the RunVouch marketplace and install the plugin."}, {"@type": "HowToStep", "name": "Register an agent", "text": "rv agent NAME --cadence 24h --cap-run-cost 2 --evidence"}, {"@type": "HowToStep", "name": "Set environment in the Routine", "text": "RUNVOUCH_KEY, RUNVOUCH_AGENT, optional RUNVOUCH_EVIDENCE"}, {"@type": "HowToStep", "name": "Run", "text": "claude -p …, hooks report start, tool calls, cost and outcome."}]}]</script><script data-goatcounter="https://runvouch.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script></head><body class="roster-pad">
+<link rel="stylesheet" href="/assets/style.2e9386af.css"><noscript><style>.reveal{opacity:1;transform:none}</style></noscript><script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "RunVouch", "url": "https://runvouch.com", "logo": "https://runvouch.com/logo.svg", "contactPoint": {"@type": "ContactPoint", "url": "https://runvouch.com/contact", "contactType": "customer support"}}]</script><script data-goatcounter="https://runvouch.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script></head><body class="roster-pad">
 <div class="ambient" aria-hidden="true"><span class="blob b1"></span><canvas id="sig" class="sig" data-mode="roster"></canvas></div>
 <header class="top"><div class="wrap nav"><a class="brand" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RunVouch">
 <circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
 <path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><p class="small muted"><a href="/docs/">Docs</a> › Claude Code: Routines, headless runs and hooks</p><h1>Claude Code: Routines, headless runs and hooks</h1><p class="lead muted">RunVouch watches Claude Code agents that run without you: Routines, <code>claude -p</code> in cron, desktop scheduled tasks. The plugin uses Claude Code hooks to report the start, every tool call, and the stop, including tokens and cost read from the transcript.</p><div class="toc"><b>On this page</b><ol><li><a href="#install-the-plugin">Install the plugin</a></li><li><a href="#wire-a-routine-or-cron-job">Wire a Routine or cron job</a></li><li><a href="#no-client-just-a-url">No client, just a URL</a></li><li><a href="#evidence-prove-the-task-happened">Evidence: prove the task happened</a></li><li><a href="#cost-caps-and-retry-storms">Cost caps and retry storms</a></li><li><a href="#ask-your-agents-about-each-other-mcp-">Ask your agents about each other (MCP)</a></li></ol></div><h2 id="install-the-plugin">Install the plugin</h2><pre>/plugin marketplace add runvouch/claude-plugin
-/plugin install runvouch</pre><p>Or from a checkout: <code>claude --plugin-dir ./integrations/claude-code-plugin</code>. The plugin is a no-op in interactive sessions; it only reports when <code>RUNVOUCH_AGENT</code> is set.</p><h2 id="wire-a-routine-or-cron-job">Wire a Routine or cron job</h2><pre><span class="d"># once: register the agent</span>
-rv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence
-
-<span class="d"># in the Routine / cron environment</span>
-export RUNVOUCH_KEY=rv_…
-export RUNVOUCH_AGENT=nightly-report
-export RUNVOUCH_EVIDENCE='{"report":{"type":"url","url":"https://example.com/reports/latest.html"}}'
-claude -p "Generate tonight's report and publish it" --dangerously-skip-permissions</pre>
-<p>What gets reported: <b>SessionStart</b> → run start · <b>PostToolUse</b> → tool name + input hash + error flag (retry-storm and budget checks run on every call) · <b>Stop</b> → run end with tokens and cost summed from the transcript, plus your evidence · <b>StopFailure</b> → run failed, with the API error type (rate_limit, authentication_failed, billing_error, server_error and the rest) · <b>SessionEnd</b> → run failed, when the session was killed or exited before the turn finished.</p><p>Read Stop as "Claude stopped responding", not as "the job is done": the hook cannot see what you wanted. An expired session or a rate limit at 03:00 now arrives as FAILED with the reason, and everything beyond that is what <code>RUNVOUCH_EVIDENCE</code> is for. Without evidence a finished session is the only thing RunVouch can vouch for.</p><h2 id="no-client-just-a-url">No client, just a URL</h2><p>Every agent has its own ping URL. Nothing to install, no header, no JSON: anything that can call a URL can report to RunVouch, from a crontab line to an n8n node, a GitHub Actions step or a Docker <code>HEALTHCHECK</code>.</p>
-<pre><span class="d"># one line in your crontab: report the exit code of the job</span>
-0 3 * * * /usr/local/bin/nightly.sh; curl -fsS -m 10 https://api.runvouch.com/ping/&lt;token&gt;/$?
-
-<span class="d"># or bracket the job so RunVouch also sees how long it took</span>
-0 3 * * * curl -fsS https://api.runvouch.com/ping/&lt;token&gt;/start; /usr/local/bin/nightly.sh &amp;&amp; curl -fsS https://api.runvouch.com/ping/&lt;token&gt;</pre>
-<p>The suffixes: nothing for success, <code>/start</code> to open a run, <code>/fail</code> for a failure, or the exit code itself (<code>0</code> is success, anything else is a failure). GET, POST and HEAD all work. A POST body up to 100 kB is kept as the error excerpt on a failure. Ten pings per agent per minute.</p>
-<p>The token is a write-only secret for that one agent: it can report runs and nothing else, so unlike your API key it can sit in a crontab or a shared workflow. <code>rv agent NAME</code> prints it, and it stays the same when you re-register the agent. A bare ping with no <code>/start</code> before it is a heartbeat: one run that begins and ends on the spot, which is all a dead man's switch needs.</p><h2 id="evidence-prove-the-task-happened">Evidence: prove the task happened</h2><p>Evidence turns "exit 0" into "done". Three forms:</p><ul><li><b>URL</b>: <code>{"type":"url","url":"…","expect":200}</code>, checked by RunVouch after the run.</li><li><b>File</b>: with <code>rv run --evidence-file PATH</code>: the file must exist, be non-empty and have changed during the run. Checked on your machine; only true/false is sent.</li><li><b>Boolean</b>: your own assertion: <code>{"rows_inserted": true}</code>.</li></ul><p>If <code>--evidence</code> is set on the agent and a run ends "ok" without passing evidence, you get a <code>NO_EVIDENCE</code> alert.</p><h2 id="cost-caps-and-retry-storms">Cost caps and retry storms</h2><p><code>--cap-run-cost 2</code> and <code>--cap-day-cost 10</code> alert the moment a run or a day crosses the line, and the agent is paused right there: the next <code>rv run</code> is refused and the command is not started. The run that crossed the line has already finished, so the cap stops the schedule, not the job in flight. Get it going again with <code>rv agent NAME --resume</code>. Only that explicit answer stops a command; if RunVouch is unreachable your job runs unmonitored, as everywhere else. Retry storms fire when the same tool is called with an identical input hash 8+ times in one run (configurable). Cost is computed from transcript usage with current Anthropic list prices; override with <code>RUNVOUCH_COST</code> / <code>RUNVOUCH_TOKENS</code> if you meter elsewhere. A job wrapped in <code>rv run</code> can also report what it spent by printing one line of its own, <code>RUNVOUCH_COST=1.25</code> (and <code>RUNVOUCH_TOKENS=</code>), which works from any language without a client. <code>rv run</code> also puts <code>RUNVOUCH_RUN_ID</code> in the job's environment, so the job can add tool calls or evidence to the run it is already in.</p><h2 id="ask-your-agents-about-each-other-mcp-">Ask your agents about each other (MCP)</h2><pre>claude mcp add runvouch -e RUNVOUCH_KEY=rv_… -- python3 runvouch_mcp.py</pre><p>Tools: <code>runvouch_status</code>, <code>runvouch_alerts</code>, <code>runvouch_ack</code>, <code>runvouch_runs</code>, <code>runvouch_run_start</code>, <code>runvouch_run_end</code>. A morning agent can refuse to build on last night's output if last night is <code>UNPROVEN</code>. See <a href="/docs/mcp">MCP docs</a>.</p><hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Need a key? <a href="/#signup">Get a free key</a> · Stuck? <a href="/contact">contact</a></p></div></main><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
+</svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><h1>Verify a run yourself</h1>
+<p class="lead muted">Below is one real run from the fleet that runs this company, sealed on 2026-09-10 and never touched since. Nothing here trusts us: your browser recomputes every hash, and you can edit any field and watch it break.</p>
+<div class="card" style="margin:1.4rem 0"><p class="small muted" style="margin:0 0 .5rem">The sealed record of run <span class="mono">00dad4a8cd67f603</span>. Change a character and press Verify.</p>
+<textarea id="rec" spellcheck="false" style="width:100%;min-height:19rem;font:13px/1.55 var(--mono,monospace);padding:.8rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit"></textarea>
+<p style="margin:.8rem 0 0"><button class="btn" onclick="verify()">Verify</button> <button class="btn ghost" onclick="tamper()">Change one value</button> <button class="btn ghost" onclick="reset()">Reset</button></p></div>
+<div id="vout"></div>
+<h2>What those four checks mean</h2>
+<p>The first says the record still hashes to its leaf, so not one byte of it moved. The second walks that leaf up the Merkle tree of the day and lands on the day root. The third rebuilds that same root from all 267 leaves published for that day, so the path we handed you cannot have been invented. The fourth links the day to the day before it, which is why a single edited run would have to be followed by every day since. That root is queued for an OpenTimestamps anchor in the Bitcoin blockchain; the .ots file next to the day file carries the stamp.</p>
+<p class="muted">Your browser never sends anything back. The page holds the day's leaf list, and the authoritative copy is the file the server publishes: <a class="mono" href="https://api.runvouch.com/proof/days/2026-09-10.json">https://api.runvouch.com/proof/days/2026-09-10.json</a>, with the timestamp proof next to it at <a class="mono" href="https://api.runvouch.com/proof/days/2026-09-10.ots">.ots</a>.</p>
+<h2>Without a browser</h2>
+<p>The same four checks in 90 lines of standard-library Python, written so it imports nothing of ours:</p>
+<pre><code>curl -sO https://runvouch.com/dl/verify_proof.py
+curl -s https://api.runvouch.com/proof/days/2026-09-10.json &gt; day.json
+curl -s https://runvouch.com/verify-sample.json &gt; proof.json
+python3 verify_proof.py proof.json day.json</code></pre>
+<h2>Your own runs</h2>
+<p>Every finished run you send gets the same receipt, on the free plan too. Fetch it with <span class="mono">rv proof RUN_ID</span> and drop the JSON into the box above, or run the script against it. What is never in the record: your prompts, your outputs and the contents of your files. Only their sizes and hashes.</p>
+<p class="muted">Why this exists is on <a href="/verifiable-agent-runs">verifiable agent runs</a>; the hashing rules are in <a href="/docs/proof">the proof docs</a>, and the numbers behind this fleet are on <a href="/stats">in numbers</a>.</p>
+</div></main>
+<script>
+const P_URL='/verify-sample.json';let P=null;
+const enc=new TextEncoder();
+async function sha(s){const b=await crypto.subtle.digest('SHA-256',enc.encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+// A JSON reader that keeps every number exactly as it was written. The server writes 0.0 and JSON.stringify would
+// write 0; that one character is the difference between a hash that matches and one that does not.
+function Num(l){this.lit=l}
+function parse(t){let i=0;
+ const ws=()=>{while(i<t.length&&' \t\n\r'.indexOf(t[i])>=0)i++};
+ function str(){const j=i;i++;while(t[i]!=='"'){if(t[i]==='\\')i++;i++}i++;return JSON.parse(t.slice(j,i))}
+ function val(){ws();const c=t[i];
+  if(c==='{'){i++;const o={};ws();if(t[i]==='}'){i++;return o}for(;;){ws();const k=str();ws();i++;o[k]=val();ws();if(t[i]===','){i++;continue}i++;return o}}
+  if(c==='['){i++;const a=[];ws();if(t[i]===']'){i++;return a}for(;;){a.push(val());ws();if(t[i]===','){i++;continue}i++;return a}}
+  if(c==='"')return str();
+  if(t.startsWith('true',i)){i+=4;return true}
+  if(t.startsWith('false',i)){i+=5;return false}
+  if(t.startsWith('null',i)){i+=4;return null}
+  const j=i;while(i<t.length&&'-+.eE0123456789'.indexOf(t[i])>=0)i++;
+  if(j===i)throw new Error('not JSON at '+i);return new Num(t.slice(j,i))}
+ const v=val();ws();if(i<t.length)throw new Error('trailing text');return v}
+function canon(v){
+ if(v===null)return 'null';if(v===true)return 'true';if(v===false)return 'false';
+ if(v instanceof Num)return v.lit;
+ if(typeof v==='string')return JSON.stringify(v);
+ if(typeof v==='number')return Number.isInteger(v)?String(v):JSON.stringify(v);
+ if(Array.isArray(v))return '['+v.map(canon).join(',')+']';
+ return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}'}
+async function merkle(hs){if(!hs.length)return await sha('');let l=hs.slice();
+ while(l.length>1){if(l.length%2)l.push(l[l.length-1]);const n=[];for(let i=0;i<l.length;i+=2)n.push(await sha(l[i]+l[i+1]));l=n}return l[0]}
+function row(ok,label,detail){return '<tr><td class="vok">'+(ok?'PASS':'FAIL')+'</td><td>'+label+'<div class="small muted mono">'+detail+'</div></td></tr>'}
+function out(h){document.getElementById('vout').innerHTML=h}
+async function verify(){
+ const box=document.getElementById('rec');
+ let rec;try{rec=parse(box.value)}catch(e){return out('<p class="bad">That is not valid JSON: '+e.message+'</p>')}
+ out('<p class="muted">Hashing in your browser...</p>');
+ const leaf=await sha(canon(rec));
+ const step1=leaf===P.leaf_hash;
+ let h=leaf;for(const [sib,side] of P.merkle_path){h=await sha(side==='left'?sib+h:h+sib)}
+ const step2=h===P.root;
+ const rebuilt=await merkle(P.leaves.map(x=>x.leaf));
+ const step3=rebuilt===P.root;
+ const listed=P.leaves.some(x=>x.run_id===P.run_id&&x.leaf===leaf);
+ const chain=await sha(P.prev+':'+P.date+':'+P.root);
+ const step4=chain===P.chain_hash;
+ const all=step1&&step2&&step3&&step4&&listed;
+ out('<p class="'+(all?'good':'bad')+'"><b>'+(all?'All four checks passed. This record is the one that was sealed on '+P.date+'.':'At least one check failed. The record below is not the record that was sealed.')+'</b></p>'
+  +'<table class="vtab">'
+  +row(step1,'The record hashes to its leaf','sha256(canonical json) = '+leaf.slice(0,32)+'...')
+  +row(listed&&step2,'That leaf sits under the day root','walked '+P.merkle_path.length+' steps to '+h.slice(0,32)+'...')
+  +row(step3,'The day root follows from all '+P.n_runs+' published leaves','recomputed '+rebuilt.slice(0,32)+'...')
+  +row(step4,'The day sits in the chain','sha256(prev:'+P.date+':root) = '+chain.slice(0,32)+'...')
+  +'</table>')}
+async function tamper(){
+ // a text edit on purpose: JSON.parse plus stringify would quietly rewrite the numbers and break the hash for the
+ // wrong reason. This changes exactly the one thing a run report would be worth lying about.
+ const box=document.getElementById('rec');const t=box.value;
+ box.value=/"status": ?"ok"/.test(t)?t.replace(/"status": ?"ok"/,'"status": "fail"')
+  :/"status": ?"fail"/.test(t)?t.replace(/"status": ?"fail"/,'"status": "ok"')
+  :t.replace(/"output_bytes": ?(\d+)/,(m,n)=>'"output_bytes": '+(Number(n)+1));
+ await verify()}
+async function reset(){document.getElementById('rec').value=P.record_text;await verify()}
+(async()=>{P=await (await fetch(P_URL)).json();await reset()})();
+</script><footer><div class="wrap"><div class="cols"><div><div class="brand" style="display:flex;align-items:center;gap:.5rem;font-family:"Instrument Sans";font-weight:700;color:var(--fg)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24" role="img" aria-label="RunVouch">
 <circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
 <path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>RunVouch</div>

@@ -1243,3 +1243,19 @@ def test_rv_run_picks_up_a_cost_the_job_reports():
         cli.api = echte_api
     eind = [b for p, b in verstuurd if p.endswith("/end")][0]
     assert eind["cost"] == 1.25 and eind["tokens"] == 4100
+
+
+def test_owner_week_reports_reach_even_when_it_is_zero(tmp_path, monkeypatch):
+    """The Monday reach line must go out on a week where nobody arrived: that is the week it matters most."""
+    import runvouch.server as S
+    monkeypatch.setenv("RUNVOUCH_INTERNAL_ACCOUNTS", "1")
+    sent = []
+    monkeypatch.setattr(S, "_telegram", lambda tok, chat, text: sent.append(text) or True)
+    with S.tx() as db:
+        db.execute("UPDATE accounts SET telegram_token='t', telegram_chat='c' WHERE id=(SELECT MIN(id) FROM accounts)")
+    import calendar
+    maandag = calendar.timegm(time.strptime("2026-09-14 09:00", "%Y-%m-%d %H:%M"))
+    assert S.owner_week(now=maandag) is True
+    assert "bereik week" in sent[0] and "betalend" in sent[0]
+    assert S.owner_week(now=maandag + 600) is False      # one line per week, not one per sweep
+    assert S.owner_week(now=maandag + 86400) is False    # Tuesday stays quiet

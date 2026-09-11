@@ -93,5 +93,6 @@ API base: https://api.runvouch.com (header X-API-Key).
 
 
 ## Other
+- [Verify a run yourself](https://runvouch.com/verify): one real sealed run, hashes recomputed in your browser, no account
 - [RunVouch in numbers](https://runvouch.com/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing](https://runvouch.com/pricing) · [Security](https://runvouch.com/security) · [Privacy](https://runvouch.com/privacy) · [Changelog](https://runvouch.com/changelog)

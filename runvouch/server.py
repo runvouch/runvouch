@@ -704,6 +704,36 @@ def owner_digest(now: Optional[float] = None) -> bool:
                      f"RunVouch dagstand {day}: {new} nieuwe accounts in 24u, {total} accounts totaal, {paid} betalend, {active} agents actief in 24u.")
 
 
+def owner_week(now: Optional[float] = None) -> bool:
+    """Monday, always, also when every number is zero: how many people from outside took a key and used it.
+
+    owner_digest stays silent on a day without signups, so a week in which nobody arrived looks exactly like a week in
+    which nobody measured. Between 25 August and 11 September 2026 every account in this database was our own and that
+    daily line never went out once. That is a fact about reach, not about the product, and it belongs in front of the
+    owner every Monday. RUNVOUCH_INTERNAL_ACCOUNTS lists our own account ids so they cannot flatter the count.
+    """
+    now = now or time.time()
+    d = datetime.utcfromtimestamp(now)
+    week = "reach-" + d.strftime("%G-%V")
+    if d.weekday() != 0 or d.hour < 7 or q1("SELECT 1 FROM reports_sent WHERE account_id=0 AND week=?", week):
+        return False
+    owner = q1("SELECT telegram_token, telegram_chat FROM accounts WHERE telegram_token IS NOT NULL ORDER BY id LIMIT 1")
+    if not owner:
+        return False
+    intern = [int(x) for x in os.getenv("RUNVOUCH_INTERNAL_ACCOUNTS", "").split(",") if x.strip().isdigit()]
+    gaten = ",".join("?" * len(intern)) if intern else "-1"
+    buiten = f"email IS NOT NULL AND id NOT IN ({gaten})"
+    n_tot = q1(f"SELECT COUNT(*) n FROM accounts WHERE {buiten}", *intern)["n"]
+    n_new = q1(f"SELECT COUNT(*) n FROM accounts WHERE {buiten} AND created>?", *intern, now - 7 * 86400)["n"]
+    n_run = q1(f"SELECT COUNT(*) n FROM accounts WHERE {buiten} AND EXISTS(SELECT 1 FROM runs r WHERE r.account_id=accounts.id)", *intern)["n"]
+    n_paid = q1(f"SELECT COUNT(*) n FROM accounts WHERE {buiten} AND plan!='free'", *intern)["n"]
+    with tx() as db:
+        db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(0, ?)", (week,))
+    return _telegram(owner["telegram_token"], owner["telegram_chat"],
+                     f"RunVouch bereik week {d.strftime('%V')}: {n_new} nieuwe sleutels van buiten, {n_tot} van buiten totaal, "
+                     f"{n_run} daarvan stuurden ooit een run, {n_paid} betalend.")
+
+
 # ───────────────────────────── verifiable runs (leaf per run, Merkle day, OpenTimestamps) ─────────────────────────────
 PROOF_DIR = Path(os.getenv("RUNVOUCH_PROOF_DIR", DB_PATH.parent / "proof" / "days"))
 OTS_BIN = os.path.expanduser(os.getenv("RUNVOUCH_OTS", "~/.local/bin/ots"))
@@ -981,6 +1011,7 @@ def _sweeper():
             purge_daily()
             if n % 20 == 0:
                 weekly_report()
+                owner_week()
         except Exception:
             pass
         n += 1

@@ -209,7 +209,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
 
 
@@ -309,7 +309,7 @@ nightly-report   ok   $0.41   0 alerts</pre></div>
 <div class="card"><h3>A Bitcoin anchor</h3><p>Each day file is stamped with OpenTimestamps, so its existence is committed in a Bitcoin block. Check it with <code>ots verify</code>; no RunVouch code involved.</p></div>
 </div>
 <pre>rv proof RUN_ID --verify   <span class="d"># recomputes the leaf and the Merkle path against the public day file, exit 0 or 1</span></pre>
-<p class="small muted">Who needs this and how to verify without trusting us: <a href="/verifiable-agent-runs">verifiable agent runs</a> · the mechanism, byte for byte: <a href="/docs/proof">docs/proof</a></p>
+<p class="small muted"><a href="/verify"><b>Verify a real run in your browser</b></a>, no account: recompute the hashes and edit a field to watch it break. Who needs this: <a href="/verifiable-agent-runs">verifiable agent runs</a> · the mechanism, byte for byte: <a href="/docs/proof">docs/proof</a></p>
 </div></section>
 
 
@@ -402,7 +402,7 @@ page("/verifiable-agent-runs", "Verifiable AI agent runs: a tamper-evident audit
      '''<main><div class="wrap doc"><p class="small muted"><a href="/">RunVouch</a> / Verifiable agent runs</p>
 <h1>Prove what your AI agent did. <span class="grad">To anyone, without trusting us.</span></h1>
 <p class="lead muted">A tamper-evident record for every run of an unattended agent: what ran, when, with which evidence, at what cost. Hashed the moment the run ends, chained in a public daily file, anchored in Bitcoin. An auditor verifies it with a 60-line script and the open-source OpenTimestamps client. Included on every plan, Free too.</p>
-<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/docs/proof">Read the mechanism</a></p>
+<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/verify">Verify a real run</a><a class="btn ghost" href="/docs/proof">Read the mechanism</a></p>
 
 <h2 id="who">Who needs this, and why now</h2>
 <p>An agent that runs while nobody watches produces two things: a result, and a claim that it produced the result. Until now the claim lived in a log file that the same team could edit. Three groups are starting to ask for more than that.</p>
@@ -919,6 +919,172 @@ if _st:
          _body, [ORG_LD])
 
 # ───────────────────────── misc pages ─────────────────────────
+# ───────────────────── VERIFY IT YOURSELF ─────────────────────
+# Every tool in the cron and agent monitoring comparisons can show a green tick. None of them can show a proof that
+# the tick was not edited afterwards. That difference sat under /proof/days/, where only a reader who already
+# believed us would look, so this page hands a stranger one real run from our own fleet and lets him break it in
+# his own browser. The sample is checked against the leaf hash the server stored on the day itself: if those two
+# disagree the page is not built, because a verification demo that cannot itself be verified is worse than none.
+def _proof_sample():
+    import sqlite3
+    import sys as _sys
+    db = ROOT.parent / "data" / "runvouch.db"
+    if not db.exists():
+        return None
+    _sys.path.insert(0, str(ROOT.parent))
+    try:
+        from runvouch import proof as pf
+    except Exception:
+        return None
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    c.row_factory = sqlite3.Row
+    leaf_sql = ("SELECT id, leaf_hash FROM (SELECT id, leaf_hash, ended FROM runs WHERE leaf_hash IS NOT NULL "
+                "UNION SELECT id, leaf_hash, ended FROM run_leaves) WHERE ended>=? AND ended<? ORDER BY id, leaf_hash")
+    for day in c.execute("SELECT * FROM proof_days WHERE n_runs BETWEEN 2 AND 600 ORDER BY date DESC LIMIT 14"):
+        t0 = datetime.datetime.strptime(day["date"], "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc).timestamp()
+        rows = c.execute(leaf_sql, (t0, t0 + 86400)).fetchall()
+        leaves = [r["leaf_hash"] for r in rows]
+        if pf.merkle_root(leaves) != day["root"]:
+            continue                       # the day file and the database disagree: never publish that as a demo
+        # a failed run teaches more than a green one: the record says fail and the hash says nobody changed it later
+        order = sorted(range(len(rows)), key=lambda i: 0 if _is_fail(c, rows[i]["id"]) else 1)
+        for i in order:
+            run = c.execute("SELECT * FROM runs WHERE id=?", (rows[i]["id"],)).fetchone()
+            if not run or run["ended"] is None:
+                continue                   # purged by retention: the leaf lives on, the record to show does not
+            agent = c.execute("SELECT * FROM agents WHERE id=?", (run["agent_id"],)).fetchone()
+            if not agent:
+                continue
+            meta = json.loads(run["meta_json"] or "{}")
+            ev = c.execute("SELECT tool, input_hash, ok, ts FROM tool_events WHERE account_id=? AND run_id=? ORDER BY id",
+                           (agent["account_id"], run["id"])).fetchall()
+            rec = {"run_id": run["id"], "agent": agent["name"], "account_id": agent["account_id"], "started": run["started"],
+                   "ended": run["ended"], "status": run["status"], "cost": run["cost"], "tokens": run["tokens"],
+                   "tool_calls": run["tool_calls"], "output_bytes": run["output_bytes"],
+                   "evidence": json.loads(run["evidence_json"] or "{}"), "evidence_ok": run["evidence_ok"],
+                   "source": run["source"],
+                   "tool_events_hash": pf.tool_events_hash([(x["tool"], x["input_hash"], x["ok"], x["ts"]) for x in ev])}
+            if "exit" in meta:
+                rec["exit"] = meta["exit"]
+            if pf.leaf_hash(rec) != rows[i]["leaf_hash"]:
+                continue                   # the record no longer reproduces its own leaf: not a sample, a bug report
+            return {"run_id": run["id"], "date": day["date"], "record": rec, "leaf_hash": rows[i]["leaf_hash"],
+                    # the text, not only the object: json.dumps writes 0.0 where a browser would write 0, and that
+                    # one character changes the hash. The page shows this string and hashes what it parses back.
+                    "record_text": json.dumps(rec, indent=1, sort_keys=True),
+                    "merkle_path": [[h, s] for h, s in pf.merkle_path(leaves, i)], "root": day["root"],
+                    "prev": day["prev"], "chain_hash": day["chain_hash"], "n_runs": len(leaves),
+                    "ots_status": day["ots_status"] or "", "index": i,
+                    "leaves": [{"run_id": r["id"], "leaf": r["leaf_hash"]} for r in rows],
+                    "day_url": f"{API}/proof/days/{day['date']}.json", "ots_url": f"{API}/proof/days/{day['date']}.ots"}
+    return None
+
+
+def _is_fail(c, run_id):
+    r = c.execute("SELECT status, evidence_ok FROM runs WHERE id=?", (run_id,)).fetchone()
+    return bool(r) and (r["status"] == "fail" or r["evidence_ok"] == 0)
+
+
+# the curl line on /verify points here, so the verifier has to be next to the sample, not only on GitHub
+(OUT / "dl").mkdir(parents=True, exist_ok=True)
+(OUT / "dl" / "verify_proof.py").write_text((ROOT.parent / "templates" / "verify_proof.py").read_text(encoding="utf-8"), encoding="utf-8")
+
+_ps = _proof_sample()
+if _ps:
+    (OUT / "verify-sample.json").write_text(json.dumps(_ps, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    _anchored = _ps["ots_status"].startswith("bitcoin:")
+    _anchor_line = ("That root is anchored in the Bitcoin blockchain by OpenTimestamps, so the date cannot be moved either."
+                    if _anchored else "That root is queued for an OpenTimestamps anchor in the Bitcoin blockchain; the .ots file next to the day file carries the stamp.")
+    _VERIFY_JS = r"""
+<script>
+const P_URL='/verify-sample.json';let P=null;
+const enc=new TextEncoder();
+async function sha(s){const b=await crypto.subtle.digest('SHA-256',enc.encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+// A JSON reader that keeps every number exactly as it was written. The server writes 0.0 and JSON.stringify would
+// write 0; that one character is the difference between a hash that matches and one that does not.
+function Num(l){this.lit=l}
+function parse(t){let i=0;
+ const ws=()=>{while(i<t.length&&' \t\n\r'.indexOf(t[i])>=0)i++};
+ function str(){const j=i;i++;while(t[i]!=='"'){if(t[i]==='\\')i++;i++}i++;return JSON.parse(t.slice(j,i))}
+ function val(){ws();const c=t[i];
+  if(c==='{'){i++;const o={};ws();if(t[i]==='}'){i++;return o}for(;;){ws();const k=str();ws();i++;o[k]=val();ws();if(t[i]===','){i++;continue}i++;return o}}
+  if(c==='['){i++;const a=[];ws();if(t[i]===']'){i++;return a}for(;;){a.push(val());ws();if(t[i]===','){i++;continue}i++;return a}}
+  if(c==='"')return str();
+  if(t.startsWith('true',i)){i+=4;return true}
+  if(t.startsWith('false',i)){i+=5;return false}
+  if(t.startsWith('null',i)){i+=4;return null}
+  const j=i;while(i<t.length&&'-+.eE0123456789'.indexOf(t[i])>=0)i++;
+  if(j===i)throw new Error('not JSON at '+i);return new Num(t.slice(j,i))}
+ const v=val();ws();if(i<t.length)throw new Error('trailing text');return v}
+function canon(v){
+ if(v===null)return 'null';if(v===true)return 'true';if(v===false)return 'false';
+ if(v instanceof Num)return v.lit;
+ if(typeof v==='string')return JSON.stringify(v);
+ if(typeof v==='number')return Number.isInteger(v)?String(v):JSON.stringify(v);
+ if(Array.isArray(v))return '['+v.map(canon).join(',')+']';
+ return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}'}
+async function merkle(hs){if(!hs.length)return await sha('');let l=hs.slice();
+ while(l.length>1){if(l.length%2)l.push(l[l.length-1]);const n=[];for(let i=0;i<l.length;i+=2)n.push(await sha(l[i]+l[i+1]));l=n}return l[0]}
+function row(ok,label,detail){return '<tr><td class="vok">'+(ok?'PASS':'FAIL')+'</td><td>'+label+'<div class="small muted mono">'+detail+'</div></td></tr>'}
+function out(h){document.getElementById('vout').innerHTML=h}
+async function verify(){
+ const box=document.getElementById('rec');
+ let rec;try{rec=parse(box.value)}catch(e){return out('<p class="bad">That is not valid JSON: '+e.message+'</p>')}
+ out('<p class="muted">Hashing in your browser...</p>');
+ const leaf=await sha(canon(rec));
+ const step1=leaf===P.leaf_hash;
+ let h=leaf;for(const [sib,side] of P.merkle_path){h=await sha(side==='left'?sib+h:h+sib)}
+ const step2=h===P.root;
+ const rebuilt=await merkle(P.leaves.map(x=>x.leaf));
+ const step3=rebuilt===P.root;
+ const listed=P.leaves.some(x=>x.run_id===P.run_id&&x.leaf===leaf);
+ const chain=await sha(P.prev+':'+P.date+':'+P.root);
+ const step4=chain===P.chain_hash;
+ const all=step1&&step2&&step3&&step4&&listed;
+ out('<p class="'+(all?'good':'bad')+'"><b>'+(all?'All four checks passed. This record is the one that was sealed on '+P.date+'.':'At least one check failed. The record below is not the record that was sealed.')+'</b></p>'
+  +'<table class="vtab">'
+  +row(step1,'The record hashes to its leaf','sha256(canonical json) = '+leaf.slice(0,32)+'...')
+  +row(listed&&step2,'That leaf sits under the day root','walked '+P.merkle_path.length+' steps to '+h.slice(0,32)+'...')
+  +row(step3,'The day root follows from all '+P.n_runs+' published leaves','recomputed '+rebuilt.slice(0,32)+'...')
+  +row(step4,'The day sits in the chain','sha256(prev:'+P.date+':root) = '+chain.slice(0,32)+'...')
+  +'</table>')}
+async function tamper(){
+ // a text edit on purpose: JSON.parse plus stringify would quietly rewrite the numbers and break the hash for the
+ // wrong reason. This changes exactly the one thing a run report would be worth lying about.
+ const box=document.getElementById('rec');const t=box.value;
+ box.value=/"status": ?"ok"/.test(t)?t.replace(/"status": ?"ok"/,'"status": "fail"')
+  :/"status": ?"fail"/.test(t)?t.replace(/"status": ?"fail"/,'"status": "ok"')
+  :t.replace(/"output_bytes": ?(\d+)/,(m,n)=>'"output_bytes": '+(Number(n)+1));
+ await verify()}
+async function reset(){document.getElementById('rec').value=P.record_text;await verify()}
+(async()=>{P=await (await fetch(P_URL)).json();await reset()})();
+</script>"""
+    _VERIFY_BODY = """<main><div class="wrap doc"><h1>Verify a run yourself</h1>
+<p class="lead muted">Below is one real run from the fleet that runs this company, sealed on __DATE__ and never touched since. Nothing here trusts us: your browser recomputes every hash, and you can edit any field and watch it break.</p>
+<div class="card" style="margin:1.4rem 0"><p class="small muted" style="margin:0 0 .5rem">The sealed record of run <span class="mono">__RUNID__</span>. Change a character and press Verify.</p>
+<textarea id="rec" spellcheck="false" style="width:100%;min-height:19rem;font:13px/1.55 var(--mono,monospace);padding:.8rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit"></textarea>
+<p style="margin:.8rem 0 0"><button class="btn" onclick="verify()">Verify</button> <button class="btn ghost" onclick="tamper()">Change one value</button> <button class="btn ghost" onclick="reset()">Reset</button></p></div>
+<div id="vout"></div>
+<h2>What those four checks mean</h2>
+<p>The first says the record still hashes to its leaf, so not one byte of it moved. The second walks that leaf up the Merkle tree of the day and lands on the day root. The third rebuilds that same root from all __N__ leaves published for that day, so the path we handed you cannot have been invented. The fourth links the day to the day before it, which is why a single edited run would have to be followed by every day since. __ANCHOR__</p>
+<p class="muted">Your browser never sends anything back. The page holds the day's leaf list, and the authoritative copy is the file the server publishes: <a class="mono" href="__DAYURL__">__DAYURL__</a>, with the timestamp proof next to it at <a class="mono" href="__OTSURL__">.ots</a>.</p>
+<h2>Without a browser</h2>
+<p>The same four checks in 90 lines of standard-library Python, written so it imports nothing of ours:</p>
+<pre><code>curl -sO https://runvouch.com/dl/verify_proof.py
+curl -s __DAYURL__ &gt; day.json
+curl -s https://runvouch.com/verify-sample.json &gt; proof.json
+python3 verify_proof.py proof.json day.json</code></pre>
+<h2>Your own runs</h2>
+<p>Every finished run you send gets the same receipt, on the free plan too. Fetch it with <span class="mono">rv proof RUN_ID</span> and drop the JSON into the box above, or run the script against it. What is never in the record: your prompts, your outputs and the contents of your files. Only their sizes and hashes.</p>
+<p class="muted">Why this exists is on <a href="/verifiable-agent-runs">verifiable agent runs</a>; the hashing rules are in <a href="/docs/proof">the proof docs</a>, and the numbers behind this fleet are on <a href="/stats">in numbers</a>.</p>
+</div></main>"""
+    _VERIFY_BODY = (_VERIFY_BODY.replace("__DATE__", _ps["date"]).replace("__RUNID__", _ps["run_id"])
+                    .replace("__N__", str(_ps["n_runs"])).replace("__ANCHOR__", _anchor_line)
+                    .replace("__DAYURL__", _ps["day_url"]).replace("__OTSURL__", _ps["ots_url"])) + _VERIFY_JS
+    page("/verify", "Verify a RunVouch run yourself, in your browser",
+         "One real sealed run from our own fleet: recompute its hash, walk the Merkle path, rebuild the day root from every published leaf and check the chain. Edit a field and watch it break. No account, nothing leaves your browser.",
+         _VERIFY_BODY, [ORG_LD])
+
 page("/contact", "Contact | RunVouch", "Questions, bugs, security reports or partnership ideas, reach the RunVouch team.", '''<main><div class="wrap doc"><h1>Contact</h1><p class="lead muted">Support, billing, security or just an idea. Replies within one working day.</p>
 <form id="cf" onsubmit="return sendContact(event)"><p><select id="ct" style="padding:.8rem;border-radius:10px;background:#040308;color:var(--fg);border:1px solid var(--line2);font:inherit"><option value="support">Support</option><option value="billing">Billing</option><option value="security">Security report</option><option value="partnership">Partnership / integration</option></select></p>
 <p><input id="ce" type="email" required placeholder="you@company.com" style="width:100%;padding:.85rem 1rem;border:1px solid var(--line2);border-radius:12px;font:inherit;background:#040308;color:var(--fg)"></p>
@@ -1060,6 +1226,7 @@ API base: {API} (header X-API-Key).
 """ + "".join(f"- [vs {b}]({BASE}/vs/{a}): {c}\n" for a, b, c in VS_LIST) + f"""
 
 ## Other
+- [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing]({BASE}/pricing) · [Security]({BASE}/security) · [Privacy]({BASE}/privacy) · [Changelog]({BASE}/changelog)
 """)

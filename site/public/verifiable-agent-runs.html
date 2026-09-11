@@ -11,7 +11,7 @@
 </svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><p class="small muted"><a href="/">RunVouch</a> / Verifiable agent runs</p>
 <h1>Prove what your AI agent did. <span class="grad">To anyone, without trusting us.</span></h1>
 <p class="lead muted">A tamper-evident record for every run of an unattended agent: what ran, when, with which evidence, at what cost. Hashed the moment the run ends, chained in a public daily file, anchored in Bitcoin. An auditor verifies it with a 60-line script and the open-source OpenTimestamps client. Included on every plan, Free too.</p>
-<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/docs/proof">Read the mechanism</a></p>
+<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/verify">Verify a real run</a><a class="btn ghost" href="/docs/proof">Read the mechanism</a></p>
 
 <h2 id="who">Who needs this, and why now</h2>
 <p>An agent that runs while nobody watches produces two things: a result, and a claim that it produced the result. Until now the claim lived in a log file that the same team could edit. Three groups are starting to ask for more than that.</p>
@@ -79,7 +79,7 @@ rv proof RUN_ID --verify</pre>
 <p class="small muted">© 2026 RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
 <div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
-<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
+<div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/verify">Verify a run</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>
 const API="https://api.runvouch.com";
 async function signup(e){e.preventDefault();const k=document.getElementById('keybox');k.classList.add('show');k.innerHTML='<pre>…</pre>';
