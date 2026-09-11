@@ -9,9 +9,19 @@ Niemand was nalatig: een PR bij een vreemde repo staat nergens meer op een scher
 wacht zet hem terug op dat scherm, en alleen als er iets van ons wordt gevraagd.
 
 Aan zet zijn wij als:
-  - de laatste reactie in de draad van iemand anders is (ook van een bot, want die meldt wat er mis is)
+  - de laatste ZINVOLLE reactie in de draad van iemand anders is
   - een beoordelaar wijzigingen vraagt
-  - een controle rood staat op onze eigen commit
+  - een controle rood staat die over onze wijziging gaat
+
+Zinvol is niet hetzelfde als "niet van ons". Op 11 september meldde deze wacht twee PR's waar de laatste reactie
+van Vercel kwam ("een teamlid moet de preview goedkeuren") en van Qodo ("onze reviews staan uit wegens een
+abonnement"). Allebei gaan ze over iets aan de andere kant van de tafel en allebei kun je er niets aan doen. De
+bot van punkpeye vroeg diezelfde dag wel iets echts, namelijk een teken veranderen. Botberichten helemaal negeren
+is dus net zo fout als ze allemaal doorlaten.
+
+De scheiding loopt daarom langs een lijst van bouw- en statusbots, en niet langs "is het een bot". Een rode
+controle van diezelfde bots telt om dezelfde reden niet: een Vercel-preview die niet is goedgekeurd is geen fout
+in onze wijziging.
 
 Aan zet zijn zij als wij het laatst schreven. Dan zegt de wacht niets, tot er iets verandert of tot hij veertien
 dagen stil staat: dat is lang genoeg om te weten dat het niet meer vanzelf goedkomt.
@@ -37,6 +47,11 @@ UA = "runvouch-prwacht/0.1"
 # zet het erbij met PRWACHT_ACCOUNTS="runvouch,datasignalslab".
 ACCOUNTS = [a for a in os.getenv("PRWACHT_ACCOUNTS", "runvouch").split(",") if a]
 STIL_DAGEN = 14
+# Bots die alleen een bouw- of abonnementsstatus melden. Wat zij schrijven vraagt nooit iets van de indiener.
+# Bewust GEEN github-actions: die droeg op 11 september het enige echte verzoek van die dag.
+RUIS_BOTS = {"vercel", "netlify", "codecov", "codecov-commenter", "qodo-code-review", "sonarcloud",
+             "sonarqubecloud", "deepsource-autofix", "snyk-bot", "socket-security", "cloudflare-workers-and-pages"}
+RUIS_CONTROLES = ("vercel", "netlify", "codecov", "qodo", "sonar", "socket", "cloudflare")
 
 
 def gh(*args, timeout=90):
@@ -69,33 +84,44 @@ def stand() -> dict:
         return {}
 
 
-def beoordeel(url: str, eigenaars: set) -> tuple:
-    """(reden, stempel) voor een PR. reden is leeg als wij niet aan zet zijn."""
-    d = gh("pr", "view", url, "--json", "comments,reviews,statusCheckRollup,updatedAt,isDraft,title")
+def zinvolle_reacties(reacties: list) -> list:
+    """Alles behalve de bots die alleen een status melden."""
+    return [c for c in reacties
+            if ((c.get("author") or {}).get("login", "").lower()) not in RUIS_BOTS]
+
+
+def aan_zet(d: dict, eigenaars: set) -> tuple:
+    """(reden, stempel) voor een PR. reden is leeg als wij niet aan zet zijn. Puur, zodat het te testen is."""
     if d.get("isDraft"):
         return "", "draft"
-    reacties = d.get("comments") or []
+    reacties = zinvolle_reacties(d.get("comments") or [])
     laatste = reacties[-1] if reacties else None
-    wie = ((laatste or {}).get("author") or {}).get("login", "")
+    wie = ((laatste or {}).get("author") or {}).get("login", "").lower()
     # Een beoordeling die wijzigingen vraagt blijft staan tot er een nieuwe beoordeling overheen komt.
     vraagt = [r for r in (d.get("reviews") or []) if r.get("state") == "CHANGES_REQUESTED"]
     rood = [c for c in (d.get("statusCheckRollup") or [])
-            if str(c.get("conclusion", "")).upper() in ("FAILURE", "TIMED_OUT", "ACTION_REQUIRED")]
+            if str(c.get("conclusion", "")).upper() in ("FAILURE", "TIMED_OUT", "ACTION_REQUIRED")
+            and not any(r in str(c.get("name", "")).lower() for r in RUIS_CONTROLES)]
     stempel = json.dumps({"c": (laatste or {}).get("id", ""), "r": len(vraagt), "x": len(rood)}, sort_keys=True)
 
     if rood:
-        return f"controle rood ({', '.join(c.get('name', '?') for c in rood[:3])})", stempel
+        return f"controle rood ({', '.join(str(c.get('name', '?')) for c in rood[:3])})", stempel
     if vraagt:
         return f"{vraagt[-1]['author']['login']} vraagt wijzigingen", stempel
     if laatste and wie not in eigenaars:
         kort = " ".join((laatste.get("body") or "").split())[:110]
-        return f"{wie} schreef als laatste: {kort}", stempel
+        return f"{(laatste.get('author') or {}).get('login')} schreef als laatste: {kort}", stempel
     if not laatste:
         return "", stempel
     stil = (time.time() - time.mktime(time.strptime(d["updatedAt"][:19], "%Y-%m-%dT%H:%M:%S"))) / 86400
     if stil > STIL_DAGEN:
         return f"{int(stil)} dagen stil, wij schreven het laatst", stempel
     return "", stempel
+
+
+def beoordeel(url: str, eigenaars: set) -> tuple:
+    return aan_zet(gh("pr", "view", url, "--json",
+                      "comments,reviews,statusCheckRollup,updatedAt,isDraft,title"), eigenaars)
 
 
 def main() -> int:
