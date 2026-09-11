@@ -183,7 +183,7 @@ with _lock:
             pass
     for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER"),
                      ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL"),
-                     ("agents", "ping_token TEXT")):
+                     ("agents", "ping_token TEXT"), ("signups", "source TEXT"), ("accounts", "source TEXT")):
         try:
             _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
         except sqlite3.OperationalError:
@@ -729,9 +729,12 @@ def owner_week(now: Optional[float] = None) -> bool:
     n_paid = q1(f"SELECT COUNT(*) n FROM accounts WHERE {buiten} AND plan!='free'", *intern)["n"]
     with tx() as db:
         db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(0, ?)", (week,))
+    waar = qa(f"SELECT COALESCE(NULLIF(source,''),'onbekend') b, COUNT(*) n FROM accounts WHERE {buiten} AND created>? "
+              f"GROUP BY b ORDER BY n DESC LIMIT 5", *intern, now - 7 * 86400)
+    regels = "".join(f"\n  {r['n']}x {r['b']}" for r in waar)
     return _telegram(owner["telegram_token"], owner["telegram_chat"],
                      f"RunVouch bereik week {d.strftime('%V')}: {n_new} nieuwe sleutels van buiten, {n_tot} van buiten totaal, "
-                     f"{n_run} daarvan stuurden ooit een run, {n_paid} betalend.")
+                     f"{n_run} daarvan stuurden ooit een run, {n_paid} betalend." + regels)
 
 
 # ───────────────────────────── verifiable runs (leaf per run, Merkle day, OpenTimestamps) ─────────────────────────────
@@ -1176,12 +1179,32 @@ def admin_create_account(name: str, plan: str = "free"):
 
 class SignupIn(BaseModel):
     email: str = Field(..., min_length=5, max_length=200, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    # where this person was standing when they asked for a key, and which site sent them there. Without it every
+    # directory listing, comparison page and mail is unmeasurable: the weekly count says four keys and nothing about
+    # what earned them. Both are hints from the browser, so they are cleaned and capped and never trusted.
+    source: str = Field("", max_length=200)
+    ref: str = Field("", max_length=300)
+
+
+_HERKOMST_RE = re.compile(r"[^A-Za-z0-9/._:-]")
+
+
+def herkomst(source: str, ref: str) -> str:
+    """'/eu-ai-act via alternativeto.net' -> one short, boring string. Query strings are dropped: they carry other
+    people's tracking parameters and sometimes a token, and neither belongs in our database."""
+    pad = _HERKOMST_RE.sub("", (source or "").split("?")[0])[:80] or "/"
+    host = ""
+    m = re.match(r"https?://([^/?#]+)", (ref or "").strip(), re.I)
+    if m:
+        host = _HERKOMST_RE.sub("", m.group(1).lower().removeprefix("www."))[:60]
+    return (pad + (" via " + host if host else ""))[:140]
 
 
 @app.post("/signup")
 def signup(body: SignupIn, request: Request):
     """Self-serve: email -> free account. Key shown once. Abuse-limited per IP."""
     ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0].strip()
+    bron = herkomst(body.source, body.ref)
     rate_check("ip:" + ip, 20)
     n = q1("SELECT COUNT(*) n FROM signups WHERE ip=? AND ts>?", ip, time.time() - 86400)["n"]
     if n >= SIGNUP_PER_IP_PER_DAY:
@@ -1193,12 +1216,13 @@ def signup(body: SignupIn, request: Request):
         # owner can read it, so this is safe, and it keeps the founder out of the loop.
         key = rotate_key(existing["id"])
         with tx() as db:
-            db.execute("INSERT INTO signups(ip, ts) VALUES(?,?)", (ip, time.time()))
+            db.execute("INSERT INTO signups(ip, ts, source) VALUES(?,?,?)", (ip, time.time(), bron))
         _send_billing("key", email, existing["plan"], None, key)
         return {"sent": True, "plan": existing["plan"], "note": "This address already has an account. A fresh key is on its way to your inbox; the old key stopped working."}
     acc = create_account(email.split("@")[0], "free", email)
     with tx() as db:
-        db.execute("INSERT INTO signups(ip, ts) VALUES(?,?)", (ip, time.time()))
+        db.execute("INSERT INTO signups(ip, ts, source) VALUES(?,?,?)", (ip, time.time(), bron))
+        db.execute("UPDATE accounts SET source=? WHERE id=?", (bron, acc["account_id"]))
         db.execute("UPDATE accounts SET alert_email=? WHERE id=?", (email, acc["account_id"]))
     _send_billing("signup", email, "free", None, acc["api_key"])
     return {"api_key": acc["api_key"], "plan": "free", "agents_allowed": PLAN_LIMITS["free"],

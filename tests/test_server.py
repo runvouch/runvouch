@@ -1259,3 +1259,25 @@ def test_owner_week_reports_reach_even_when_it_is_zero(tmp_path, monkeypatch):
     assert "bereik week" in sent[0] and "betalend" in sent[0]
     assert S.owner_week(now=maandag + 600) is False      # one line per week, not one per sweep
     assert S.owner_week(now=maandag + 86400) is False    # Tuesday stays quiet
+
+
+def test_signup_records_where_the_visitor_came_from():
+    """Every listing and every mail is unmeasurable until a key can say which page earned it."""
+    import runvouch.server as S
+    with S.tx() as db:   # de andere aanmeldtests hebben de daglimiet per IP al opgesoupeerd
+        db.execute("DELETE FROM signups")
+    r = c.post("/signup", json={"email": "herkomst@example.com", "source": "/eu-ai-act?utm_source=x",
+                                "ref": "https://www.alternativeto.net/software/healthchecks-io/"})
+    assert r.status_code == 200, r.text
+    row = S.q1("SELECT source FROM accounts WHERE email=?", "herkomst@example.com")
+    assert row["source"] == "/eu-ai-act via alternativeto.net"   # query weg, www weg, host erbij
+    assert S.q1("SELECT source FROM signups ORDER BY id DESC LIMIT 1")["source"] == "/eu-ai-act via alternativeto.net"
+
+
+def test_signup_without_a_source_still_works():
+    import runvouch.server as S
+    with S.tx() as db:
+        db.execute("DELETE FROM signups")
+    r = c.post("/signup", json={"email": "kaal@example.com"})
+    assert r.status_code == 200, r.text
+    assert S.q1("SELECT source FROM accounts WHERE email=?", "kaal@example.com")["source"] == "/"
