@@ -157,6 +157,35 @@ def zonder_link(text: str, forced) -> list[str]:
     return [concept, staart]
 
 
+PR_STATE = os.path.join(ROOT, "data", "prantwoord.json")
+GH = os.path.expanduser("~/bin/gh")
+
+
+def klaargezet() -> dict:
+    """Het antwoord dat prantwoord.py schreef en dat op een 'ja' wacht."""
+    try:
+        with open(PR_STATE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def plaats_pr_antwoord(tekst: str = "") -> list[str]:
+    """Zet het klaargezette antwoord in de draad. De sessie schrijft, de eigenaar drukt af."""
+    d = klaargezet()
+    if not d.get("url"):
+        return ["Er staat geen GitHub-antwoord klaar."]
+    body = tekst or d.get("tekst", "")
+    if not body.strip():
+        return ["Het klaargezette antwoord is leeg, er is niets geplaatst."]
+    r = subprocess.run([GH, "pr", "comment", d["url"], "--body", body],
+                       capture_output=True, text=True, timeout=90)
+    if r.returncode:
+        return [f"Plaatsen mislukt: {(r.stderr or r.stdout).strip()[:300]}\n{d['url']}"]
+    open(PR_STATE, "w").write("{}")
+    return [f"Geplaatst op {d.get('repo', d['url'])}.\n{(r.stdout or '').strip()[:200]}"]
+
+
 def handle(text: str) -> list[str]:
     """One incoming message -> the messages to send back. Pure: no Telegram inside, so it is testable."""
     text = (text or "").lstrip()
@@ -167,6 +196,11 @@ def handle(text: str) -> list[str]:
         except FileNotFoundError:
             pass
         return ["Losgekoppeld. Wat je nu plakt staat op zichzelf. Stuur een link om een nieuwe thread vast te zetten."]
+    if los in ("ja", "plaats", "post", "doe maar", "akkoord"):
+        return plaats_pr_antwoord()
+    if los in ("nee", "niet doen", "laat maar") and klaargezet().get("url"):
+        open(PR_STATE, "w").write("{}")
+        return ["Niet geplaatst, het concept is weg."]
     if los in ("thread", "status", "waar", "?"):
         st = vastgezet()
         return [f"Vastgezet: {kort(st['url'])}\n{st['url']}" if st else "Geen thread vastgezet.\n" + HELP]

@@ -1,0 +1,6 @@
+[Unit]
+Description=RunVouch PR reply (drafts the answer, the owner presses send)
+[Service]
+Type=oneshot
+WorkingDirectory=%h/runvouch
+ExecStart=%h/bin/rv run prantwoord --source systemd --log %h/runvouch/data/prantwoord.log -- /usr/bin/python3 %h/runvouch/deploy/prantwoord.py

@@ -116,3 +116,38 @@ def test_scout_leest_issue_pull_en_discussion():
     assert not S.GH_THREAD_RE.search("https://github.com/a/b")
     with pytest.raises(ValueError):
         S.thread_github("https://github.com/openclaw/openclaw")
+
+
+def test_ja_plaatst_het_klaargezette_github_antwoord(T, tmp_path, monkeypatch):
+    """De sessie schrijft, de eigenaar drukt af. Dat is het hele verschil met een bot die zelf praat."""
+    import json as _j
+    T.PR_STATE = str(tmp_path / "pr.json")
+    open(T.PR_STATE, "w").write(_j.dumps({"url": "https://github.com/a/b/pull/1", "repo": "a/b",
+                                          "tekst": "Done, pushed to the same branch."}))
+    gedaan = []
+
+    class R:
+        returncode = 0
+        stdout = "https://github.com/a/b/pull/1#issuecomment-1"
+        stderr = ""
+
+    monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: gedaan.append(a[0]) or R())
+    uit = T.handle("ja")
+    assert "Geplaatst" in uit[0]
+    assert gedaan[0][1:3] == ["pr", "comment"], "moet via gh pr comment gaan"
+    assert _j.load(open(T.PR_STATE)) == {}, "na plaatsen hoort het concept weg te zijn"
+
+
+def test_nee_gooit_het_concept_weg_zonder_te_plaatsen(T, tmp_path, monkeypatch):
+    import json as _j
+    T.PR_STATE = str(tmp_path / "pr.json")
+    open(T.PR_STATE, "w").write(_j.dumps({"url": "https://github.com/a/b/pull/1", "repo": "a/b", "tekst": "x"}))
+    monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("mag niet plaatsen")))
+    uit = T.handle("nee")
+    assert "Niet geplaatst" in uit[0]
+    assert _j.load(open(T.PR_STATE)) == {}
+
+
+def test_ja_zonder_klaargezet_antwoord_doet_niets(T, tmp_path):
+    T.PR_STATE = str(tmp_path / "leeg.json")
+    assert "geen GitHub-antwoord" in T.handle("ja")[0]
