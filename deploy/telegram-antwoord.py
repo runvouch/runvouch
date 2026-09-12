@@ -196,9 +196,21 @@ def handle(text: str) -> list[str]:
         except FileNotFoundError:
             pass
         return ["Losgekoppeld. Wat je nu plakt staat op zichzelf. Stuur een link om een nieuwe thread vast te zetten."]
+    if los in ("ja mail", "ja pr", "ja github", "ja gh"):
+        return verstuur_mail_antwoord() if los == "ja mail" else plaats_pr_antwoord()
     if los in ("ja", "plaats", "post", "doe maar", "akkoord", "verstuur"):
-        # Eerst mail, dan GitHub: een mailantwoord is vers en een PR-concept kan een dag oud zijn.
-        if klaar_mail().get("naar"):
+        mail_klaar = bool(klaar_mail().get("naar"))
+        pr_klaar = bool(klaargezet().get("url"))
+        if mail_klaar and pr_klaar:
+            # Niet gokken welke je bedoelt. Hiervoor won de mail altijd, ook als je net het
+            # PR-concept had gelezen en daarop ja zei: dan gaat er een mail naar een klant
+            # terwijl jij dacht een reactie in een draad te plaatsen. Allebei gaan naar
+            # buiten, dus bij twijfel vragen we het (gemeld 12 september 2026).
+            return ["Er staan er twee klaar en ik weet niet welke je bedoelt:\n"
+                    f"- mail aan {klaar_mail().get('naar')}\n"
+                    f"- GitHub op {klaargezet().get('repo', klaargezet().get('url'))}\n"
+                    "Antwoord 'ja mail' of 'ja pr'. Met 'nee' gooi je ze allebei weg."]
+        if mail_klaar:
             return verstuur_mail_antwoord()
         return plaats_pr_antwoord()
     if los in ("nee", "niet doen", "laat maar"):

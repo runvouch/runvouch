@@ -218,3 +218,49 @@ def test_een_mailconcept_boekt_wat_het_kostte(T, tmp_path, monkeypatch):
         "returncode": 0})())
     T.mail_reply("From: iemand@acme.com\nSubject: vraag\n\nHoi")
     assert T.S.UITGAVEN == [0.0413], "het bedrag van de aanroep hoort in dezelfde pot als de scout"
+
+
+def test_ja_vraagt_door_als_er_twee_concepten_klaarstaan(T, tmp_path, monkeypatch):
+    """Twee dingen die naar buiten gaan, en een 'ja' dat niet zegt welke.
+
+    Hiervoor won de mail altijd. Las je het PR-concept en zei je ja, dan ging er een mail
+    naar een klant terwijl jij dacht een reactie in een draad te zetten. Allebei zijn
+    onomkeerbaar, dus bij twijfel hoort hij te vragen (12 september 2026).
+    """
+    import json as _j
+    T.PR_STATE = str(tmp_path / "pr.json")
+    T.MAIL_STATE = str(tmp_path / "mail.json")
+    open(T.PR_STATE, "w").write(_j.dumps({"url": "https://github.com/a/b/pull/1", "repo": "a/b",
+                                          "tekst": "Done, pushed to the same branch."}))
+    open(T.MAIL_STATE, "w").write(_j.dumps({"naar": "klant@voorbeeld.nl", "onderwerp": "Vraag",
+                                            "tekst": "Dank voor je bericht."}))
+    verstuurd = []
+    monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: verstuurd.append(a[0]) or None)
+
+    uit = T.handle("ja")
+    assert not verstuurd, "er mag niets de deur uit bij een dubbelzinnige ja"
+    assert "twee klaar" in uit[0]
+    assert "ja mail" in uit[0] and "ja pr" in uit[0]
+    assert _j.load(open(T.PR_STATE)).get("url"), "het PR-concept hoort te blijven staan"
+    assert _j.load(open(T.MAIL_STATE)).get("naar"), "het mailconcept hoort te blijven staan"
+
+
+def test_ja_pr_kiest_het_github_antwoord_ook_als_er_mail_klaarstaat(T, tmp_path, monkeypatch):
+    import json as _j
+    T.PR_STATE = str(tmp_path / "pr.json")
+    T.MAIL_STATE = str(tmp_path / "mail.json")
+    open(T.PR_STATE, "w").write(_j.dumps({"url": "https://github.com/a/b/pull/1", "repo": "a/b",
+                                          "tekst": "Done."}))
+    open(T.MAIL_STATE, "w").write(_j.dumps({"naar": "klant@voorbeeld.nl", "tekst": "Dank."}))
+    gedaan = []
+
+    class R:
+        returncode = 0
+        stdout = "https://github.com/a/b/pull/1#issuecomment-1"
+        stderr = ""
+
+    monkeypatch.setattr(T.subprocess, "run", lambda *a, **k: gedaan.append(a[0]) or R())
+    uit = T.handle("ja pr")
+    assert "Geplaatst" in uit[0]
+    assert gedaan[0][1:3] == ["pr", "comment"]
+    assert _j.load(open(T.MAIL_STATE)).get("naar"), "de mail hoort onaangeroerd te blijven"
