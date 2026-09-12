@@ -353,7 +353,16 @@ def meld_run(kosten: float, bron: str) -> None:
     try:
         r = subprocess.run([RV, "start", "telegram-antwoord", "--source", "daemon"],
                            capture_output=True, text=True, timeout=20)
-        rid = (json.loads(r.stdout or "{}") or {}).get("run_id") or (r.stdout or "").strip()
+        # rv start print het kale run-id, geen JSON. json.loads() gooide daarop een fout
+        # VOOR de terugval erachter werd bereikt, dus deze functie stopte altijd hier: de
+        # run werd wel geopend en nooit gesloten. Gevolg: elke afgehandeld bericht liet een
+        # open run achter, na een uur kwam daar STALLED overheen, en de kosten waar deze
+        # functie voor bestaat landden alsnog nergens (gemeten 12 september 2026).
+        uit = (r.stdout or "").strip()
+        try:
+            rid = (json.loads(uit) or {}).get("run_id") or ""
+        except ValueError:
+            rid = uit.splitlines()[-1].strip() if uit else ""
         if not rid:
             return
         subprocess.run([RV, "end", rid, "--status", "ok", "--cost", f"{kosten:.6f}"],
