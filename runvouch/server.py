@@ -1258,6 +1258,10 @@ def me(acc=Depends(account_from_key)):
     return {"name": acc["name"], "email": acc["email"], "plan": acc["plan"], "agents_allowed": PLAN_LIMITS.get(acc["plan"], 3),
             "history_days": RETENTION_DAYS.get(acc["plan"], 7), "viewer": is_viewer(acc),
             "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"] or acc["alert_email"] or acc["slack_webhook_url"] or acc["pagerduty_routing_key"]),
+            # Of de Slack-app op deze server geregistreerd is. Zonder dit bood het dashboard
+            # een "Add to Slack" die bij /integrations/slack/install uitkwam op 503 "Slack app
+            # not configured": een knop die niet kan werken (gemeld 14 september 2026).
+            "slack_oauth": _slack_configured(),
             "channels": {"email": bool(acc["alert_email"]), "telegram": bool(acc["telegram_token"] and acc["telegram_chat"]), "webhook": bool(acc["webhook_url"]),
                          "slack": bool(acc["slack_webhook_url"]), "pagerduty": bool(acc["pagerduty_routing_key"] and acc["plan"] == "team")}}
 
@@ -2072,7 +2076,7 @@ let f='<h2>Alert channels</h2><p><small>Every alert goes to every channel you fi
 f+='<p>E-mail'+st('email')+'<br><input id=s_alert_email type=email placeholder="you@company.com" autocomplete="off"></p>';
 f+='<p>Telegram'+st('telegram')+'<br><input id=s_telegram_token placeholder="bot token (from @BotFather)" autocomplete="off"> <input id=s_telegram_chat placeholder="chat id" style="width:12rem" autocomplete="off"></p>';
 f+='<p>Webhook (JSON POST)'+st('webhook')+'<br><input id=s_webhook_url type=url placeholder="https://..." autocomplete="off"></p>';
-f+='<p>Slack incoming webhook'+st('slack')+'<br><input id=s_slack_webhook_url type=url placeholder="https://hooks.slack.com/services/..." autocomplete="off"> <a href="/integrations/slack/install?token='+encodeURIComponent(key())+'" style="white-space:nowrap">Add to Slack</a></p>';
+f+='<p>Slack incoming webhook'+st('slack')+'<br><input id=s_slack_webhook_url type=url placeholder="https://hooks.slack.com/services/..." autocomplete="off"> '+(me.slack_oauth?'<a href="/integrations/slack/install?token='+encodeURIComponent(key())+'" style="white-space:nowrap">Add to Slack</a>':'<small class="muted">Paste a webhook URL here. One-click install is not enabled on this server.</small>')+'</p>';
 f+='<p>PagerDuty (Events API v2 routing key)'+(team?st('pagerduty'):' <span class="pill waiting">team plan</span>')+'<br><input id=s_pagerduty_routing_key placeholder="32-character integration key" autocomplete="off"'+(team?'':' disabled')+'>'+(team?'':' <small>MISSED, FAILED, STALLED and BUDGET alerts open an incident; ack here resolves it. <a href="https://runvouch.com/pricing">Team plan</a>.</small>')+'</p>';
 f+='<p><button onclick="saveSettings()">Save channels</button> <button onclick="testAlert()" style="background:transparent;border:1px solid var(--line);color:var(--fg2)">Send test alert</button> <small id=cfgmsg></small></p>';
 if(team){f+='<h2>Shared dashboard</h2><p><small>Viewer keys (rvv_) open this dashboard read-only: agents, runs, alerts, export and alert ack. No settings, no run reporting. Hand one to a teammate or paste it in a wall display.</small></p><div id=vk></div><p><input id=vkname placeholder="name (e.g. ops wall)" style="width:14rem"> <button onclick="newViewerKey()">Create viewer key</button> <small id=vkmsg></small></p>'}
