@@ -24,7 +24,8 @@ LOCK = os.path.join(REPO, "data", "remediator.lock")
 RETRY_EVERY = 24 * 3600          # one retry + one repair attempt per agent per day
 MAX_REPAIRS_PER_DAY = 3
 NEVER = {"blogmotor", "blog-writer", "blog-queue", "reddit-scout", "clawhub-publish",   # content jobs: a human decides
-         "verkoopmails", "events-api-kassa"}   # sends mail / touches money: never re-run blindly, only alert
+         "verkoopmails", "events-api-kassa",   # sends mail / touches money: never re-run blindly, only alert
+         "koperswandeling"}   # 40-minute Claude walk: on 14 sep 2026 re-run for a 7 sep alert right after a green run
 # where a job's code lives -> which git repo to fix and how to publish the fix
 REPOS = [
     (HOME + "/apify/landing-live/", HOME + "/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
@@ -53,6 +54,20 @@ def telegram(text: str) -> None:
         print("telegram:", e, file=sys.stderr)
 
 
+def systemd_env() -> dict:
+    """Environment in which `systemctl --user` finds the user bus, also when this runs from cron.
+
+    Cron passes no XDG_RUNTIME_DIR. systemctl --user then fails with "Failed to connect to bus", its empty
+    output read as "no units", and every cron run of the remediator silently skipped the systemd jobs added on
+    29 aug 2026. Found on 14 sep 2026 through the same fault in the DataSignals expectation check.
+    """
+    bus_env = dict(os.environ)
+    run = f"/run/user/{os.getuid()}"
+    bus_env.setdefault("XDG_RUNTIME_DIR", run)
+    bus_env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={run}/bus")
+    return bus_env
+
+
 def jobs_from_crontab() -> dict:
     """Every job that runs through `rv run`: the crontab lines and, since 29 aug 2026, the systemd user units
     (adresrapport, events-api, verkoopmails) whose ExecStart was wrapped the same way."""
@@ -61,11 +76,19 @@ def jobs_from_crontab() -> dict:
         m = re.search(re.escape(HOME) + r"/bin/rv run (\S+) (.*)$", l)
         if m:
             out[m.group(1)] = m.group(2)
-    names = [l.split()[0] for l in subprocess.run(["systemctl", "--user", "list-unit-files", "--type=service", "--no-legend"],
-                                                  capture_output=True, text=True).stdout.splitlines() if l.strip() and "@" not in l]   # no templates
+    units = subprocess.run(["systemctl", "--user", "list-unit-files", "--type=service", "--no-legend"],
+                           capture_output=True, text=True, env=systemd_env())
+    if units.returncode != 0:
+        print("systemd units unreadable, systemd jobs cannot be remediated this run: "
+              + (units.stderr or "").strip()[:200], file=sys.stderr)
+    names = [l.split()[0] for l in units.stdout.splitlines() if l.strip() and "@" not in l]   # no templates
     if names:
-        show = subprocess.run(["systemctl", "--user", "show", *names, "-p", "ExecStart", "-p", "WorkingDirectory"],
-                              capture_output=True, text=True).stdout
+        shown = subprocess.run(["systemctl", "--user", "show", *names, "-p", "ExecStart", "-p", "WorkingDirectory"],
+                               capture_output=True, text=True, env=systemd_env())
+        if shown.returncode != 0:
+            print("systemctl show failed, systemd jobs cannot be remediated this run: "
+                  + (shown.stderr or "").strip()[:200], file=sys.stderr)
+        show = shown.stdout
         for blok in show.split("\n\n"):
             wd = re.search(r"^WorkingDirectory=(.*)$", blok, re.M)
             for m in re.finditer(r"argv\[\]=" + re.escape(HOME) + r"/bin/rv run (\S+) ([^;]*);", blok):
