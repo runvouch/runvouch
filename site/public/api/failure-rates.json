@@ -41,8 +41,8 @@
  "runs": {
   "failed": 30,
   "failure_rate_percent": 0.54,
-  "finished": 5557,
-  "ok": 5527
+  "finished": 5565,
+  "ok": 5535
  },
  "source": "RunVouch, https://runvouch.com/how-often-jobs-fail",
  "window_days": 30
