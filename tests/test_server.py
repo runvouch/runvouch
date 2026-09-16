@@ -722,7 +722,7 @@ def test_public_fleet_only_shows_opted_in_agents():
     acc = server.q1("SELECT id FROM agents WHERE name='nightly-build' ORDER BY id DESC LIMIT 1")
     with server.tx() as db:
         db.execute("INSERT OR REPLACE INTO public_fleets(slug, account_id, title) VALUES('demo', (SELECT account_id FROM agents WHERE id=?), 'Demo')", (acc["id"],))
-        db.execute("INSERT OR REPLACE INTO public_agents(agent_id, label, kind) VALUES(?, 'Nightly build', 'pipeline')", (acc["id"],))
+        db.execute("INSERT OR REPLACE INTO public_agents(agent_id, label, kind, fleet_slug) VALUES(?, 'Nightly build', 'pipeline', 'demo')", (acc["id"],))
     j = c.get("/public/fleet/demo.json").json()  # no key
     names = [a["name"] for a in j["agents"]]
     assert names == ["nightly-build"] and "secret-job" not in json.dumps(j)
@@ -1351,3 +1351,47 @@ def test_gratis_plafond_is_drie_agents():
     for n in range(server.PLAN_LIMITS["free"]):
         assert c.post("/v1/agents", json={"name": f"g{n}"}, headers=fh).status_code == 200
     assert c.post("/v1/agents", json={"name": "een-te-veel"}, headers=fh).status_code == 402
+
+
+def test_vloot_per_klant_toont_alleen_die_klant():
+    """Een bureau geeft elke klant zijn eigen pagina.
+
+    Waarom deze test bestaat: public_agents hing aan het account, niet aan de pagina, dus twee slugs van
+    hetzelfde account toonden allebei dezelfde lijst. Dat maakte de belofte op /for-agencies, een statuspagina
+    per klant, onwaar (16 september 2026).
+    """
+    for naam in ("acme-report", "globex-scrape"):
+        c.post("/v1/agents", json={"name": naam, "cadence_s": 3600}, headers=H)
+        rid = c.post("/v1/runs/start", json={"agent": naam}, headers=H).json()["run_id"]
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok"}, headers=H)
+    assert c.post("/v1/fleets", json={"slug": "acme", "title": "Acme"}, headers=H).status_code == 200
+    assert c.post("/v1/fleets", json={"slug": "globex"}, headers=H).status_code == 200
+    c.post("/v1/fleets/acme/agents", json={"agent": "acme-report", "label": "Nightly report"}, headers=H)
+    c.post("/v1/fleets/globex/agents", json={"agent": "globex-scrape"}, headers=H)
+
+    acme = c.get("/public/fleet/acme.json").json()
+    globex = c.get("/public/fleet/globex.json").json()
+    assert [a["name"] for a in acme["agents"]] == ["acme-report"]
+    assert [a["name"] for a in globex["agents"]] == ["globex-scrape"]
+    assert acme["agents"][0]["label"] == "Nightly report"
+    assert "cost" not in json.dumps(acme), "een klantpagina toont geen kosten"
+
+    # een baan hoort bij een klant: verplaatsen betekent weggaan bij de vorige
+    c.post("/v1/fleets/globex/agents", json={"agent": "acme-report"}, headers=H)
+    assert [a["name"] for a in c.get("/public/fleet/acme.json").json()["agents"]] == []
+    assert len(c.get("/public/fleet/globex.json").json()["agents"]) == 2
+
+    assert {f["slug"] for f in c.get("/v1/fleets", headers=H).json()} >= {"acme", "globex"}
+    assert c.delete("/v1/fleets/acme", headers=H).status_code == 200
+    assert c.get("/public/fleet/acme.json").status_code == 404
+
+
+def test_klantpagina_is_een_betaald_plan_en_een_slug_is_van_een_account():
+    fk = c.post("/admin/accounts", params={"name": "vloot-gratis", "plan": "free"},
+                headers={"X-Admin-Token": "adm"}).json()["api_key"]
+    assert c.post("/v1/fleets", json={"slug": "gratis-klant"}, headers={"X-API-Key": fk}).status_code == 402
+    c.post("/v1/fleets", json={"slug": "bezet"}, headers=H)
+    tk = c.post("/admin/accounts", params={"name": "ander-team", "plan": "team"},
+                headers={"X-Admin-Token": "adm"}).json()["api_key"]
+    assert c.post("/v1/fleets", json={"slug": "bezet"}, headers={"X-API-Key": tk}).status_code == 409
+    assert c.post("/v1/fleets", json={"slug": "Niet Goed"}, headers=H).status_code == 400

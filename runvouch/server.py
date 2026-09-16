@@ -183,11 +183,17 @@ with _lock:
             pass
     for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER"),
                      ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL"),
-                     ("agents", "ping_token TEXT"), ("signups", "source TEXT"), ("accounts", "source TEXT")):
+                     ("agents", "ping_token TEXT"), ("signups", "source TEXT"), ("accounts", "source TEXT"),
+                     ("public_agents", "fleet_slug TEXT")):
         try:
             _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
         except sqlite3.OperationalError:
             pass
+    # A public agent used to belong to an account, not to a page, so every slug of the same account showed the
+    # same list. An agency needs one page per client. Existing rows are handed to the account's first fleet,
+    # which is the page they were already on.
+    _db.execute("UPDATE public_agents SET fleet_slug=(SELECT f.slug FROM public_fleets f JOIN agents g ON g.account_id=f.account_id "
+                "WHERE g.id=public_agents.agent_id ORDER BY f.rowid LIMIT 1) WHERE fleet_slug IS NULL")
     for _r in _db.execute("SELECT id FROM agents WHERE ping_token IS NULL").fetchall():
         _db.execute("UPDATE agents SET ping_token=? WHERE id=?", (secrets.token_urlsafe(18), _r["id"]))
     _db.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_ping ON agents(ping_token)")
@@ -1153,7 +1159,7 @@ def fleet_summary(slug: str, now: Optional[float] = None) -> Optional[dict]:
         return None
     now = now or time.time()
     rows = qa("SELECT g.id, g.name, g.cadence_s, g.paused, p.label, p.kind FROM public_agents p JOIN agents g ON g.id=p.agent_id "
-              "WHERE g.account_id=? ORDER BY p.kind DESC, g.name", fleet["account_id"])
+              "WHERE g.account_id=? AND p.fleet_slug=? ORDER BY p.kind DESC, g.name", fleet["account_id"], slug)
     agents = []
     for g in rows:
         last = q1("SELECT started, ended, status FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT 1", g["id"])
@@ -1938,6 +1944,81 @@ def delete_viewer_key(key_id: int, acc=Depends(account_from_key)):
     if not n:
         raise HTTPException(404, "viewer key not found")
     return {"ok": True, "revoked": key_id}
+
+
+class FleetIn(BaseModel):
+    slug: str
+    title: Optional[str] = None
+
+
+class FleetAgentIn(BaseModel):
+    agent: str
+    label: Optional[str] = None
+    kind: Optional[str] = None
+
+
+def _fleet(acc, slug: str) -> sqlite3.Row:
+    f = q1("SELECT * FROM public_fleets WHERE slug=? AND account_id=?", slug, acc["id"])
+    if not f:
+        raise HTTPException(404, f"no fleet '{slug}' on this account")
+    return f
+
+
+@app.post("/v1/fleets")
+def create_fleet(body: FleetIn, acc=Depends(account_from_key)):
+    """Team: a public status page for one client. An agency that runs jobs for three clients gives each its own
+    page, so a client sees their own jobs and nothing else. Public JSON: /public/fleet/{slug}.json."""
+    require_plan(acc, "team", "Client status pages")
+    slug = (body.slug or "").strip().lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,39}", slug):
+        raise HTTPException(400, "slug must be 2 to 40 characters, lowercase letters, digits and dashes")
+    owner = q1("SELECT account_id FROM public_fleets WHERE slug=?", slug)
+    if owner and owner["account_id"] != acc["id"]:
+        raise HTTPException(409, "that slug is taken")
+    with tx() as db:
+        db.execute("INSERT INTO public_fleets(slug, account_id, title) VALUES(?,?,?) "
+                   "ON CONFLICT(slug) DO UPDATE SET title=excluded.title", (slug, acc["id"], body.title or slug))
+    return {"slug": slug, "title": body.title or slug, "url": f"{PUBLIC_URL}/public/fleet/{slug}.json"}
+
+
+@app.get("/v1/fleets")
+def list_fleets(acc=Depends(account_from_key)):
+    return [{"slug": f["slug"], "title": f["title"], "url": f"{PUBLIC_URL}/public/fleet/{f['slug']}.json",
+             "agents": q1("SELECT COUNT(*) n FROM public_agents WHERE fleet_slug=?", f["slug"])["n"]}
+            for f in qa("SELECT * FROM public_fleets WHERE account_id=? ORDER BY rowid", acc["id"])]
+
+
+@app.post("/v1/fleets/{slug}/agents")
+def add_fleet_agent(slug: str, body: FleetAgentIn, acc=Depends(account_from_key)):
+    """Put one agent on one client page. An agent lives on a single page: it belongs to the client it runs for."""
+    require_plan(acc, "team", "Client status pages")
+    _fleet(acc, slug)
+    a = _agent(acc, body.agent)
+    with tx() as db:
+        db.execute("INSERT INTO public_agents(agent_id, label, kind, fleet_slug) VALUES(?,?,?,?) "
+                   "ON CONFLICT(agent_id) DO UPDATE SET label=excluded.label, kind=excluded.kind, fleet_slug=excluded.fleet_slug",
+                   (a["id"], body.label or a["name"], body.kind or "pipeline", slug))
+    return {"ok": True, "slug": slug, "agent": a["name"], "label": body.label or a["name"]}
+
+
+@app.delete("/v1/fleets/{slug}/agents/{name}")
+def remove_fleet_agent(slug: str, name: str, acc=Depends(account_from_key)):
+    _fleet(acc, slug)
+    a = _agent(acc, name)
+    with tx() as db:
+        n = db.execute("DELETE FROM public_agents WHERE agent_id=? AND fleet_slug=?", (a["id"], slug)).rowcount
+    if not n:
+        raise HTTPException(404, f"{name} is not on {slug}")
+    return {"ok": True, "removed": name}
+
+
+@app.delete("/v1/fleets/{slug}")
+def delete_fleet(slug: str, acc=Depends(account_from_key)):
+    _fleet(acc, slug)
+    with tx() as db:
+        db.execute("DELETE FROM public_agents WHERE fleet_slug=?", (slug,))
+        db.execute("DELETE FROM public_fleets WHERE slug=? AND account_id=?", (slug, acc["id"]))
+    return {"ok": True, "deleted": slug}
 
 
 @app.post("/v1/agents/{name}/pause")

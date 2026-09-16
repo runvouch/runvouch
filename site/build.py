@@ -507,6 +507,12 @@ page("/for-agencies", "Monitoring for automation agencies: prove the client's jo
 
 <h2 id="hand">What you hand the client</h2>
 <p>Two things they can check without taking your word for it. A status page per client on a link you share, with the last run and the 90-day record per job. And a proof per run: a hashed record fixed when the run ends, chained into a public daily file and anchored in Bitcoin through OpenTimestamps. Our own fleet runs on it in public: <a href="/fleet/datasignals">a real fleet page</a>, and the mechanism is written out on <a href="/verifiable-agent-runs">verifiable agent runs</a>. A client who has been burned before does not want a screenshot of a dashboard. They want a record that nobody could edit afterwards.</p>
+<p>One page per client, two calls, nothing else to configure. Each job sits on exactly one page, so Acme never sees Globex:</p>
+<pre>curl -X POST https://api.runvouch.com/v1/fleets -H "X-API-Key: $RUNVOUCH_KEY" \\
+  -d '{"slug":"acme","title":"Acme nightly jobs"}'
+curl -X POST https://api.runvouch.com/v1/fleets/acme/agents -H "X-API-Key: $RUNVOUCH_KEY" \\
+  -d '{"agent":"acme-nightly-report","label":"Nightly report"}'</pre>
+<p class="small muted">The page is public JSON at <code>/public/fleet/acme.json</code>: run facts only, no cost, no evidence, no keys. Drop it in your own client portal or link it as is. Client pages are part of Team.</p>
 
 <h2 id="setup">Setting it up on an instance you do not own</h2>
 <p>Every agent gets a ping URL. At the end of the client workflow, one HTTP Request node to the success URL; on the error path, one to the /fail URL. That is the whole integration, and it works on their cloud instance, their VPS or their laptop. Where you do control the machine, wrap the command instead and you get cost, duration and evidence for free:</p>

@@ -35,7 +35,7 @@ curl localhost:8787/health</code></pre>
 <p>Where this one differs is what it does after the job checks in: evidence that the work actually happened, cost and duration drift against the job's own baseline, retry storms, and a per-run record that cannot be edited afterwards. The full comparison, including where they win: <a href="/vs/healthchecks">vs Healthchecks.io</a>.</p>
 
 <h2>Tests are part of the deal</h2>
-<p>The suite is 107 tests and runs in under half a minute with no network. If you fork this, that suite is how you know your change did not break a detector.</p>
+<p>The suite is 109 tests and runs in under half a minute with no network. If you fork this, that suite is how you know your change did not break a detector.</p>
 <pre><code>.venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q tests</code></pre>
 
