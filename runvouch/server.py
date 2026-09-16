@@ -176,7 +176,7 @@ with _lock:
     if _legacy:
         _db.executescript(SCHEMA)  # the indexes followed the renamed tables and went down with them
     for col in ("email TEXT", "ls_customer_id TEXT", "ls_subscription_id TEXT", "alert_email TEXT", "stripe_customer_id TEXT", "stripe_subscription_id TEXT", "polar_customer_id TEXT", "polar_subscription_id TEXT",
-                "slack_webhook_url TEXT", "pagerduty_routing_key TEXT"):
+                "slack_webhook_url TEXT", "pagerduty_routing_key TEXT", "discord_webhook_url TEXT", "teams_webhook_url TEXT"):
         try:
             _db.execute(f"ALTER TABLE accounts ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -356,6 +356,32 @@ def _slack(url: str, text: str, kind: str, agent: str, message: str) -> bool:
     return _webhook(url, payload)
 
 
+ERNSTIG = {"MISSED", "FAILED", "STALLED", "NO_EVIDENCE", "BUDGET_RUN", "BUDGET_DAY", "RETRY_STORM"}
+
+
+def _discord(url: str, text: str, kind: str, agent: str, message: str) -> bool:
+    """Discord incoming webhook. One embed so the kind and the agent are readable in a busy channel."""
+    kleur = 0xE5484D if kind in ERNSTIG else 0x2EA043
+    return _webhook(url, {"username": "RunVouch", "content": text[:1900], "embeds": [
+        {"title": f"{kind}: {agent}"[:250], "description": message[:3900], "color": kleur,
+         "url": "https://runvouch.com/app"}]})
+
+
+def _teams(url: str, text: str, kind: str, agent: str, message: str) -> bool:
+    """Microsoft Teams. The webhook of a Power Automate workflow takes an adaptive card, which is also what
+    the retired Office 365 connectors accepted, so one payload covers both routes."""
+    return _webhook(url, {"type": "message", "attachments": [{
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "content": {"$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "type": "AdaptiveCard",
+                    "version": "1.4", "body": [
+                        {"type": "TextBlock", "text": f"RunVouch {kind}: {agent}"[:150], "weight": "Bolder",
+                         "size": "Medium", "wrap": True,
+                         "color": "Attention" if kind in ERNSTIG else "Good"},
+                        {"type": "TextBlock", "text": message[:3000], "wrap": True}],
+                    "actions": [{"type": "Action.OpenUrl", "title": "Open the dashboard",
+                                 "url": "https://runvouch.com/app"}]}}]})
+
+
 PD_KINDS = {"MISSED", "FAILED", "STALLED", "BUDGET_RUN", "BUDGET_DAY", "TEST"}
 PD_URL = "https://events.pagerduty.com/v2/enqueue"
 
@@ -431,6 +457,10 @@ def _deliver(alert_id: int) -> None:
         delivered |= _webhook(acc["webhook_url"], {"kind": a["kind"], "agent": name, "run_id": a["run_id"], "message": a["message"], "ts": a["ts"]})
     if acc["slack_webhook_url"]:
         delivered |= _slack(acc["slack_webhook_url"], text, a["kind"], name, a["message"])
+    if acc["discord_webhook_url"]:
+        delivered |= _discord(acc["discord_webhook_url"], text, a["kind"], name, a["message"])
+    if acc["teams_webhook_url"]:
+        delivered |= _teams(acc["teams_webhook_url"], text, a["kind"], name, a["message"])
     if acc["pagerduty_routing_key"] and acc["plan"] == "team" and a["kind"] in PD_KINDS:
         delivered |= _pagerduty(acc["pagerduty_routing_key"], "trigger", pd_dedup_key(name, a["kind"]), f"[{a['kind']}] {name}: {a['message']}",
                                 "info" if a["kind"] == "TEST" else "error", {"agent": name, "kind": a["kind"], "run_id": a["run_id"], "alert_id": a["id"]})
@@ -668,7 +698,8 @@ def weekly_report(now: Optional[float] = None) -> int:
         return 0
     week = time.strftime("%G-W%V", lt)
     sent = 0
-    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL OR alert_email IS NOT NULL OR slack_webhook_url IS NOT NULL"):
+    for acc in qa("SELECT * FROM accounts WHERE telegram_token IS NOT NULL OR webhook_url IS NOT NULL OR alert_email IS NOT NULL "
+              "OR slack_webhook_url IS NOT NULL OR discord_webhook_url IS NOT NULL OR teams_webhook_url IS NOT NULL"):
         if q1("SELECT 1 FROM reports_sent WHERE account_id=? AND week=?", acc["id"], week):
             continue
         t0 = now - 7 * 86400
@@ -691,6 +722,10 @@ def weekly_report(now: Optional[float] = None) -> int:
             ok |= _webhook(acc["webhook_url"], {"kind": "WEEKLY_REPORT", "week": week, "cost_7d": round(total_cost, 4), "runs": total_runs, "failed": fails, "alerts": [dict(a) for a in alerts]})
         if acc["slack_webhook_url"]:
             ok |= _slack(acc["slack_webhook_url"], text, "WEEKLY_REPORT", f"{len(rows)} agents", text)
+        if acc["discord_webhook_url"]:
+            ok |= _discord(acc["discord_webhook_url"], text, "WEEKLY_REPORT", f"{len(rows)} agents", text)
+        if acc["teams_webhook_url"]:
+            ok |= _teams(acc["teams_webhook_url"], text, "WEEKLY_REPORT", f"{len(rows)} agents", text)
         with tx() as db:
             db.execute("INSERT OR IGNORE INTO reports_sent(account_id, week) VALUES(?,?)", (acc["id"], week))
         sent += int(ok)
@@ -1106,6 +1141,8 @@ class SettingsIn(BaseModel):
     webhook_url: Optional[str] = None
     alert_email: Optional[str] = None
     slack_webhook_url: Optional[str] = None
+    discord_webhook_url: Optional[str] = None
+    teams_webhook_url: Optional[str] = None
     pagerduty_routing_key: Optional[str] = None
 
 
@@ -1293,13 +1330,16 @@ def contact(body: ContactIn, request: Request):
 def me(acc=Depends(account_from_key)):
     return {"name": acc["name"], "email": acc["email"], "plan": acc["plan"], "agents_allowed": PLAN_LIMITS.get(acc["plan"], 3),
             "history_days": RETENTION_DAYS.get(acc["plan"], 7), "viewer": is_viewer(acc),
-            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"] or acc["alert_email"] or acc["slack_webhook_url"] or acc["pagerduty_routing_key"]),
+            "alerts_configured": bool((acc["telegram_token"] and acc["telegram_chat"]) or acc["webhook_url"] or acc["alert_email"] or acc["slack_webhook_url"]
+                                       or acc["discord_webhook_url"] or acc["teams_webhook_url"] or acc["pagerduty_routing_key"]),
             # Of de Slack-app op deze server geregistreerd is. Zonder dit bood het dashboard
             # een "Add to Slack" die bij /integrations/slack/install uitkwam op 503 "Slack app
             # not configured": een knop die niet kan werken (gemeld 14 september 2026).
             "slack_oauth": _slack_configured(),
             "channels": {"email": bool(acc["alert_email"]), "telegram": bool(acc["telegram_token"] and acc["telegram_chat"]), "webhook": bool(acc["webhook_url"]),
-                         "slack": bool(acc["slack_webhook_url"]), "pagerduty": bool(acc["pagerduty_routing_key"] and acc["plan"] == "team")}}
+                         "slack": bool(acc["slack_webhook_url"]), "discord": bool(acc["discord_webhook_url"]),
+                         "teams": bool(acc["teams_webhook_url"]),
+                         "pagerduty": bool(acc["pagerduty_routing_key"] and acc["plan"] == "team")}}
 
 
 @app.post("/v1/me/rotate-key")
@@ -1547,11 +1587,21 @@ def put_settings(s: SettingsIn, acc=Depends(account_from_key)):
         require_plan(acc, "team", "PagerDuty")
     if s.slack_webhook_url and not s.slack_webhook_url.startswith("https://hooks.slack.com/"):
         raise HTTPException(422, "slack_webhook_url must be a Slack incoming webhook (https://hooks.slack.com/services/...)")
+    if s.discord_webhook_url and not s.discord_webhook_url.startswith(("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/")):
+        raise HTTPException(422, "discord_webhook_url must be a Discord webhook (https://discord.com/api/webhooks/...)")
+    # Teams heeft twee routes: de workflow uit Power Automate (logic.azure.com) en de oude connector die
+    # Microsoft uitfaseert (outlook.office.com). Allebei accepteren dezelfde adaptive card, dus allebei toegestaan.
+    if s.teams_webhook_url and not (s.teams_webhook_url.startswith("https://") and
+                                    (".logic.azure.com" in s.teams_webhook_url or "webhook.office.com" in s.teams_webhook_url
+                                     or "outlook.office.com" in s.teams_webhook_url)):
+        raise HTTPException(422, "teams_webhook_url must be a Teams workflow URL (…logic.azure.com…) or an Office 365 connector URL")
     with tx() as db:
         db.execute("UPDATE accounts SET telegram_token=COALESCE(?,telegram_token), telegram_chat=COALESCE(?,telegram_chat), "
                    "webhook_url=COALESCE(?,webhook_url), alert_email=COALESCE(?,alert_email), slack_webhook_url=COALESCE(?,slack_webhook_url), "
+                   "discord_webhook_url=COALESCE(?,discord_webhook_url), teams_webhook_url=COALESCE(?,teams_webhook_url), "
                    "pagerduty_routing_key=COALESCE(?,pagerduty_routing_key) WHERE id=?",
-                   (s.telegram_token, s.telegram_chat, s.webhook_url, s.alert_email, s.slack_webhook_url, s.pagerduty_routing_key, acc["id"]))
+                   (s.telegram_token, s.telegram_chat, s.webhook_url, s.alert_email, s.slack_webhook_url,
+                    s.discord_webhook_url, s.teams_webhook_url, s.pagerduty_routing_key, acc["id"]))
     return {"ok": True}
 
 

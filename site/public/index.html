@@ -16,7 +16,7 @@
 <h1 class="reveal">Know your agents did the job<br><span class="grad">before the bill tells you</span> they didn't.</h1>
 <p class="lead reveal">A green run means the scheduler worked, not that the task got done. RunVouch watches agents that run while you sleep and tells you when a run is missed, fails quietly, loops, or blows its budget. Works with Claude Code Routines, headless <code>claude&nbsp;-p</code>, OpenClaw, n8n and cron. When it went right, you get a record you can verify without us.</p>
 <div class="cta reveal"><a class="btn" href="#start">Get a free key</a><a class="btn ghost" href="/docs/claude-code">Read the docs →</a></div>
-<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email, Telegram, Slack or webhook</span><span>self-host (MIT)</span></div>
+<div class="trust reveal"><span>no card</span><span>2-minute setup</span><span>email, Telegram, Slack, Discord, Teams or webhook</span><span>self-host (MIT)</span></div>
 </div>
 <div class="panel reveal" aria-label="Example RunVouch dashboard"><div class="bar"><i></i><i></i><i></i>&nbsp;example night · tonight an alert, next year a record</div>
 <ul class="runs">
@@ -48,7 +48,7 @@
 <div class="card"><h3>Wrap the run</h3><p>Cron, systemd, GitHub Actions, a Routine, anything. Exit code, duration, output and evidence are captured automatically.</p><pre>rv run nightly-report \
   --evidence-file out/report.html \
   -- claude -p "build tonight's report"</pre></div>
-<div class="card"><h3>Get told, not surprised</h3><p>Missed, failed, unproven, looping, over budget, drifting or stalled → Telegram, Slack or any webhook within minutes. Ask your MCP client "are my agents healthy?"</p><pre>rv status
+<div class="card"><h3>Get told, not surprised</h3><p>Missed, failed, unproven, looping, over budget, drifting or stalled → Telegram, Slack, Discord, Teams or any webhook within minutes. Ask your MCP client "are my agents healthy?"</p><pre>rv status
 nightly-report   ok   $0.41   0 alerts</pre></div>
 </div>
 </div></section>
@@ -120,7 +120,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <section id="start"><div class="wrap">
 <span class="kicker">pricing</span><h2>The alert is free. <span class="grad">The brake is $19.</span></h2>
 <div class="price">
-<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>A cost cap alerts you, the agent keeps running</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
+<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack, Discord, Teams &amp; webhook alerts</li><li>A cost cap alerts you, the agent keeps running</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
 <div class="card hi"><h3>Solo</h3><div class="n">$19<small>/month</small></div><ul><li><b>A cost cap that refuses the next run</b></li><li>50 agents</li><li>90-day history</li><li>Weekly cost report</li><li>MISSED and FAILED alerts sent every time, no 10-minute cooldown</li><li>Verifiable proof per run</li></ul><a class="btn" href="https://buy.polar.sh/polar_cl_TWutXZxVmocC9i8o6SS0UXI9hG8V5mR8KlgJ12vrZNe" data-ls="customer_email">Upgrade to Solo, $19/mo</a></div>
 <div class="card"><h3>Team</h3><div class="n">$99<small>/month</small></div><ul><li>1000 agents</li><li>90-day history</li><li>API export (CSV / JSON) for audits</li><li>Read-only dashboard for teammates (viewer keys)</li><li>PagerDuty incidents</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="https://buy.polar.sh/polar_cl_XzTkjGGHRdRqlXbCVfbWLiTBWAd4IA9cq6ZjX227pU1" data-ls="customer_email">Upgrade to Team, $99/mo</a></div>
 </div>

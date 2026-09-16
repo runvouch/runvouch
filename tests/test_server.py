@@ -1395,3 +1395,39 @@ def test_klantpagina_is_een_betaald_plan_en_een_slug_is_van_een_account():
                 headers={"X-Admin-Token": "adm"}).json()["api_key"]
     assert c.post("/v1/fleets", json={"slug": "bezet"}, headers={"X-API-Key": tk}).status_code == 409
     assert c.post("/v1/fleets", json={"slug": "Niet Goed"}, headers=H).status_code == 400
+
+
+def test_discord_en_teams_kanaal(monkeypatch):
+    """Twee kanalen erbij, en de reden staat in elke vergelijkingstabel: wie in Discord of Teams werkt wil de
+    melding daar, niet in een mailbox die hij 's nachts niet leest. Ze zitten op elk plan, ook gratis, want een
+    wacht die zwijgt is geen wacht en dat is precies waar de concurrent zijn gratis plan afknijpt.
+    """
+    verstuurd = []
+    monkeypatch.setattr(server, "_webhook", lambda url, payload: verstuurd.append((url, payload)) or True)
+    dk, dh = _acct("free")
+    c.post("/v1/agents", json={"name": "kanaaltest"}, headers=dh)
+
+    r = c.put("/v1/settings", json={"discord_webhook_url": "https://example.com/hook"}, headers=dh)
+    assert r.status_code == 422, "alleen een echte Discord-webhook"
+    r = c.put("/v1/settings", json={"teams_webhook_url": "https://example.com/hook"}, headers=dh)
+    assert r.status_code == 422, "alleen een Teams-workflow of connector"
+
+    assert c.put("/v1/settings", json={
+        "discord_webhook_url": "https://discord.com/api/webhooks/123/abc",
+        "teams_webhook_url": "https://prod-1.westeurope.logic.azure.com/workflows/abc/triggers/manual/paths/invoke",
+    }, headers=dh).status_code == 200
+    kanalen = c.get("/v1/me", headers=dh).json()["channels"]
+    assert kanalen["discord"] and kanalen["teams"]
+
+    rid = c.post("/v1/runs/start", json={"agent": "kanaaltest"}, headers=dh).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "fail"}, headers=dh)
+    aid = [a for a in c.get("/v1/alerts", headers=dh).json() if a["run_id"] == rid][0]["id"]
+    server._deliver(aid)
+
+    discord = [p for u, p in verstuurd if "discord.com" in u]
+    teams = [p for u, p in verstuurd if "logic.azure.com" in u]
+    assert discord and discord[0]["embeds"][0]["title"].startswith("FAILED: kanaaltest")
+    assert discord[0]["embeds"][0]["color"] == 0xE5484D, "een storing is rood"
+    kaart = teams[0]["attachments"][0]["content"]
+    assert kaart["type"] == "AdaptiveCard"
+    assert "FAILED: kanaaltest" in kaart["body"][0]["text"] and kaart["body"][0]["color"] == "Attention"
