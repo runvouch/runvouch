@@ -12,6 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")
 OUT = os.path.join(ROOT, "data", "koperswandeling")
 UA = "runvouch-koperswandeling/0.1"
+TIJD = 2400  # seconds; a full walk took 14 to 22 minutes so far
 
 BRIEF = """You are a careful buyer, not a reviewer of style. Walk these two sites the way a paying customer would and report
 ONLY defects: broken links, forms that do not respond, downloads that fail, numbers that contradict each other, dates that
@@ -52,10 +53,16 @@ def telegram(text: str) -> None:
 
 def main() -> int:
     os.makedirs(OUT, exist_ok=True)
-    r = subprocess.run([CLAUDE, "-p", BRIEF, "--output-format", "json", "--max-turns", "80",
-                        "--allowedTools", "Bash,Read,WebFetch"], capture_output=True, text=True, timeout=2400, cwd=ROOT)
     try:
-        antwoord = json.loads(r.stdout or "{}")
+        r = subprocess.run([CLAUDE, "-p", BRIEF, "--output-format", "json", "--max-turns", "80",
+                            "--allowedTools", "Bash,Read,WebFetch"], capture_output=True, text=True, timeout=TIJD, cwd=ROOT)
+        uitvoer, fout = r.stdout, r.stderr
+    except subprocess.TimeoutExpired:
+        # Without this the walk ended in a bare traceback: no report file, no Telegram, only a FAILED alert
+        # with nothing in it (14 September 2026, a second run next to the green one of that morning).
+        uitvoer, fout = "", f"walk did not finish within {TIJD // 60} minutes"
+    try:
+        antwoord = json.loads(uitvoer or "{}")
         out = antwoord.get("result", "").strip()
         # rv run leest deze regel en zet de kosten op de run, anders staat de BUDGET-detector
         # bij onze eigen jobs naar een som van 0.00 te kijken
@@ -63,7 +70,7 @@ def main() -> int:
     except Exception:
         out = ""
     if not out:
-        out = "Koperswandeling kon niet worden afgerond: " + (r.stderr or "geen uitvoer")[-500:]
+        out = "Koperswandeling kon niet worden afgerond: " + (fout or "geen uitvoer")[-500:]
     path = os.path.join(OUT, time.strftime("%Y-%m-%d") + ".md")
     open(path, "w").write(out + "\n")
     print(out)
