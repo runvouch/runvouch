@@ -832,6 +832,20 @@ def integration_page(i):
                 ("What " + i["name"] + " does not tell you", i["missing"]),
                 ("What RunVouch detects", DETECTS),
                 ("Set up in two minutes", SETUP.replace("HOW", how.lower()))]
+    # Elke integratiepagina had precies een interne link naar zich toe, die van de index. Google noemt dat
+    # "gevonden, niet geïndexeerd", en op 16 september 2026 stonden 19 van onze pagina's in dat bakje. Wie op
+    # deze pagina staat draait vaker meer dan een van deze dingen, dus de buren horen er ook inhoudelijk.
+    _groep = [b for b in INTEGRATIONS if b["group"] == i["group"]]
+    _n = [b["slug"] for b in _groep].index(i["slug"])
+    buren = [_groep[(_n + k) % len(_groep)] for k in range(1, min(5, len(_groep)))]
+    if len(buren) < 2:  # een groep van een (Grafana) zou anders zonder buren blijven staan
+        _rest = [b for b in INTEGRATIONS if b["slug"] != i["slug"] and b not in buren]
+        buren += [_rest[(_n + k) % len(_rest)] for k in range(3)]
+    if buren:
+        sections.append((f"Also running {i['group'].lower()}?",
+                         "<p>" + " ".join(f'<a href="/integrations/{b["slug"]}">{b["name"]}</a>.' for b in buren) +
+                         f' The full list of runtimes is on <a href="/integrations/">integrations</a>, and the same '
+                         f'agent can report from several of them: one job, one cadence, wherever it happens to run.</p>'))
     steps = [("Store RUNVOUCH_KEY as a secret", re.sub("<[^>]+>", "", i["key"])),
              (how, "Add the snippet from this page to the scheduled job."),
              ("Register the agent", f"rv agent {agent} --cadence 24h --grace 30m --evidence")]
@@ -859,10 +873,20 @@ page("/integrations/", "RunVouch integrations: every scheduler, platform and age
 
 VS_LIST = [('healthchecks', 'Healthchecks.io', 'Ping monitor vs outcome watchdog.'), ('cronitor', 'Cronitor', 'Ops monitoring vs agent monitoring.'), ('langfuse', 'Langfuse', 'Tracing vs watchdog, complementary.'), ('dead-mans-snitch', "Dead Man's Snitch", 'Heartbeat vs heartbeat plus outcome.'), ('sentry-crons', 'Sentry Crons', 'Exceptions vs silent failures.'), ('better-stack', 'Better Stack', 'One vendor for uptime vs one job done well.'), ('uptime-kuma', 'Uptime Kuma', 'Self-hosted push monitor vs agent watchdog.'), ('cronhub', 'Cronhub', 'Cron monitor vs LLM job monitor.'), ('helicone', 'Helicone', 'LLM proxy vs outside watchdog.'), ('agentops', 'AgentOps', 'Session replay vs pager.'), ('langsmith', 'LangSmith', 'Tracing vs the alert that there is something to trace.'), ('traceseal', 'Traceseal', 'Signed receipt per invocation vs watchdog plus proof.'), ('traccia', 'Traccia', 'Control plane inside the stack vs watchdog outside it.')]
 # ───────────────────────── VS PAGES ─────────────────────────
+def _vs_buren(slug):
+    """Drie zusterpagina's, meeschuivend. Elke vs-pagina had een enkele interne link, die van de index, en dat
+    is precies het bakje "gevonden, niet geïndexeerd" waar Google er 19 van ons in had staan."""
+    i = [a for a, _b, _c in VS_LIST].index(slug)
+    buren = [VS_LIST[(i + k) % len(VS_LIST)] for k in range(1, 4)]
+    return " ".join(f'<a href="/vs/{a}">vs {b}</a>: {c}' for a, b, c in buren)
+
+
 def vs(slug, name, tagline, rows, verdict):
     body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/vs/">Compare</a> › {name}</p><h1>RunVouch vs {name}</h1><p class="lead muted">{tagline}</p>
 <table><tr><th></th><th>{name}</th><th>RunVouch</th></tr>{"".join(f"<tr><td>{a}</td><td>{b}</td><td>{c}</td></tr>" for a,b,c in rows)}</table>
-<h2>When to use which</h2>{verdict}<p><a class="btn" href="/#signup">Get a free key</a></p></div></main>'''
+<h2>When to use which</h2>{verdict}
+<h2>Other comparisons</h2><p>{_vs_buren(slug)} Not sure which category you need at all? Start at <a href="/observability-or-watchdog">observability, a heartbeat, or a watchdog</a>, or see <a href="/vs/">all comparisons</a>.</p>
+<p><a class="btn" href="/#signup">Get a free key</a></p></div></main>'''
     page(f"/vs/{slug}", f"RunVouch vs {name}: for AI agents, cron and scheduled jobs", f"Honest comparison of RunVouch and {name} for monitoring scheduled AI agents: missed runs, evidence, retry storms, cost caps, pricing.", body, [ORG_LD], article=True)
 
 
@@ -1537,7 +1561,12 @@ def _sources_html(art):
     src = SOURCES.get(art["slug"]) or []
     return ('<h2>Sources</h2><ul class="muted">' + "".join(f'<li><a href="{u}" rel="noopener">{t}</a></li>' for t, u in src) + '</ul>') if src else ""
 def _related_html(art):
-    others = [a for a in ARTICLES if a["slug"] != art["slug"]][:3]
+    # Was [:3] over de hele lijst, dus alleen de eerste drie stukken kregen ooit een link en de rest bleef op
+    # een enkele interne verwijzing staan. Nu schuift het venster mee: elk stuk wijst naar de drie die erop
+    # volgen, dus elk stuk krijgt er ook drie terug (16 september 2026, 19 pagina's "gevonden, niet geïndexeerd").
+    _slugs = [a["slug"] for a in ARTICLES]
+    _i = _slugs.index(art["slug"])
+    others = [ARTICLES[(_i + k) % len(ARTICLES)] for k in range(1, 4)]
     return '<h2>Related field notes</h2><ul>' + "".join(f'<li><a href="/blog/{a["slug"]}">{a["title"]}</a></li>' for a in others) + '</ul>'
 for art in ARTICLES:
     body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · {art.get("date") or BLOG_DATE} · RunVouch</p><h1>{art["title"]}</h1><p class="lead muted">{art["description"]}</p>{art["html"]}
