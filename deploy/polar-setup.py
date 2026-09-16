@@ -3,19 +3,27 @@
 
   POLAR_TOKEN=polar_oat_... .venv/bin/python deploy/polar-setup.py            # production
   POLAR_TOKEN=... POLAR_API=https://sandbox-api.polar.sh .venv/bin/python deploy/polar-setup.py   # sandbox
+  POLAR_TOKEN=... .venv/bin/python deploy/polar-setup.py --prices             # only move the amounts
 
 Token: polar.sh -> Settings -> Developers -> New token, scopes: products:read/write, checkout_links:read/write,
-webhooks:read/write. Creates Solo ($9/mo) + Team ($29/mo), two checkout links, and the webhook endpoint
+webhooks:read/write. Creates Solo + Team, two checkout links, and the webhook endpoint
 https://api.runvouch.com/webhooks/polar. Prints the lines to append to .env.
 Written against the Polar API docs (Aug 2026); if a field name changed, the error message names it.
+
+The amounts in PLANS are what the market pays for this job, not what feels modest. Measured on 16 September
+2026: AgentPing asks $99 a month for ten agents and $199 for unlimited, and its free plan sends no alerts at
+all; AgentWatch asks $19 for a single agent and does not even stop it. RunVouch asked $9 for a hundred agents
+with everything included and had no paying customer at all. With --prices the existing products keep their id,
+their checkout link and their subscribers, and only the amount moves. Polar archives the old price itself.
 """
 import json, os, sys, urllib.request
 
 TOKEN = os.getenv("POLAR_TOKEN") or sys.exit("POLAR_TOKEN not set")
 API = os.getenv("POLAR_API", "https://api.polar.sh").rstrip("/")
 WEBHOOK_URL = os.getenv("POLAR_WEBHOOK_URL", "https://api.runvouch.com/webhooks/polar")
-PLANS = [("solo", "RunVouch Solo", 900, "50 agents, a cost cap that refuses the next run, 90-day history, weekly cost report"),
-         ("team", "RunVouch Team", 2900, "1000 agents, Slack & PagerDuty, shared dashboard, API export")]
+PLANS = [("solo", "RunVouch Solo", 1900, "50 agents, a cost cap that refuses the next run, 90-day history, weekly cost report"),
+         ("team", "RunVouch Team", 9900, "1000 agents, a public status page per client, viewer keys, PagerDuty, API export")]
+ALLEEN_PRIJZEN = "--prices" in sys.argv
 
 
 def call(method, path, data=None):
@@ -41,6 +49,19 @@ def items(path):
 env, product_plans = {}, []
 for plan, name, cents, desc in PLANS:
     found = [p for p in items("/v1/products/?is_archived=false") if p["name"] == name]
+    if ALLEEN_PRIJZEN:
+        if not found:
+            sys.exit(f"{name} does not exist yet; run once without --prices first")
+        product = found[0]
+        levend = [p for p in product.get("prices", []) if not p.get("is_archived")]
+        if any(p.get("price_amount") == cents for p in levend):
+            print(f"{plan}: already at ${cents / 100:.2f}, nothing to do")
+        else:
+            was = ", ".join(f"${p.get('price_amount', 0) / 100:.2f}" for p in levend) or "none"
+            call("PATCH", f"/v1/products/{product['id']}", {
+                "prices": [{"amount_type": "fixed", "price_amount": cents, "price_currency": "usd"}]})
+            print(f"{plan}: {was} -> ${cents / 100:.2f}, product {product['id']} and its checkout link unchanged")
+        continue
     product = found[0] if found else call("POST", "/v1/products/", {
         "name": name, "description": desc, "recurring_interval": "month",
         "prices": [{"amount_type": "fixed", "price_amount": cents, "price_currency": "usd"}],
@@ -52,6 +73,10 @@ for plan, name, cents, desc in PLANS:
     product_plans.append(f"{product['id']}:{plan}")
     env[f"POLAR_{plan.upper()}_URL"] = link["url"]
     print(f"{plan}: product {product['id']} link {link['url']}")
+
+if ALLEEN_PRIJZEN:
+    print("\n# prices moved. The site still prints the old amounts until site/build.py is updated and rebuilt.")
+    sys.exit(0)
 
 hooks = [h for h in items("/v1/webhooks/endpoints") if h["url"] == WEBHOOK_URL]
 if hooks:

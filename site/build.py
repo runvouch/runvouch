@@ -207,7 +207,7 @@ FOOTER = f'''<footer><div class="wrap"><div class="cols"><div><div class="brand"
 {PH_BADGE}
 <ul class="avail" aria-label="Available on"><li><a href="https://pypi.org/project/runvouch/">PyPI</a></li><li><a href="https://www.npmjs.com/package/runvouch">npm</a></li><li><a href="https://github.com/runvouch/vouch-action">GitHub Action</a></li><li><a href="https://github.com/runvouch/claude-plugin">Claude Code plugin</a></li><li><a href="https://registry.modelcontextprotocol.io/?search=runvouch">MCP Registry</a></li><li><a href="https://smithery.ai/servers/runvouch/runvouch">Smithery</a></li><li><a href="https://glama.ai/mcp/servers/runvouch/runvouch">Glama</a></li></ul>
 <p class="small muted">© {datetime.date.today().year} RunVouch · Netherlands · <a href="/contact">contact</a><br>Built by the team behind <a href="https://datasignalslab.com" rel="noopener">DataSignals Lab</a>, whose nightly pipelines it watches.</p></div>
-<div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
+<div><h4>Product</h4><a href="/#how">How it works</a><a href="/verifiable-agent-runs">Verifiable agent runs</a><a href="/for-agencies">For agencies</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="/app">Dashboard</a><a href="/changelog">Changelog</a><a href="/status">Status</a></div>
 <div><h4>Docs</h4><a href="/integrations/">All integrations</a><a href="/docs/claude-code">Claude Code</a><a href="/docs/cron">Cron &amp; scripts</a><a href="/docs/python-node">Python &amp; Node</a><a href="/docs/github-actions">GitHub Actions</a><a href="/docs/openclaw">OpenClaw</a><a href="/docs/n8n">n8n</a><a href="/docs/templates">Agent templates</a><a href="/docs/proof">Verifiable runs</a><a href="/docs/alerts">Alert channels</a><a href="/docs/mcp">MCP server</a><a href="/docs/api">API</a></div>
 <div><h4>Compare</h4><a href="/vs/">All comparisons</a><a href="/observability-or-watchdog">Which tool do I need</a><a href="/self-hosted">Self-hosted</a><a href="/verify">Verify a run</a><a href="/fleet/datasignals">A live fleet</a><a href="/eu-ai-act">EU AI Act</a><a href="/vs/healthchecks">vs Healthchecks.io</a><a href="/vs/cronitor">vs Cronitor</a><a href="/vs/langfuse">vs Langfuse</a><a href="/how-often-jobs-fail">How often jobs fail</a><a href="/stats">In numbers</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></div></div></footer>
 <script>{SIGNUP_JS}</script></body></html>'''
@@ -371,6 +371,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li><b>A cost cap that refuses the next run</b></li><li>50 agents</li><li>90-day history</li><li>Weekly cost report</li><li>MISSED and FAILED alerts sent every time, no 10-minute cooldown</li><li>Verifiable proof per run</li></ul>{SOLO_BTN}</div>
 <div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>1000 agents</li><li>90-day history</li><li>API export (CSV / JSON) for audits</li><li>Read-only dashboard for teammates (viewer keys)</li><li>PagerDuty incidents</li><li>Verifiable proof per run</li></ul>{TEAM_BTN}</div>
 </div>
+<p class="small muted" style="margin-top:1rem">Running these jobs for clients instead of yourself? <a href="/for-agencies">What an agency shows the client</a>.</p>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by {PROCESSOR}; upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
 <div id="keybox" class="keybox"></div></div>
@@ -477,6 +478,52 @@ PRICING_FAQ = '''<section class="alt faq"><div class="wrap"><span class="kicker"
 <details><summary>Why do you need my email for a free key?</summary><p>Because the key is the account. If you upgrade later, the payment is matched to the same email; if you lose the key, we can rotate it. We do not send marketing mail.</p></details>
 <details><summary>Can I self-host?</summary><p>Yes. The server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
 </div></section>'''
+AGENCY_FAQ = [
+    ("Does this replace the n8n error workflow?", "No, and if one instance is all you run, the error workflow is free and enough. RunVouch watches from outside: it notices the run that never started, which is the failure an Error Trigger cannot see, and it does that across every client instance from one place."),
+    ("Do I need access to the client's server?", "No. Anything that can call a URL can report: an HTTP Request node at the end of the workflow, a curl line in their cron, or the rv wrapper if you do control the box. The client keeps their instance, you keep the watch."),
+    ("What do I show a client who asks whether it ran?", "A status page with the last 90 days per job, on your own link, and a proof file per run: a hashed record, chained into a public daily file and anchored in Bitcoin. They can verify it without trusting you or us."),
+    ("What does it cost per client?", "Free covers three agents, which is one small client or your own first test. Solo is $9 a month for 50 agents and adds the cost cap that refuses the next run. Team is $29 for 1000 agents, PagerDuty, API export and read-only dashboards for people who should not hold your key."),
+]
+AGENCY_LD = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in AGENCY_FAQ]}
+page("/for-agencies", "Monitoring for automation agencies: prove the client's jobs ran | RunVouch",
+     "Watch every client's scheduled workflows from outside their n8n, cron or Claude Code setup: missed runs, silent failures, cost caps with a brake, and a verifiable proof file you can hand the client.",
+     '''<main><div class="wrap doc"><p class="small muted"><a href="/">RunVouch</a> / For agencies</p>
+<h1>The client's workflow went quiet in August. <span class="grad">You heard about it in September.</span></h1>
+<p class="lead muted">You built the automation, handed it over, and you are still the one who gets called when it goes silent. The workflows live in instances you do not control, on schedules set months ago, for people who assume that no news is good news. RunVouch watches them from the outside and gives you something to show when the question comes.</p>
+<p class="cta"><a class="btn" href="/#signup">Get a free key</a><a class="btn ghost" href="/fleet/datasignals">See a live client page</a><a class="btn ghost" href="/contact?topic=agency">Talk to us</a></p>
+
+<h2 id="blind">The failure your error handling cannot see</h2>
+<p>A failed run is the easy case: the error workflow fires, Slack lights up, you fix it. The expensive case is the run that never happened. A workflow someone deactivated during a test, a schedule that did not survive an upgrade, a token that expired, a container that never came back after a reboot. None of those produce a failed execution, because none of them produce an execution at all. The execution list stays clean, the error workflow stays quiet, and the report the client pays for is simply not there. Weeks later they ask, and you are explaining instead of invoicing.</p>
+<p>The same hole exists outside n8n. Cron does not care whether your job ran; it only cares that it fired the command. A headless agent that exits 0 after writing nothing looks exactly like a good night.</p>
+
+<h2 id="watch">What RunVouch watches, per client</h2>
+<ul>
+<li><b>MISSED.</b> You declare the cadence and a grace window. Nothing checked in by then is an alert, whatever the reason.</li>
+<li><b>FAILED.</b> Non-zero exit with the last lines of stderr, so you know what to open before you log in.</li>
+<li><b>NO_EVIDENCE.</b> The run went green, but the file, row or URL it exists for did not change. This is the one that protects the client relationship: green is not done.</li>
+<li><b>BUDGET.</b> A cap per run and per day. On a paid plan the next run is refused instead of billed, which matters when the workflow calls a model in a loop.</li>
+<li><b>RETRY_STORM, DRIFT, STALLED.</b> The same tool call forty times, a job that suddenly finishes in a tenth of the usual time, a run that started and never ended.</li>
+</ul>
+
+<h2 id="hand">What you hand the client</h2>
+<p>Two things they can check without taking your word for it. A status page per client on a link you share, with the last run and the 90-day record per job. And a proof per run: a hashed record fixed when the run ends, chained into a public daily file and anchored in Bitcoin through OpenTimestamps. Our own fleet runs on it in public: <a href="/fleet/datasignals">a real fleet page</a>, and the mechanism is written out on <a href="/verifiable-agent-runs">verifiable agent runs</a>. A client who has been burned before does not want a screenshot of a dashboard. They want a record that nobody could edit afterwards.</p>
+
+<h2 id="setup">Setting it up on an instance you do not own</h2>
+<p>Every agent gets a ping URL. At the end of the client workflow, one HTTP Request node to the success URL; on the error path, one to the /fail URL. That is the whole integration, and it works on their cloud instance, their VPS or their laptop. Where you do control the machine, wrap the command instead and you get cost, duration and evidence for free:</p>
+<pre>rv agent acme-nightly-report --cadence 24h --cap-run-cost 2 --evidence
+rv run acme-nightly-report --evidence-file /srv/acme/report.html -- python build_report.py</pre>
+<p>Guides per platform: <a href="/docs/n8n">n8n</a>, <a href="/docs/cron">cron and systemd</a>, <a href="/docs/claude-code">Claude Code</a>, <a href="/integrations/">everything else</a>.</p>
+
+<h2 id="honest">Where this is not the right tool</h2>
+<p>If you run one instance and you only need to hear about failed executions, n8n's own error workflow does that and costs nothing. If you need traces of every prompt and token to debug an agent's reasoning, you want an observability tool and we link to <a href="/vs/langfuse">the comparison</a>. RunVouch is the outside watch: it tells you that something did not happen, and it gives you the record that it did when it did.</p>
+
+<h2 id="price">What it costs</h2>
+<p>Free is three agents with all eight detectors and every alert channel, no card, enough to put your own worst job under it tonight. Solo is $9 a month for 50 agents and adds the cap that refuses the next run. Team is $29 for 1000 agents, PagerDuty, CSV and JSON export for audits, and read-only dashboards for people who should not hold your key. Full detail on <a href="/pricing">pricing</a>.</p>
+<h2 id="faq">Questions agencies ask</h2>
+<div class="faq">''' + "".join(f"<details><summary>{q}</summary><p>{a}</p></details>" for q, a in AGENCY_FAQ) + '''</div>
+<p class="cta"><a class="btn" href="/#signup">Start free</a><a class="btn ghost" href="/contact?topic=agency">Ask a question</a></p>
+</div></main>''', [AGENCY_LD, ORG_LD])
+
 page("/pricing", "RunVouch pricing: free for 3 agents, $9 Solo, $29 Team", "Simple pricing for agent monitoring: free for 3 agents with all detectors and all alert channels; Solo $9/month adds the cost cap that refuses the next run and 50 agents; Team $29/month for 1000 agents, PagerDuty, shared dashboard and API export.",
      HOME[HOME.index('<section id="start">'):HOME.index('<section class="alt faq">')].replace('<section id="start">', '<main><section id="start">').replace('<h2>', '<h1>', 1).replace('</h2>', '</h1>', 1) + PRICING_FAQ + '</main>', [ORG_LD, PRICING_LD])
 
