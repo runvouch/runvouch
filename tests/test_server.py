@@ -1281,3 +1281,35 @@ def test_signup_without_a_source_still_works():
     r = c.post("/signup", json={"email": "kaal@example.com"})
     assert r.status_code == 200, r.text
     assert S.q1("SELECT source FROM accounts WHERE email=?", "kaal@example.com")["source"] == "/"
+
+
+def test_drift_kent_de_echte_spreiding_van_een_baan():
+    """Zeven runs geheugen maakte van normale spreiding een afwijking.
+
+    Waarom deze test bestaat: verzamel-reviews duurt de ene keer 8 en de andere keer 72
+    seconden, met elke keer dezelfde uitvoer. Vielen de laatste zeven runs toevallig dicht
+    bij elkaar, dan gold die smalle band als de norm en meldde de detector elke gewone
+    korte run als DRIFT (vijf keer in 30 dagen, 15 september 2026). Nu kijkt hij ook naar
+    de band die de baan echt heeft gehaald, zonder de laagste en de hoogste ronde. Een
+    waarde daarbinnen is geen afwijking, een waarde eronder of erboven nog wel.
+    """
+    c.post("/v1/agents", json={"name": "wisselvallig"}, headers=H)
+    voor = len(alerts("DRIFT"))
+    # de echte spreiding van deze baan: lage en hoge rondes door elkaar
+    for n in (3000, 12000, 3500, 11000, 4000, 10500, 4200):
+        rid = c.post("/v1/runs/start", json={"agent": "wisselvallig"}, headers=H).json()["run_id"]
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": n}, headers=H)
+    # daarna zeven rondes die toevallig dicht bij elkaar liggen
+    for n in (10000, 10200, 9800, 10100, 10000, 9900, 10050):
+        rid = c.post("/v1/runs/start", json={"agent": "wisselvallig"}, headers=H).json()["run_id"]
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": n}, headers=H)
+    na_opbouw = len(alerts("DRIFT"))
+
+    rid = c.post("/v1/runs/start", json={"agent": "wisselvallig"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 4000}, headers=H)
+    assert len(alerts("DRIFT")) == na_opbouw, "een lage ronde die deze baan vaker draaide is geen afwijking"
+
+    rid = c.post("/v1/runs/start", json={"agent": "wisselvallig"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 60}, headers=H)
+    assert len(alerts("DRIFT")) > na_opbouw, "een waarde die deze baan nooit haalde hoort wel gemeld te worden"
+    assert voor <= na_opbouw

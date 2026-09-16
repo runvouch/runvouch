@@ -9,18 +9,18 @@
 <circle cx="32" cy="32" r="27" fill="#141B33" stroke="#4C8DFF" stroke-width="4"/>
 <path d="M19 34 l9 9 l17 -19" fill="none" stroke="#EEF2FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>RunVouch</a><nav><a href="/#how">How it works</a><a href="/docs/">Docs</a><a href="/integrations/">Integrations</a><a href="/vs/">Compare</a><a href="/pricing">Pricing</a><a href="/blog/">Blog</a><a href="https://github.com/runvouch">GitHub</a></nav><a class="btn" href="/#start">Get a free key</a></div></header><main><div class="wrap doc"><h1>Verify a run yourself</h1>
-<p class="lead muted">Below is one real run from the fleet that runs this company, sealed on 2026-09-13 and never touched since. Nothing here trusts us: your browser recomputes every hash, and you can edit any field and watch it break.</p>
-<div class="card" style="margin:1.4rem 0"><p class="small muted" style="margin:0 0 .5rem">The sealed record of run <span class="mono">00b399bdb01e801c</span>. Change a character and press Verify.</p>
+<p class="lead muted">Below is one real run from the fleet that runs this company, sealed on 2026-09-15 and never touched since. Nothing here trusts us: your browser recomputes every hash, and you can edit any field and watch it break.</p>
+<div class="card" style="margin:1.4rem 0"><p class="small muted" style="margin:0 0 .5rem">The sealed record of run <span class="mono">0115b8f8a6e684fc</span>. Change a character and press Verify.</p>
 <textarea id="rec" spellcheck="false" style="width:100%;min-height:19rem;font:13px/1.55 var(--mono,monospace);padding:.8rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit"></textarea>
 <p style="margin:.8rem 0 0"><button class="btn" onclick="verify()">Verify</button> <button class="btn ghost" onclick="tamper()">Change one value</button> <button class="btn ghost" onclick="reset()">Reset</button></p></div>
 <div id="vout"></div>
 <h2>What those four checks mean</h2>
-<p>The first says the record still hashes to its leaf, so not one byte of it moved. The second walks that leaf up the Merkle tree of the day and lands on the day root. The third rebuilds that same root from all 292 leaves published for that day, so the path we handed you cannot have been invented. The fourth links the day to the day before it, which is why a single edited run would have to be followed by every day since. That root is queued for an OpenTimestamps anchor in the Bitcoin blockchain; the .ots file next to the day file carries the stamp.</p>
-<p class="muted">Your browser never sends anything back. The page holds the day's leaf list, and the authoritative copy is the file the server publishes: <a class="mono" href="https://api.runvouch.com/proof/days/2026-09-13.json">https://api.runvouch.com/proof/days/2026-09-13.json</a>, with the timestamp proof next to it at <a class="mono" href="https://api.runvouch.com/proof/days/2026-09-13.ots">.ots</a>.</p>
+<p>The first says the record still hashes to its leaf, so not one byte of it moved. The second walks that leaf up the Merkle tree of the day and lands on the day root. The third rebuilds that same root from all 297 leaves published for that day, so the path we handed you cannot have been invented. The fourth links the day to the day before it, which is why a single edited run would have to be followed by every day since. That root is queued for an OpenTimestamps anchor in the Bitcoin blockchain; the .ots file next to the day file carries the stamp.</p>
+<p class="muted">Your browser never sends anything back. The page holds the day's leaf list, and the authoritative copy is the file the server publishes: <a class="mono" href="https://api.runvouch.com/proof/days/2026-09-15.json">https://api.runvouch.com/proof/days/2026-09-15.json</a>, with the timestamp proof next to it at <a class="mono" href="https://api.runvouch.com/proof/days/2026-09-15.ots">.ots</a>.</p>
 <h2>Without a browser</h2>
 <p>The same four checks in 90 lines of standard-library Python, written so it imports nothing of ours:</p>
 <pre><code>curl -sO https://runvouch.com/dl/verify_proof.py
-curl -s https://api.runvouch.com/proof/days/2026-09-13.json &gt; day.json
+curl -s https://api.runvouch.com/proof/days/2026-09-15.json &gt; day.json
 curl -s https://runvouch.com/verify-sample.json &gt; proof.json
 python3 verify_proof.py proof.json day.json</code></pre>
 <h2>Your own runs</h2>

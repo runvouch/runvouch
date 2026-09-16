@@ -86,7 +86,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3><span class="tag">NO_EVIDENCE</span></h3><p>Run says ok, but the file didn't change, the URL 404s, the assertion is false. Green ≠ done.</p></div>
 <div class="card"><h3><span class="tag">RETRY_STORM</span></h3><p>Same tool, identical input, N times in one run. The invisible loop that burns money.</p></div>
 <div class="card"><h3><span class="tag">BUDGET</span></h3><p>Per-run and per-day cost or token caps. Alert, then pause the agent.</p></div>
-<div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its 7-run baseline. The agent is quietly doing something else.</p></div>
+<div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its recent baseline, and outside the range this job has actually produced. The agent is quietly doing something else.</p></div>
 <div class="card"><h3><span class="tag">STALLED</span></h3><p>Started, no end, no heartbeat past the max runtime. Hung on a prompt nobody will answer.</p></div>
 <div class="card"><h3><span class="tag">COST</span></h3><p>Tokens and dollars per run, read straight from Claude Code transcripts. Weekly cost report per agent.</p></div>
 <div class="card"><h3><span class="tag" style="color:var(--good);background:var(--good-soft)">PROOF</span></h3><p>Not a detector but a receipt: one hashed record per run, written once, that an auditor can check with a standalone script. <a href="/verifiable-agent-runs">Verify it yourself</a>.</p></div>

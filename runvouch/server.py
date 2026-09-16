@@ -368,6 +368,15 @@ _deliver_q: "_queue.Queue[int]" = _queue.Queue()
 ALERT_COOLDOWN = int(os.getenv("RUNVOUCH_ALERT_COOLDOWN", "600"))  # same kind+agent at most once per 10 min
 PRIORITY_KINDS = {"MISSED", "FAILED"}  # paid plans: delivered immediately, no cooldown
 DRIFT_MIN_MEDIAN = {"duration": 30.0, "output size": 2048.0}  # below this baseline drift is noise (a 1 s job that takes 3 s)
+# Two memories, on purpose. The baseline of "normal" stays short, so a job that really does start
+# behaving differently is caught within days. The check for "this job has done this before" reaches
+# further back: verzamel-reviews runs anywhere between 8 and 72 seconds with the same output every
+# time, and when its last seven runs happened to land close together, every ordinary short run read as
+# drift (five false alerts in 30 days, 15 September 2026). Widening the baseline itself was worse: on a
+# job with two working levels it inflates the spread so far that a collapse to almost nothing stops
+# alerting, which is the one case this detector exists for.
+DRIFT_BASELINE = 7
+DRIFT_HISTORY = 25
 
 
 def raise_alert(account_id: int, agent_id: int, run_id: Optional[str], kind: str, message: str, quiet: bool = False) -> None:
@@ -479,7 +488,7 @@ def _median(xs: list[float]) -> float:
 def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
     """Compare this run's duration / output size against trailing successful runs (robust MAD)."""
     hist = qa("SELECT started, ended, output_bytes FROM runs WHERE agent_id=? AND status='ok' AND id!=? "
-              "AND ended IS NOT NULL ORDER BY started DESC LIMIT 7", agent["id"], run["id"])
+              "AND ended IS NOT NULL ORDER BY started DESC LIMIT ?", agent["id"], run["id"], DRIFT_HISTORY)
     if len(hist) < 4:
         return
     for label, cur, series in (
@@ -488,13 +497,14 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
     ):
         if cur is None or len(series) < 4:
             continue
-        med = _median(series)
+        recent = series[:DRIFT_BASELINE]
+        med = _median(recent)
         if med < DRIFT_MIN_MEDIAN[label]:
             continue
         # robust MAD with an absolute floor: 5 s / 512 bytes, or 10% of the median, a 1-second job
         # that takes 2 seconds, or a log line that is 60 bytes longer, is noise, not drift
         floor = 5.0 if label == "duration" else 512.0
-        mad = max(_median([abs(x - med) for x in series]), med * 0.1, floor)
+        mad = max(_median([abs(x - med) for x in recent]), med * 0.1, floor)
         if abs(cur - med) <= DRIFT_K * mad or abs(cur - med) <= 0.25 * max(med, 1.0):
             continue
         # A median plus MAD assumes one normal level. Plenty of real jobs have two:
@@ -507,6 +517,15 @@ def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
         dichtbij = sum(1 for x in series if abs(x - cur) <= max(mad, 0.1 * max(abs(cur), 1.0)))
         if dichtbij >= 2:
             continue
+        # And a value inside the band this job has actually produced is not a deviation either. The band drops
+        # the single lowest and highest run, so one freak round does not widen it forever. verzamel-reviews
+        # takes anywhere from 8 to 72 seconds with identical output; a 22-second round sits well inside that
+        # and was still reported five times in 30 days (15 September 2026). A collapse to almost nothing, the
+        # case this detector exists for, falls below the band and still alerts.
+        if len(series) >= 6:
+            geordend = sorted(series)
+            if geordend[1] <= cur <= geordend[-2]:
+                continue
         raise_alert(agent["account_id"], agent["id"], run["id"], "DRIFT",
                     f"{label} {cur:.0f} vs trailing median {med:.0f} (MAD {mad:.0f}). Task may be silently doing something else.")
 
