@@ -1431,3 +1431,22 @@ def test_discord_en_teams_kanaal(monkeypatch):
     kaart = teams[0]["attachments"][0]["content"]
     assert kaart["type"] == "AdaptiveCard"
     assert "FAILED: kanaaltest" in kaart["body"][0]["text"] and kaart["body"][0]["color"] == "Attention"
+
+
+def test_klantpagina_wordt_gerenderd_voor_elke_vloot():
+    """De belofte op /for-agencies was een statuspagina per klant, maar alleen onze eigen vloot had een gebouwde
+    pagina en de rest kreeg kale JSON (16 september 2026). Nu rendert elke slug."""
+    c.post("/v1/agents", json={"name": "wayne-nightly", "cadence_s": 3600}, headers=H)
+    rid = c.post("/v1/runs/start", json={"agent": "wayne-nightly"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "cost": 12.34}, headers=H)
+    c.post("/v1/fleets", json={"slug": "wayne", "title": "Wayne Enterprises"}, headers=H)
+    c.post("/v1/fleets/wayne/agents", json={"agent": "wayne-nightly", "label": "Nightly report"}, headers=H)
+
+    r = c.get("/fleet/wayne", headers={"Host": "runvouch.com"})
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    assert "Wayne Enterprises" in r.text and "Nightly report" in r.text
+    assert "12.34" not in r.text, "een klantpagina toont geen kosten"
+    assert "Watched by" in r.text
+
+    assert c.get("/fleet/bestaat-niet", headers={"Host": "runvouch.com"}).status_code == 404
+    assert c.get("/fleet/wayne").status_code == 404, "op de api-host hoort de JSON, niet de pagina"

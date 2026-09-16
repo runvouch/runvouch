@@ -2310,6 +2310,69 @@ def openapi_lite():
     return JSONResponse({"base": PUBLIC_URL, "auth": "X-API-Key", "endpoints": [r.path for r in app.routes if r.path.startswith("/v1")]})
 
 
+def _ago(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return "-"
+    u = seconds / 3600
+    return f"{round(u * 60)} min ago" if u < 1 else (f"{u:.1f} h ago" if u < 48 else f"{u / 24:.1f} days ago")
+
+
+@app.get("/fleet/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def fleet_page(slug: str, request: Request):
+    """The client status page an agency hands to its client, rendered for any fleet, not just our own demo.
+
+    Until now /fleet/<slug> existed only as a page built into the site for our own fleet, and everybody else got
+    raw JSON. That made the promise on /for-agencies, a status page per client, true for us and for nobody else
+    (16 September 2026). Run facts only: no cost, no evidence, no keys, exactly what the JSON already exposed.
+    """
+    import html as _html
+    if not _is_marketing(request):
+        raise HTTPException(404, "not found")
+    gebouwd = SITE_DIR / "fleet" / (slug + ".html")
+    if gebouwd.is_file():
+        return _serve_site(f"fleet/{slug}")
+    f = fleet_summary(slug)
+    if not f:
+        return _serve_site(f"fleet/{slug}")  # geeft de 404-pagina van de site
+    nu = time.time()
+    rijen = []
+    for a in f["agents"]:
+        run = a.get("last_run") or {}
+        alarm = a.get("open_alert") or {}
+        vers = alarm and (run.get("ended") is None or (alarm.get("ts") or 0) > (run.get("ended") or 0))
+        if a["paused"]:
+            stand, kleur = "paused", "mute"
+        elif vers:
+            stand, kleur = str(alarm.get("kind", "alert")).lower().replace("_", " "), "bad"
+        elif not run:
+            stand, kleur = "no run recorded yet", "mute"
+        elif run.get("status") == "ok":
+            stand, kleur = ("ok, but late", "warn") if a["late"] else ("ok", "ok")
+        else:
+            stand, kleur = str(run.get("status")), "bad"
+        r30 = a["rates"]["30d"]
+        tempo = f"{round(100 * r30['ok'] / r30['runs'])}% of {r30['runs']}" if r30["runs"] else "-"
+        rijen.append(f'<tr><td>{_html.escape(a["label"])}</td><td class=n>{_ago(nu - run["started"] if run.get("started") else None)}</td>'
+                     f'<td><span class="pill {kleur}">{_html.escape(stand)}</span></td><td class=n>{tempo}</td></tr>')
+    titel = _html.escape(f["title"] or slug)
+    return HTMLResponse(f"""<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>{titel} status</title>
+<meta name=description content="Scheduled jobs for {titel}: last run, result and the 30-day record, watched by RunVouch.">
+<link rel=canonical href="{_site_url()}/fleet/{_html.escape(slug)}">
+<style>:root{{color-scheme:light dark}}body{{font:16px/1.5 system-ui,sans-serif;max-width:52rem;margin:0 auto;padding:2rem 1rem;background:#0f1115;color:#e7e9ee}}
+h1{{font-size:1.4rem;margin:0 0 .2rem}}table{{border-collapse:collapse;width:100%;margin:1.2rem 0;font-size:.95rem}}
+th,td{{border-bottom:1px solid #2a2f3a;padding:.5rem .4rem;text-align:left}}th{{color:#98a2b3;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}}
+td.n{{text-align:right;font-variant-numeric:tabular-nums;color:#c7cedb}}a{{color:#7fb0ff}}
+.pill{{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.8rem;border:1px solid}}
+.ok{{color:#7fd39b;border-color:#2f5c3a}}.warn{{color:#e3b341;border-color:#5c4a1f}}.bad{{color:#ff7b72;border-color:#6b2b26}}.mute{{color:#98a2b3;border-color:#2a2f3a}}
+p.small{{color:#98a2b3;font-size:.85rem}}</style></head><body>
+<h1>{titel}</h1>
+<p class=small>Scheduled jobs and whether they ran. Times are relative to your browser's clock; the feed time is {f["time"].replace("T", " ").replace("Z", " UTC")}.</p>
+<table><thead><tr><th>Job</th><th>Last run</th><th>Result</th><th>Last 30 days</th></tr></thead><tbody>{"".join(rijen) or '<tr><td colspan=4>No jobs published yet.</td></tr>'}</tbody></table>
+<p class=small>Watched by <a href="{_site_url()}">RunVouch</a>: every run reports a start and an end, and a missed, failed or evidence-less run raises an alert. Raw data behind this page: <a href="{PUBLIC_URL}/public/fleet/{_html.escape(slug)}.json">JSON</a>. Each finished run is hashed into a <a href="{_site_url()}/docs/proof">public daily chain</a>, so this history cannot be edited afterwards.</p>
+</body></html>""", headers={"Cache-Control": "public, max-age=60"})
+
+
 @app.get("/{path:path}", include_in_schema=False)
 def site_catchall(path: str, request: Request):
     if _is_marketing(request):
