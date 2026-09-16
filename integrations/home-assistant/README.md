@@ -17,7 +17,7 @@ The judgement in the state field is made by RunVouch (cadence, evidence, caps); 
 
 ## Install
 
-1. Get a free key at https://runvouch.com (20 agents, no card) and put it in `secrets.yaml`:
+1. Get a free key at https://runvouch.com (3 agents, no card) and put it in `secrets.yaml`:
 
        runvouch_key: rv_...
 

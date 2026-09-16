@@ -74,7 +74,7 @@ integrations/openclaw/
 Line for the Skills section of https://github.com/rohitg00/awesome-openclaw (submit as a PR from the runvouch GitHub account):
 
 ```
-- **[RunVouch verified-run](https://github.com/runvouch/runvouch/tree/main/integrations/openclaw)** - Watchdog skill for scheduled tasks: start/end runs with the output file as evidence, alerts on missed, failed or empty runs, free for 20 agents, proof record per run.
+- **[RunVouch verified-run](https://github.com/runvouch/runvouch/tree/main/integrations/openclaw)** - Watchdog skill for scheduled tasks: start/end runs with the output file as evidence, alerts on missed, failed or empty runs, free for 3 agents, proof record per run.
 ```
 
 ## Docs and support

@@ -12,8 +12,8 @@ import base64, json, os, sys, urllib.parse, urllib.request
 KEY = os.getenv("STRIPE_SECRET_KEY") or sys.exit("STRIPE_SECRET_KEY not set")
 API = "https://api.stripe.com/v1"
 WEBHOOK_URL = os.getenv("STRIPE_WEBHOOK_URL", "https://api.runvouch.com/webhooks/stripe")
-PLANS = [("solo", "RunVouch Solo", 900, "15 agents, 90-day history, weekly cost report, priority alerts"),
-         ("team", "RunVouch Team", 2900, "100 agents, Slack & PagerDuty, shared dashboard, API export")]
+PLANS = [("solo", "RunVouch Solo", 900, "50 agents, a cost cap that refuses the next run, 90-day history, weekly cost report"),
+         ("team", "RunVouch Team", 2900, "1000 agents, Slack & PagerDuty, shared dashboard, API export")]
 
 
 def call(method, path, data=None):

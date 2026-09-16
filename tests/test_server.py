@@ -1313,3 +1313,41 @@ def test_drift_kent_de_echte_spreiding_van_een_baan():
     c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 60}, headers=H)
     assert len(alerts("DRIFT")) > na_opbouw, "een waarde die deze baan nooit haalde hoort wel gemeld te worden"
     assert voor <= na_opbouw
+
+
+def test_gratis_krijgt_de_melding_maar_niet_de_rem():
+    """De rem is het betaalde deel, de melding niet.
+
+    Waarom deze test bestaat: tot 16 september 2026 was het enige verschil tussen Free en Solo een plafond van
+    20 agents. Vrijwel niemand draait er meer dan twintig, dus er was nooit een reden om te betalen en er
+    betaalde ook niemand. De melding blijft gratis, want een wacht die zwijgt is geen wacht, maar de volgende
+    run weigeren hoort bij Solo en Team.
+    """
+    fk = c.post("/admin/accounts", params={"name": "gratis-cap", "plan": "free"},
+                headers={"X-Admin-Token": "adm"}).json()["api_key"]
+    fh = {"X-API-Key": fk}
+    c.post("/v1/agents", json={"name": "duurtje", "cap_run_cost": 1.0}, headers=fh)
+    rid = c.post("/v1/runs/start", json={"agent": "duurtje"}, headers=fh).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "cost": 9.0}, headers=fh)
+
+    gemeld = [a for a in c.get("/v1/alerts", headers=fh).json() if a["kind"] == "BUDGET_RUN"]
+    assert gemeld, "de melding zelf hoort ook op Free gewoon uit te gaan"
+    assert "runvouch.com/pricing" in gemeld[0]["message"]
+    rij = server.q1("SELECT paused FROM agents WHERE name='duurtje'")
+    assert not rij["paused"], "op Free loopt de agent door"
+    assert "run_id" in c.post("/v1/runs/start", json={"agent": "duurtje"}, headers=fh).json()
+
+    with server.tx() as db:
+        db.execute("UPDATE accounts SET plan='solo' WHERE api_key=?", (server.key_hash(fk),))
+    rid = c.post("/v1/runs/start", json={"agent": "duurtje"}, headers=fh).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "cost": 9.0}, headers=fh)
+    assert server.q1("SELECT paused FROM agents WHERE name='duurtje'")["paused"], "op Solo weigert de volgende run"
+
+
+def test_gratis_plafond_is_drie_agents():
+    fk = c.post("/admin/accounts", params={"name": "gratis-drie", "plan": "free"},
+                headers={"X-Admin-Token": "adm"}).json()["api_key"]
+    fh = {"X-API-Key": fk}
+    for n in range(server.PLAN_LIMITS["free"]):
+        assert c.post("/v1/agents", json={"name": f"g{n}"}, headers=fh).status_code == 200
+    assert c.post("/v1/agents", json={"name": "een-te-veel"}, headers=fh).status_code == 402

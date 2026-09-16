@@ -149,7 +149,7 @@ async function signup(e){e.preventDefault();const k=document.getElementById('key
 try{const r=await fetch(API+'/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('em').value,source:location.pathname,ref:document.referrer})});
 const j=await r.json();if(!r.ok){k.innerHTML='<div class="alertbox">'+(j.detail||('Error '+r.status))+'</div>';return}
 if(j.sent){k.innerHTML='<div class="alertbox">This address already has an account. We just e-mailed a fresh key to it (the old one stopped working). Check your inbox, then <a href="/app">open the dashboard</a>.</div>';return}
-k.innerHTML='<pre><span class="d"># Your key, shown once. Store it now.</span>\\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\\nexport RUNVOUCH_URL='+API+'\\n\\n<span class="d"># Install the client, register an agent, wrap your job</span>\\npip install runvouch   <span class="d"># or: curl -fsSL https://runvouch.com/rv -o ~/bin/rv</span>\\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\\'s report"</pre><p class="small muted">Free plan: 20 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
+k.innerHTML='<pre><span class="d"># Your key, shown once. Store it now.</span>\\nexport RUNVOUCH_KEY=<span class="k">'+j.api_key+'</span>\\nexport RUNVOUCH_URL='+API+'\\n\\n<span class="d"># Install the client, register an agent, wrap your job</span>\\npip install runvouch   <span class="d"># or: curl -fsSL https://runvouch.com/rv -o ~/bin/rv</span>\\nrv agent nightly-report --cadence 24h --cap-run-cost 2 --evidence\\nrv run nightly-report --evidence-file out/report.html -- claude -p "build tonight\\'s report"</pre><p class="small muted">Free plan: 3 agents, no card. <a href="/app">Open the dashboard</a> and paste the key.</p>'}
 catch(err){k.innerHTML='<div class="alertbox">Network error: '+err+'</div>'}return false}
 
 (function(){const hero=document.querySelector('.hero');if(hero){const setH=()=>document.documentElement.style.setProperty('--bandh',(hero.offsetTop+hero.offsetHeight)+'px');setH();addEventListener('resize',setH)}else{document.documentElement.style.setProperty('--bandh','360px')}
@@ -365,10 +365,10 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 </div></section>
 
 <section id="start"><div class="wrap">
-<span class="kicker">pricing</span><h2>Free until you outgrow it. <span class="grad">Then $9.</span></h2>
+<span class="kicker">pricing</span><h2>The alert is free. <span class="grad">The brake is $9.</span></h2>
 <div class="price">
-<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>20 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
-<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li>100 agents</li><li>90-day history</li><li>Weekly cost report</li><li>MISSED and FAILED alerts sent every time, no 10-minute cooldown</li><li>Verifiable proof per run</li></ul>{SOLO_BTN}</div>
+<div class="card"><h3>Free</h3><div class="n">$0</div><ul><li>3 agents</li><li>All 8 detectors</li><li>Email, Telegram, Slack &amp; webhook alerts</li><li>A cost cap alerts you, the agent keeps running</li><li>7-day history</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="#signup">Start free</a></div>
+<div class="card hi"><h3>Solo</h3><div class="n">$9<small>/month</small></div><ul><li><b>A cost cap that refuses the next run</b></li><li>50 agents</li><li>90-day history</li><li>Weekly cost report</li><li>MISSED and FAILED alerts sent every time, no 10-minute cooldown</li><li>Verifiable proof per run</li></ul>{SOLO_BTN}</div>
 <div class="card"><h3>Team</h3><div class="n">$29<small>/month</small></div><ul><li>1000 agents</li><li>90-day history</li><li>API export (CSV / JSON) for audits</li><li>Read-only dashboard for teammates (viewer keys)</li><li>PagerDuty incidents</li><li>Verifiable proof per run</li></ul>{TEAM_BTN}</div>
 </div>
 <div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by {PROCESSOR}; upgrade with the same email you sign up with.</p>
@@ -378,7 +378,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 
 <section class="alt faq"><div class="wrap"><span class="kicker">faq</span><h2>Questions</h2>
 <details><summary>Why do you need my email for a free key?</summary><p>Because the key is the account. If you upgrade later, the payment is matched to the same email; if you lose the key, we can rotate it. We don't send marketing mail.</p></details>
-<details><summary>Why 20 agents on the free plan?</summary><p>Because a fleet you can only half-watch tells you nothing. Twenty covers a whole crontab, forever, no card. Paid plans are for people who run more than that, and for history, export, viewer keys and PagerDuty.</p></details>
+<details><summary>What does $9 buy that Free does not have?</summary><p>The brake. On every plan a cost cap alerts you the moment a run crosses it. On Solo and Team the next run is refused as well, so a loop that bills by the token stops instead of running until morning. Free is three agents, all eight detectors and every alert channel, so you can see what RunVouch does before you pay for it.</p></details>
 <details><summary>Does RunVouch see my prompts or data?</summary><p>No. It receives what your job reports: start/end, exit status, tool names and a hash of their input (for loop detection), cost/tokens, output size, and true/false evidence results. Evidence checks on files run on your machine; only the verdict is sent.</p></details>
 <details><summary>What if RunVouch is down?</summary><p><code>rv run</code> fails open: your job still runs unmonitored and prints a warning. Monitoring must never break the thing it monitors.</p></details>
 <details><summary>Can I self-host?</summary><p>Yes. The server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
@@ -454,7 +454,7 @@ ots verify 2026-08-25.ots -f day.json</pre>
 
 <hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0">
 <h2>Start with one agent</h2>
-<p class="muted">Wrap the job, let it run once, fetch the proof, hand it to whoever asked. Free for 20 agents, no card.</p>
+<p class="muted">Wrap the job, let it run once, fetch the proof, hand it to whoever asked. Free for 3 agents, no card.</p>
 <pre>pip install runvouch
 rv agent nightly-report --cadence 24h --evidence
 rv run nightly-report --evidence-file out/report.html -- claude -p "build tonight's report"
@@ -464,8 +464,8 @@ rv proof RUN_ID --verify</pre>
 
 PRICING_LD = {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "RunVouch", "applicationCategory": "DeveloperApplication", "operatingSystem": "Any", "url": BASE + "/pricing",
               "description": "RunVouch watches unattended AI agents (Claude Code, OpenClaw, n8n, cron): alerts on missed, failed, looping, over-budget or unproven runs, and a verifiable, tamper-evident proof per run on every plan.",
-              "offers": [{"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "20 agents, all 8 detectors, e-mail, Telegram, Slack and webhook alerts, 7-day history, verifiable proof per run"},
-                         {"@type": "Offer", "name": "Solo", "price": "9", "priceCurrency": "USD", "description": "100 agents, 90-day history, weekly cost report, priority alerts, verifiable proof per run", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "9", "priceCurrency": "USD", "billingDuration": "P1M"}},
+              "offers": [{"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "3 agents, all 8 detectors, e-mail, Telegram, Slack and webhook alerts, cost cap alerts, 7-day history, verifiable proof per run"},
+                         {"@type": "Offer", "name": "Solo", "price": "9", "priceCurrency": "USD", "description": "50 agents, a cost cap that refuses the next run, 90-day history, weekly cost report, priority alerts, verifiable proof per run", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "9", "priceCurrency": "USD", "billingDuration": "P1M"}},
                          {"@type": "Offer", "name": "Team", "price": "29", "priceCurrency": "USD", "description": "1000 agents, 90-day history, PagerDuty incidents, shared dashboard, API export, verifiable proof per run", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "29", "priceCurrency": "USD", "billingDuration": "P1M"}}]}
 # ───────────────────────── PRICING ─────────────────────────
 PRICING_FAQ = '''<section class="alt faq"><div class="wrap"><span class="kicker">faq</span><h2>What the plans mean, exactly</h2>
@@ -477,7 +477,7 @@ PRICING_FAQ = '''<section class="alt faq"><div class="wrap"><span class="kicker"
 <details><summary>Why do you need my email for a free key?</summary><p>Because the key is the account. If you upgrade later, the payment is matched to the same email; if you lose the key, we can rotate it. We do not send marketing mail.</p></details>
 <details><summary>Can I self-host?</summary><p>Yes. The server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
 </div></section>'''
-page("/pricing", "RunVouch pricing: free for 20 agents, $9 Solo, $29 Team", "Simple pricing for agent monitoring: free for 20 agents with all detectors; Solo $9/month for 100 agents; Team $29/month for 1000 agents, PagerDuty, shared dashboard and API export.",
+page("/pricing", "RunVouch pricing: free for 3 agents, $9 Solo, $29 Team", "Simple pricing for agent monitoring: free for 3 agents with all detectors and all alert channels; Solo $9/month adds the cost cap that refuses the next run and 50 agents; Team $29/month for 1000 agents, PagerDuty, shared dashboard and API export.",
      HOME[HOME.index('<section id="start">'):HOME.index('<section class="alt faq">')].replace('<section id="start">', '<main><section id="start">').replace('<h2>', '<h1>', 1).replace('</h2>', '</h1>', 1) + PRICING_FAQ + '</main>', [ORG_LD, PRICING_LD])
 
 
@@ -606,7 +606,7 @@ doc("/docs/templates", "Agent templates: nightly digests on official data, with 
     "Three copy-paste agent templates: a nightly 13F consensus digest, Form D raises in your sector, and a weekly competitor hiring watch. Official SEC and career-site data via DataSignals Lab, wrapped in rv run with evidence and cost caps.",
     "Agent templates: nightly digests on official data, with evidence",
     'Three ready-to-run agents on official public data (SEC 13F, Form D, company career sites) from <a href="https://datasignalslab.com/datasignals-mcp.html">DataSignals Lab</a>. Each one writes a file, and RunVouch checks that the file actually changed, that the run started on time, and what it cost. Plain Python, standard library only, with a <code>claude -p</code> or n8n variant in every folder. Copy a folder, set two keys, done in two minutes.',
-    [("What you need", '''<p>A RunVouch key (free for 20 agents) and, depending on the template, an <a href="https://console.apify.com/settings/integrations">Apify token</a> (free account; the DataSignals MCP server is free for the first 50 calls a month, then $0.20 per result on your own account) or a DataSignals Events API key (a permanent free plan exists: one stream, 250 events a month, 24 hours behind; <a href="https://datasignalslab.com/events-api.html#free-key">request it here</a>, the key arrives by e-mail). Nothing here needs a card. All templates: <a href="https://github.com/runvouch/runvouch/tree/main/templates">github.com/runvouch/runvouch/tree/main/templates</a>.</p>'''),
+    [("What you need", '''<p>A RunVouch key (free for 3 agents) and, depending on the template, an <a href="https://console.apify.com/settings/integrations">Apify token</a> (free account; the DataSignals MCP server is free for the first 50 calls a month, then $0.20 per result on your own account) or a DataSignals Events API key (a permanent free plan exists: one stream, 250 events a month, 24 hours behind; <a href="https://datasignalslab.com/events-api.html#free-key">request it here</a>, the key arrives by e-mail). Nothing here needs a card. All templates: <a href="https://github.com/runvouch/runvouch/tree/main/templates">github.com/runvouch/runvouch/tree/main/templates</a>.</p>'''),
      ("1. Nightly 13F consensus digest", '''<p>Which stocks are the funds you follow buying? One MCP call a night (<code>hedge_fund_13f</code>, cross-fund consensus from SEC EDGAR 13F), a top 10 in <code>out/13f-digest.md</code>, and a diff against yesterday. Two flavours: <code>digest.py</code> (no Claude) or <code>prompt.md</code> for headless <code>claude -p</code>.</p><pre>rv agent nightly-13f-digest --cadence 24h --grace 2h --cap-run-cost 1 --evidence
 rv run nightly-13f-digest --evidence-file out/13f-digest.md -- python3 digest.py --spend-cap 5
 <span class="d"># or, with Claude Code and the MCP server registered via claude mcp add:</span>
@@ -754,7 +754,7 @@ DETECTS = ('<table><tr><th>Alert</th><th>What it means here</th></tr>'
            '<tr><td><b>BUDGET_RUN / BUDGET_DAY</b></td><td>cost cap crossed; the agent is paused until you resume it</td></tr>'
            '<tr><td><b>DRIFT</b></td><td>duration or output size far off its 7-run baseline</td></tr></table>')
 
-SETUP = ('<ol><li><a href="/#signup">Get a free key</a> (20 agents, no card) and store it where this page says.</li>'
+SETUP = ('<ol><li><a href="/#signup">Get a free key</a> (3 agents, no card) and store it where this page says.</li>'
          '<li>HOW: copy the snippet above into the scheduled job.</li>'
          '<li>Register the cadence once: <code>rv agent nightly-report --cadence 24h --grace 30m --evidence</code>, or let the first run create the agent and set the cadence on the <a href="/app">dashboard</a>.</li>'
          '<li>Send one test alert: <code>curl -X POST ' + API + '/v1/settings/test-alert -H "X-API-Key: $RUNVOUCH_KEY"</code>. The next missed, failed or empty run reaches the same channels.</li></ol>')
@@ -808,13 +808,13 @@ def vs(slug, name, tagline, rows, verdict):
 
 
 vs("healthchecks", "Healthchecks.io", "Healthchecks.io is the reference dead man's switch for cron jobs. RunVouch starts where a ping ends: did the job do the work, and what did it cost?",
-   [("Missed / late run alerts", "yes", "yes"), ("Failure with stderr excerpt", "via /fail ping", "yes, with rv run or the same /fail ping"), ("Evidence the task was actually done", "no", "yes, file / URL / assertion"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes, per run and per day"), ("Output/duration drift", "no", "yes"), ("Claude Code plugin / MCP server", "no", "yes"), ("Self-host", "yes (BSD)", "yes (MIT)"), ("Price", "free 20 checks; $20/mo for 100, $80 for 1000", "free 20 agents; $9 / $29")],
+   [("Missed / late run alerts", "yes", "yes"), ("Failure with stderr excerpt", "via /fail ping", "yes, with rv run or the same /fail ping"), ("Evidence the task was actually done", "no", "yes, file / URL / assertion"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes, per run and per day"), ("Output/duration drift", "no", "yes"), ("Claude Code plugin / MCP server", "no", "yes"), ("Self-host", "yes (BSD)", "yes (MIT)"), ("Price", "free 20 checks; $20/mo for 100, $80 for 1000", "free 3 agents; $9 / $29")],
    "<p>Use Healthchecks.io for classic cron jobs where \"it ran\" is enough. Use RunVouch when the job is an agent or an LLM script: a green ping tells you nothing about whether the report was written or whether the agent spent $60 looping on a missing file. Many teams run both.</p>")
 vs("cronitor", "Cronitor", "Cronitor is a mature cron, heartbeat and uptime monitor for ops teams. RunVouch is narrower and deeper: outcome, cost and loop detection for unattended AI agents.",
-   [("Cron expression parsing", "yes", "cadence + grace"), ("Uptime / status pages", "yes", "no (we link to yours)"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Claude Code / MCP / OpenClaw integrations", "no", "yes"), ("Price", "free tier; paid from ~$5 per monitor tier", "free 20 agents; $9 / $29")],
+   [("Cron expression parsing", "yes", "cadence + grace"), ("Uptime / status pages", "yes", "no (we link to yours)"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Claude Code / MCP / OpenClaw integrations", "no", "yes"), ("Price", "free tier; paid from ~$5 per monitor tier", "free 3 agents; $9 / $29")],
    "<p>Pick Cronitor if you need status pages and hundreds of classic monitors. Pick RunVouch if what you run is agents and you care about \"done\" and \"how much\", not just \"on time\".</p>")
 vs("langfuse", "Langfuse", "Langfuse is excellent open-source LLM observability: traces, evals, prompt management. RunVouch is not a tracing tool; it's the watchdog that tells you a scheduled agent is broken or expensive, without instrumenting your code.",
-   [("Traces, spans, prompt versions, evals", "yes", "no"), ("Requires SDK in your code", "yes", "no, wrap the command or install the plugin"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in traces", "automatic"), ("Hard cost cap + pause", "cost threshold alerts since v4, no cap or pause", "yes"), ("Pricing", "free self-host; cloud per unit", "free 20 agents; $9 / $29")],
+   [("Traces, spans, prompt versions, evals", "yes", "no"), ("Requires SDK in your code", "yes", "no, wrap the command or install the plugin"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "you can find it in traces", "automatic"), ("Hard cost cap + pause", "cost threshold alerts since v4, no cap or pause", "yes"), ("Pricing", "free self-host; cloud per unit", "free 3 agents; $9 / $29")],
    "<p>They're complementary. Langfuse answers \"why did this prompt produce that\"; RunVouch answers \"did last night's agent run, finish, prove it, and stay under budget\". If you only want the second, you don't need the first.</p>")
 
 vs("traceseal", "Traceseal", "Traceseal (Show HN, August 2026) signs a receipt for every agent invocation: what code ran, who published it, input and output hashes, sandbox profile, all verifiable offline with one command. RunVouch proves a scheduled run happened and was done, and pages you when it was not. Both are proof; they answer different questions.",
@@ -826,7 +826,7 @@ vs("traceseal", "Traceseal", "Traceseal (Show HN, August 2026) signs a receipt f
     ("Hard cost cap + pause", "no", "yes"),
     ("Requires a sandbox around the agent", "yes, bwrap kernel namespaces", "no, wrap the command or two HTTP calls"),
     ("Regulatory angle", "EU AI Act Article 50 receipts", "audit trail of unattended runs; no compliance claims"),
-    ("Pricing", "not published on the site (September 2026); open source verifier", "free 20 agents; $9 / $29")],
+    ("Pricing", "not published on the site (September 2026); open source verifier", "free 3 agents; $9 / $29")],
    "<p>If you have to prove to a third party <i>which code</i> an agent executed and on <i>which inputs</i>, Traceseal is built for exactly that and RunVouch is not. If you have to know at 07:00 that last night's agent ran, did the work and stayed under budget, and want a proof of that record you can hand to anyone, that is RunVouch. Running both is coherent: Traceseal seals the invocation, RunVouch watches the schedule.</p>")
 
 vs("traccia", "Traccia", "Traccia is an AI agent control plane: traces, cost attribution, PII detection, policy enforcement and evals, from one SDK init call. RunVouch sits outside the stack: it does not see inside the run, it checks that the run happened, finished, produced evidence and stayed under budget.",
@@ -838,23 +838,23 @@ vs("traccia", "Traccia", "Traccia is an AI agent control plane: traces, cost att
     ("Missed-run / dead man's switch", "no", "yes"),
     ("Evidence the task was done", "no", "yes: file, URL or assertion required, else NO_EVIDENCE"),
     ("Third-party verifiable proof of the run record", "compliance evidence export", "public hash chain, Bitcoin-anchored"),
-    ("Pricing", "free 50K events, 7-day retention; $99 / $299 / $799 per month; enterprise custom", "free 20 agents; $9 / $29")],
+    ("Pricing", "free 50K events, 7-day retention; $99 / $299 / $799 per month; enterprise custom", "free 3 agents; $9 / $29")],
    "<p>Traccia is for a team running many agents in production that needs governance inside the stack: who called what, at what cost, with which policy. RunVouch is for anyone with agents on a schedule who needs to know they ran and were done, without instrumenting anything. If your worry is \"the routine stopped and nobody noticed\" or \"it ran up $1,800 overnight\", the watchdog outside the process is the cheaper answer; Traccia's hard spend cap starts at Enterprise, RunVouch's is on the free plan.</p>")
 
 vs("dead-mans-snitch", "Dead Man's Snitch", "Dead Man's Snitch is a heartbeat monitor: your job checks in, and you hear about it when it does not. RunVouch keeps the heartbeat and adds what the job did and what it cost.",
-   [("Missed check-in alerts", "yes", "yes"), ("Failure with stderr excerpt", "via the snitch CLI wrapper", "yes, automatic with rv run"), ("Evidence the task was done", "no", "yes, file / URL / assertion"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes, per run and per day"), ("Output/duration drift", "no", "yes"), ("Claude Code plugin / MCP server", "no", "yes"), ("Self-host", "no", "yes (MIT)"), ("Price", "free for one snitch; paid plans", "free 20 agents; $9 / $29")],
+   [("Missed check-in alerts", "yes", "yes"), ("Failure with stderr excerpt", "via the snitch CLI wrapper", "yes, automatic with rv run"), ("Evidence the task was done", "no", "yes, file / URL / assertion"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes, per run and per day"), ("Output/duration drift", "no", "yes"), ("Claude Code plugin / MCP server", "no", "yes"), ("Self-host", "no", "yes (MIT)"), ("Price", "free for one snitch; paid plans", "free 3 agents; $9 / $29")],
    "<p>If all you need is \"did the cron check in\", Dead Man's Snitch has done that reliably for years. If the job is an agent, the check-in is the least interesting fact about it.</p>")
 vs("sentry-crons", "Sentry Crons", "Sentry Crons adds scheduled-job monitoring to Sentry error tracking. RunVouch is for jobs whose failure is not an exception: empty output, loops, overspend.",
-   [("Missed / late run alerts", "yes", "yes"), ("Exceptions with stack traces", "yes, with the Sentry SDK", "stderr excerpt only"), ("Evidence the task was done", "no", "yes"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes"), ("Output/duration drift", "no (duration thresholds only)", "yes"), ("Requires SDK in your code", "yes (or curl check-ins)", "no, wrap the command"), ("Self-host", "yes (Sentry self-hosted)", "yes (MIT)"), ("Price", "included in Sentry plans; per-monitor quota", "free 20 agents; $9 / $29")],
+   [("Missed / late run alerts", "yes", "yes"), ("Exceptions with stack traces", "yes, with the Sentry SDK", "stderr excerpt only"), ("Evidence the task was done", "no", "yes"), ("Retry-storm (loop) detection", "no", "yes"), ("Cost and token caps", "no", "yes"), ("Output/duration drift", "no (duration thresholds only)", "yes"), ("Requires SDK in your code", "yes (or curl check-ins)", "no, wrap the command"), ("Self-host", "yes (Sentry self-hosted)", "yes (MIT)"), ("Price", "included in Sentry plans; per-monitor quota", "free 3 agents; $9 / $29")],
    "<p>Already on Sentry and your jobs fail by throwing? Use Sentry Crons. Agents mostly fail without throwing; that is the case RunVouch is built for. They coexist fine.</p>")
 vs("better-stack", "Better Stack", "Better Stack combines uptime, heartbeat monitoring, logs and incident management. RunVouch is one narrow thing: is the scheduled agent alive, done, and under budget.",
-   [("Heartbeat (missed run) alerts", "yes", "yes"), ("Uptime / status pages / on-call", "yes", "no (we link to yours)"), ("Failure with stderr excerpt", "no (heartbeat only)", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("PagerDuty", "own on-call product", "yes (Team)"), ("Price", "free tier; paid plans", "free 20 agents; $9 / $29")],
+   [("Heartbeat (missed run) alerts", "yes", "yes"), ("Uptime / status pages / on-call", "yes", "no (we link to yours)"), ("Failure with stderr excerpt", "no (heartbeat only)", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("PagerDuty", "own on-call product", "yes (Team)"), ("Price", "free tier; paid plans", "free 3 agents; $9 / $29")],
    "<p>Pick Better Stack when you want one vendor for uptime, logs and paging. Pick RunVouch when the thing you are worried about is a nightly agent, not a website.</p>")
 vs("uptime-kuma", "Uptime Kuma", "Uptime Kuma is the self-hosted uptime monitor everyone runs at home, and it has push monitors that work as a dead man's switch. RunVouch is the agent-specific layer on top of that idea.",
-   [("Push (heartbeat) monitors", "yes", "yes"), ("HTTP / TCP / DNS uptime checks", "yes", "no"), ("Failure with stderr excerpt", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Tamper-evident proof of each run", "no", "yes"), ("Self-host", "yes (MIT)", "yes (MIT)"), ("Price", "free", "free 20 agents; $9 / $29")],
+   [("Push (heartbeat) monitors", "yes", "yes"), ("HTTP / TCP / DNS uptime checks", "yes", "no"), ("Failure with stderr excerpt", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Tamper-evident proof of each run", "no", "yes"), ("Self-host", "yes (MIT)", "yes (MIT)"), ("Price", "free", "free 3 agents; $9 / $29")],
    "<p>Keep Uptime Kuma for everything with a URL. For scheduled agents, a push monitor tells you the script ran; RunVouch tells you whether it did the job and what it spent, and the self-hosted version is also MIT.</p>")
 vs("cronhub", "Cronhub", "Cronhub is a straightforward cron monitor with a clean UI. RunVouch shares the missed-run alert and adds outcome, loops and cost.",
-   [("Missed / late run alerts", "yes", "yes"), ("Failure with stderr excerpt", "via /fail ping", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Output/duration drift", "no", "yes"), ("Self-host", "no", "yes (MIT)"), ("Price", "free tier; paid plans", "free 20 agents; $9 / $29")],
+   [("Missed / late run alerts", "yes", "yes"), ("Failure with stderr excerpt", "via /fail ping", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm detection", "no", "yes"), ("Cost caps", "no", "yes"), ("Output/duration drift", "no", "yes"), ("Self-host", "no", "yes (MIT)"), ("Price", "free tier; paid plans", "free 3 agents; $9 / $29")],
    "<p>For plain cron, either works. For an LLM job on cron, the questions change from \"did it run\" to \"did it finish the work and how much did it cost\", which is where the comparison ends.</p>")
 vs("helicone", "Helicone", "Helicone is an LLM gateway and observability layer: one proxy URL, then dashboards of requests and cost. RunVouch does not sit in the request path; it watches the scheduled job from outside.",
    [("Per-request logs and cost dashboards", "yes", "no (cost per run and per day)"), ("Requires routing LLM calls through a proxy", "yes", "no"), ("Missed-run / dead man's switch", "no", "yes"), ("Evidence the task was done", "no", "yes"), ("Retry-storm alert", "visible in logs", "automatic"), ("Hard cost cap that pauses the agent", "rate limits per key", "yes, per run and per day"), ("Self-host", "yes", "yes (MIT)")],
@@ -982,7 +982,7 @@ if _st:
 <p>The dashboard version of the same measurement, with the median time to alert and the proof chain, is on <a href="/stats">in numbers</a>. The fleet itself is live on <a href="/fleet/datasignals">a real fleet</a>.</p>
 
 <h2>If you want your own numbers</h2>
-<p>Wrap one job and you have a baseline within a week. Free for 20 agents, all detectors on, no card: <a href="/#signup">get a free key</a>.</p>
+<p>Wrap one job and you have a baseline within a week. Free for 3 agents, all detectors on, no card: <a href="/#signup">get a free key</a>.</p>
 <p class="small muted">Figures from the production database on {TODAY}, over the preceding 30 days. TEST alerts excluded. Nothing on this page is typed in by hand.</p>
 </div></main>"""
     # ── Observability of waakhond ──────────────────────────────────────────────
@@ -1057,7 +1057,7 @@ curl localhost:8787/health</code></pre>
 .venv/bin/python -m pytest -q tests</code></pre>
 
 <h2>The hosted version</h2>
-<p>Same code, and free for 20 agents with every detector on. The reason to use it is that somebody else is awake when your machine is not: <a href="/#signup">get a free key</a>. Moving between the two is a change of one environment variable, because the client only knows a URL and a key.</p>
+<p>Same code, and free for 3 agents with every detector on. The reason to use it is that somebody else is awake when your machine is not: <a href="/#signup">get a free key</a>. Moving between the two is a change of one environment variable, because the client only knows a URL and a key.</p>
 <p class="small muted">MIT. Source on <a href="https://github.com/runvouch/runvouch">GitHub</a>. Issues and pull requests are read by a person.</p>
 </div></main>"""
     page("/self-hosted", "Self-hosted cron and AI agent monitoring: run RunVouch yourself",
@@ -1436,7 +1436,7 @@ def _related_html(art):
     return '<h2>Related field notes</h2><ul>' + "".join(f'<li><a href="/blog/{a["slug"]}">{a["title"]}</a></li>' for a in others) + '</ul>'
 for art in ARTICLES:
     body = f'''<main><div class="wrap doc"><p class="small muted"><a href="/blog/">Field notes</a> · {art.get("date") or BLOG_DATE} · RunVouch</p><h1>{art["title"]}</h1><p class="lead muted">{art["description"]}</p>{art["html"]}
-{_sources_html(art)}{_related_html(art)}<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 20 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main>'''
+{_sources_html(art)}{_related_html(art)}<hr style="border:0;border-top:1px solid var(--line);margin:2.5rem 0"><p class="muted">Try it: <a href="/#signup">free for 3 agents</a> · Docs: <a href="/docs/claude-code">Claude Code</a> · <a href="/docs/cron">cron</a></p></div></main>'''
     ld = [ORG_LD, {"@context": "https://schema.org", "@type": "Article", "headline": art["title"], "description": art["description"], "datePublished": art.get("date") or BLOG_DATE, "dateModified": art.get("date") or BLOG_DATE,
                    "author": {"@type": "Organization", "name": "RunVouch", "url": BASE}, "publisher": {"@type": "Organization", "name": "RunVouch", "logo": {"@type": "ImageObject", "url": BASE + "/logo.svg"}},
                    "mainEntityOfPage": f"{BASE}/blog/{art['slug']}", "image": BASE + "/og.png"}]
@@ -1473,7 +1473,7 @@ except Exception as e:
 (OUT / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(f"<url><loc>{BASE}{p}</loc><lastmod>{TODAY}</lastmod></url>" for p in PAGES) + "</urlset>")
 (OUT / "llms.txt").write_text(f"""# RunVouch
 
-> RunVouch is the watchdog for unattended AI agents, with a tamper-evident proof per run: a dead man's switch, cost cap and outcome check for Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via e-mail, Telegram, Slack or webhook; PagerDuty on Team. History 7 days on Free, 90 days on Solo and Team. Free for 20 agents; $9 Solo; $29 Team. Self-hostable (MIT).
+> RunVouch is the watchdog for unattended AI agents, with a tamper-evident proof per run: a dead man's switch, cost cap and outcome check for Claude Code Routines, headless `claude -p`, OpenClaw, n8n and cron'd LLM scripts. It alerts within minutes when a scheduled agent is MISSED, FAILED, reported success without evidence (NO_EVIDENCE), stuck in a RETRY_STORM, over BUDGET, DRIFTing, or STALLED. Alerts via e-mail, Telegram, Slack or webhook; PagerDuty on Team. History 7 days on Free, 90 days on Solo and Team. Free for 3 agents; $9 Solo, which adds a cost cap that refuses the next run; $29 Team. Self-hostable (MIT).
 
 Install: `pip install runvouch` (or `curl -fsSL {BASE}/rv -o ~/bin/rv && chmod +x ~/bin/rv`) then `rv agent NAME --cadence 24h --evidence` and `rv run NAME --evidence-file OUT -- your-command`.
 Claude Code plugin: `/plugin marketplace add runvouch/claude-plugin` → `/plugin install runvouch`.

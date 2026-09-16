@@ -14,8 +14,8 @@ import json, os, sys, urllib.request
 TOKEN = os.getenv("POLAR_TOKEN") or sys.exit("POLAR_TOKEN not set")
 API = os.getenv("POLAR_API", "https://api.polar.sh").rstrip("/")
 WEBHOOK_URL = os.getenv("POLAR_WEBHOOK_URL", "https://api.runvouch.com/webhooks/polar")
-PLANS = [("solo", "RunVouch Solo", 900, "15 agents, 90-day history, weekly cost report, priority alerts"),
-         ("team", "RunVouch Team", 2900, "100 agents, Slack & PagerDuty, shared dashboard, API export")]
+PLANS = [("solo", "RunVouch Solo", 900, "50 agents, a cost cap that refuses the next run, 90-day history, weekly cost report"),
+         ("team", "RunVouch Team", 2900, "1000 agents, Slack & PagerDuty, shared dashboard, API export")]
 
 
 def call(method, path, data=None):

@@ -279,7 +279,11 @@ def rotate_key(account_id: int) -> str:
     return key
 
 
-PLAN_LIMITS = {"free": 20, "solo": 100, "team": 1000}
+# Free is meant to be outgrown. It was 20 agents, and almost nobody runs more than twenty scheduled jobs, so
+# the only difference between Free and Solo was a ceiling nobody ever reached, and nothing ever converted
+# (four accounts, none paying, 16 September 2026). Three agents is enough to see whether RunVouch does what it
+# says; the brake on a runaway bill is what the paid plans are for, see pause_for_cap.
+PLAN_LIMITS = {"free": 3, "solo": 50, "team": 1000}
 RETENTION_DAYS = {"free": 7, "solo": 90, "team": 90}  # runs, tool events and acked alerts older than this are purged daily
 
 
@@ -536,7 +540,14 @@ def pause_for_cap(agent: sqlite3.Row) -> str:
     A cap that only sends a message is not a cap. The run that crossed the line has already
     finished, so this brake works on the next run: /v1/runs/start refuses it and the client
     skips the command. Setting a cap is opt-in, resuming is one call.
+
+    The brake itself is the paid plan. On Free the alert goes out with the same numbers, but the agent keeps
+    running: refusing the next run is the one thing worth paying for to somebody who woke up to the bill of an
+    overnight loop, and it is the difference Free could not show when the only limit was a count of agents.
     """
+    plan = (q1("SELECT plan FROM accounts WHERE id=?", agent["account_id"]) or {"plan": "free"})["plan"]
+    if plan not in ("solo", "team"):
+        return " Agent keeps running: refusing the next run is part of Solo and Team, https://runvouch.com/pricing"
     if agent["paused"]:
         return ""
     with tx() as db:
@@ -1406,7 +1417,7 @@ def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, 
                 f"If anything is unclear, reply to this mail - it reaches a person." + sig)
     if kind == "signup":
         return ("Your RunVouch key and a 2-minute start",
-                f"Hi,\n\nWelcome to RunVouch. Your account is on the Free plan: 20 agents, all eight detectors, alerts via Telegram, Slack, e-mail or webhook.\n\n"
+                f"Hi,\n\nWelcome to RunVouch. Your account is on the Free plan: {PLAN_LIMITS['free']} agents, all eight detectors, alerts via Telegram, Slack, e-mail or webhook.\n\n"
                 f"Your API key (keep it private):\n\n    {api_key}\n\n"
                 f"Start in two minutes:\n  1. pip install runvouch   (or: npm install -g runvouch)\n  2. export RUNVOUCH_KEY={api_key}\n"
                 f"  3. rv run nightly-report --evidence-file out/report.html -- your-command\n\n"
@@ -1419,13 +1430,13 @@ def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, 
     if kind == "canceled":
         return (f"Your RunVouch {name} subscription is canceled",
                 f"Hi,\n\nWe have received your cancellation. Your RunVouch {name} plan stays fully active until {_fmt_date(ends_at)}; "
-                f"after that your account moves to the Free plan (20 agents, all detectors) - nothing is deleted and your key keeps working.\n\n"
+                f"after that your account moves to the Free plan ({PLAN_LIMITS['free']} agents, all detectors, alerts but no brake on a cost cap) - nothing is deleted and your key keeps working.\n\n"
                 f"Changed your mind? You can resume from the link in your Polar receipt before that date and nothing changes.\n\n"
                 f"Thank you for using RunVouch. If something made you leave, we would honestly like to know - just reply to this mail. We hope to see you again." + sig)
     if kind == "ended":
         return (f"Your RunVouch {name} plan has ended",
-                f"Hi,\n\nYour RunVouch {name} subscription ended today. Your account is now on the Free plan: 20 agents, all eight detectors, 7-day history. "
-                f"Your API key and agents are untouched; if you have more than 20 agents, the oldest 20 stay monitored.\n\n"
+                f"Hi,\n\nYour RunVouch {name} subscription ended today. Your account is now on the Free plan: {PLAN_LIMITS['free']} agents, all eight detectors, 7-day history. "
+                f"Your API key and agents are untouched; if you have more, the oldest {PLAN_LIMITS['free']} stay monitored, and a cost cap now alerts instead of refusing the next run.\n\n"
                 f"Thank you for the time you spent with us. Whenever your agents outgrow the free plan again, upgrading takes one click: https://runvouch.com/pricing\n\n"
                 f"We hope to see you again." + sig)
     if kind == "refunded":
