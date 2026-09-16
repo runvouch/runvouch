@@ -30,7 +30,7 @@ LS_VARIANT_PLANS=<solo-variant-id>:solo,<team-variant-id>:team
 Daarna `systemctl --user restart runvouch`.
 
 ## Lemon Squeezy (bestaande store "DataSignals Lab" of nieuwe store onder merknaam)
-Producten: "RunVouch Solo" $9/mnd en "RunVouch Team" $29/mnd (subscription). Webhook-events aanvinken:
+Producten: "RunVouch Solo" $19/mnd en "RunVouch Team" $99/mnd (subscription). Webhook-events aanvinken:
 subscription_created/updated/cancelled/expired/resumed/paused, order_created/refunded. Signing secret → `.env`.
 Koppeling gebeurt op e-mailadres: klant koopt met hetzelfde e-mailadres als de signup → plan gaat automatisch omhoog/omlaag.
 

@@ -51,7 +51,7 @@ RUNVOUCH_EVIDENCE=/srv/digest/today.html   # a file path, an https:// URL, or cm
 <p>I would not make the agent responsible for reporting its own failure. It cannot report a run that never started, and a hung run is by definition not reporting. The clock has to live outside.</p>
 <p>I would not treat the evidence check as optional for "simple" jobs. Every one of my silent failures was on a job I considered too simple to need checking.</p>
 <p>I would not let the watchdog become a dependency. <code>rv run</code> fails open: if RunVouch is unreachable, your command runs as normal and you lose one run of monitoring, not the run.</p>
-<p>Free for three agents, $9 Solo, $29 Team, MIT self-host, EU hosting. Details at <a href="https://runvouch.com">runvouch.com</a>.</p>
+<p>Free for three agents, $19 Solo, $99 Team, MIT self-host, EU hosting. Details at <a href="https://runvouch.com">runvouch.com</a>.</p>
 
 <h2>FAQ</h2>
 <p><strong>My Routine shows green. Do I still need this?</strong><br>Per the docs, green means the session "started and exited without an infrastructure error" and "does not mean the task in your prompt succeeded". Green covers case 1 partially and cases 2 to 4 not at all. The evidence check is what covers the rest.</p>

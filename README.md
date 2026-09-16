@@ -76,7 +76,7 @@ MCP: `claude mcp add runvouch -e RUNVOUCH_KEY=... -- python3 integrations/mcp/ru
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Hosted vs self-host
-Hosted at [runvouch.com](https://runvouch.com): free for 3 agents, $9 Solo, $29 Team, alerts, dashboard, backups, EU hosting. Self-host: this repo, MIT. Same code.
+Hosted at [runvouch.com](https://runvouch.com): free for 3 agents, $19 Solo, $99 Team, alerts, dashboard, backups, EU hosting. Self-host: this repo, MIT. Same code.
 
 ## Compare
 [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)

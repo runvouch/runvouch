@@ -17,7 +17,7 @@ every fact. No guesses, no invented numbers; if you cannot verify something, lea
 
 Company 1: RunVouch (runvouch.com), the watchdog for unattended AI agents: 8 detectors (MISSED, FAILED, NO_EVIDENCE,
 RETRY_STORM, BUDGET_RUN, BUDGET_DAY, DRIFT, STALLED), alerts (Telegram, Slack, email, webhook, PagerDuty), a tamper-evident
-proof per run anchored in Bitcoin, Claude Code plugin, MCP server, GitHub Action, pip/npm CLI. Free 3 agents, Solo $9, Team $29.
+proof per run anchored in Bitcoin, Claude Code plugin, MCP server, GitHub Action, pip/npm CLI. Free 3 agents, Solo $19, Team $99.
 Known competitors: Healthchecks.io, Cronitor, Langfuse, LangSmith, NotiLens, AgentWatch (getagentwatch.com).
 Company 2: DataSignals Lab (datasignalslab.com), official US public data (SEC filings, Form D, 13F, 8-K, FDA, NIH, federal
 contracts, congress trades, hiring) turned into scored signals; sold as Apify actors ($0.20/result), an Events API ($29+),

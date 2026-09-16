@@ -41,7 +41,7 @@ rv run nightly-report --evidence-file out/report.html -- claude -p "write the da
 <p>Alerts go to Telegram, Slack or a webhook. On a budget alert RunVouch pauses the agent itself, so the next scheduled run does not start. It never kills a running process. A half-finished agent that has written three files and not the fourth is a worse state than a finished expensive one, and the process is on your machine, not mine.</p>
 <h2>Keep the cron monitor, add the agent watchdog</h2>
 <p>These are not competitors. My backup jobs and my tunnel checks still ping a plain heartbeat monitor, because did it run is genuinely the whole question there. The agents get RunVouch, because did it run is the least interesting of the eight things that can go wrong. Running both on the same job is fine and costs you one extra line in the crontab.</p>
-<p>Free covers 20 agents. Solo is $9 a month, Team is $29. The server is MIT licensed if you would rather run it yourself, and the hosted version runs in the EU.</p>
+<p>Free covers three agents. Solo is $19 a month, Team is $99. The server is MIT licensed if you would rather run it yourself, and the hosted version runs in the EU.</p>
 <h2>Frequently asked questions</h2>
 <p><strong>Can I use Cronitor or Healthchecks.io for AI agents?</strong></p>
 <p>Yes, and they will correctly tell you when the agent did not run or exited non-zero. What they cannot tell you is that the run cost eleven dollars, called the same tool nine times, or exited clean without writing the report, because that information never reaches an HTTP ping.</p>

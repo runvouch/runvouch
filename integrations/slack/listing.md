@@ -26,7 +26,7 @@ Each run reports a start and an end with evidence: a file that was written, a UR
 
 A weekly digest summarises every agent. Every run has a hash and every day a Merkle root anchored in Bitcoin, so a run can be verified offline.
 
-Free for 3 agents, no card. Paid plans from $9 a month. Setup: add RunVouch to a channel, done; the same alerts also go to e-mail, Telegram, webhooks and PagerDuty if you want them there.
+Free for 3 agents, no card. Paid plans from $19 a month. Setup: add RunVouch to a channel, done; the same alerts also go to e-mail, Telegram, webhooks and PagerDuty if you want them there.
 
 ## Categories
 
