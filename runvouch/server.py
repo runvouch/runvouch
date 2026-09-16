@@ -184,7 +184,7 @@ with _lock:
     for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER"),
                      ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL"),
                      ("agents", "ping_token TEXT"), ("signups", "source TEXT"), ("accounts", "source TEXT"),
-                     ("public_agents", "fleet_slug TEXT")):
+                     ("public_agents", "fleet_slug TEXT"), ("accounts", "nudged_at REAL")):
         try:
             _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
         except sqlite3.OperationalError:
@@ -927,6 +927,38 @@ def seal_days(now: Optional[float] = None) -> int:
 _last_ots_day = ""
 
 
+def activation_nudge(now: Optional[float] = None) -> int:
+    """One mail, once, to an account that asked for a key and never reported a run.
+
+    The funnel says this is where everything stops: an account is made in two seconds and the first wrapped job
+    takes five minutes that nobody has that day. Two days later the key is in a terminal history somewhere. So
+    we write once, with the one line that does it, and never again: no drip, no second reminder, and anyone who
+    replies is out. Accounts older than two weeks are skipped, so switching this on does not mail a backlog.
+    """
+    now = now or time.time()
+    n = 0
+    for acc in qa("SELECT * FROM accounts WHERE email IS NOT NULL AND nudged_at IS NULL "
+                  "AND (source IS NULL OR source != 'owner') AND created < ? AND created > ?",
+                  now - 2 * 86400, now - 14 * 86400):
+        if q1("SELECT id FROM runs WHERE account_id=? LIMIT 1", acc["id"]):
+            continue
+        tekst = ("Hi,\n\nYou picked up a RunVouch key two days ago and no run has arrived yet, so here is the "
+                 "shortest path from key to watched job.\n\n"
+                 "    pip install runvouch            (or: npm install -g runvouch)\n"
+                 "    export RUNVOUCH_KEY=your-key\n"
+                 "    rv run nightly-report --cadence 24h --evidence-file out/report.html -- your-command\n\n"
+                 "That is the whole setup. The first run registers the agent, the cadence turns a schedule that "
+                 "stopped into an alert, and the evidence file turns a green run that produced nothing into a "
+                 "failure.\n\nStuck on something, or does it not fit what you are running? Reply to this mail, a "
+                 "person reads it. If you would rather not hear from us again, reply with one word and this was "
+                 "the only message you will get.\n\nDocs per runtime: https://runvouch.com/docs\n\nRunVouch")
+        if _email(acc["email"], "Your RunVouch key is waiting for its first run", tekst):
+            n += 1
+        with tx() as db:
+            db.execute("UPDATE accounts SET nudged_at=? WHERE id=?", (now, acc["id"]))
+    return n
+
+
 def proof_maintenance(now: Optional[float] = None) -> None:
     global _last_ots_day
     now = now or time.time()
@@ -1086,6 +1118,7 @@ def _sweeper():
             if n % 20 == 0:
                 weekly_report()
                 owner_week()
+                activation_nudge()
         except Exception:
             pass
         n += 1

@@ -1450,3 +1450,29 @@ def test_klantpagina_wordt_gerenderd_voor_elke_vloot():
 
     assert c.get("/fleet/bestaat-niet", headers={"Host": "runvouch.com"}).status_code == 404
     assert c.get("/fleet/wayne").status_code == 404, "op de api-host hoort de JSON, niet de pagina"
+
+
+def test_activatiemail_gaat_een_keer_en_alleen_naar_wie_niets_draaide(monkeypatch):
+    """Waar de trechter stilstaat: een sleutel ophalen duurt twee seconden, de eerste baan omwikkelen vijf
+    minuten die je die dag niet hebt. Een bericht, met de regel die het doet, en daarna nooit meer."""
+    verstuurd = []
+    monkeypatch.setattr(server, "_email", lambda to, onderwerp, tekst, sender=None: verstuurd.append((to, onderwerp)) or True)
+    nu = time.time()
+    with server.tx() as db:
+        db.execute("INSERT INTO accounts(name, api_key, created, plan, email) VALUES('stil', ?, ?, 'free', ?)",
+                   (server.key_hash("rv_stil"), nu - 3 * 86400, "stil@example.com"))
+        db.execute("INSERT INTO accounts(name, api_key, created, plan, email) VALUES('bezig', ?, ?, 'free', ?)",
+                   (server.key_hash("rv_bezig"), nu - 3 * 86400, "bezig@example.com"))
+        db.execute("INSERT INTO accounts(name, api_key, created, plan, email, source) VALUES('zelf', ?, ?, 'team', ?, 'owner')",
+                   (server.key_hash("rv_zelf"), nu - 3 * 86400, "owner@example.com"))
+        db.execute("INSERT INTO accounts(name, api_key, created, plan, email) VALUES('vers', ?, ?, 'free', ?)",
+                   (server.key_hash("rv_vers"), nu - 3600, "vers@example.com"))
+    bezig = server.q1("SELECT id FROM accounts WHERE name='bezig'")["id"]
+    c.post("/v1/agents", json={"name": "draait"}, headers={"X-API-Key": "rv_bezig"})
+    rid = c.post("/v1/runs/start", json={"agent": "draait"}, headers={"X-API-Key": "rv_bezig"}).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok"}, headers={"X-API-Key": "rv_bezig"})
+    assert server.q1("SELECT COUNT(*) n FROM runs WHERE account_id=?", bezig)["n"] == 1
+
+    assert server.activation_nudge(now=nu) == 1
+    assert [t for t, _o in verstuurd] == ["stil@example.com"], "alleen wie een sleutel heeft en niets draaide"
+    assert server.activation_nudge(now=nu) == 0, "een keer, daarna nooit meer"
