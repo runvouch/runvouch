@@ -1,0 +1,49 @@
+{
+ "alerts_by_kind": {
+  "DRIFT": 26,
+  "FAILED": 30,
+  "MISSED": 12,
+  "NO_EVIDENCE": 2,
+  "STALLED": 3
+ },
+ "fleet": {
+  "agents": 77,
+  "description": "one production fleet running a data business: scrapers, refreshes, health checks, report builders and a handful of LLM jobs"
+ },
+ "generated": "2026-09-16",
+ "kind_meaning": {
+  "BUDGET_DAY": "one agent went over its daily cost cap",
+  "BUDGET_RUN": "one run went over its cost cap",
+  "DRIFT": "cost or duration moved away from this job's own baseline, while nothing failed",
+  "FAILED": "exited non-zero, or the client reported failure",
+  "MISSED": "the run never started: dead scheduler, expired auth, crash before the first line",
+  "NO_EVIDENCE": "reported success, but the file, URL or assertion it promised was missing",
+  "RETRY_STORM": "the same tool with the same input, over and over, inside one run",
+  "STALLED": "started and then stopped reporting before it ended"
+ },
+ "license": "CC BY 4.0",
+ "limits": [
+  "One fleet, not an industry average.",
+  "Mostly small scheduled jobs; the median run takes about a second.",
+  "The record is what each client reported: a client that misreports its own cost produces a faithful record of the misreport.",
+  "A job nobody registered produces no alerts, so unmonitored work is invisible here by definition.",
+  "TEST alerts are excluded."
+ ],
+ "median_seconds_to_alert": 0.0,
+ "proof": {
+  "day_files": "https://api.runvouch.com/proof/",
+  "days_anchored_in_bitcoin": 22,
+  "days_sealed": 22,
+  "first_day": "2026-08-25",
+  "runs_in_chain": 5315,
+  "verify_in_browser": "https://runvouch.com/verify"
+ },
+ "runs": {
+  "failed": 30,
+  "failure_rate_percent": 0.54,
+  "finished": 5557,
+  "ok": 5527
+ },
+ "source": "RunVouch, https://runvouch.com/how-often-jobs-fail",
+ "window_days": 30
+}

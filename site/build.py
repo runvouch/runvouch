@@ -1042,8 +1042,46 @@ if _st:
 
 <h2>If you want your own numbers</h2>
 <p>Wrap one job and you have a baseline within a week. Free for 3 agents, all detectors on, no card: <a href="/#signup">get a free key</a>.</p>
+<h2 id="cite">Use these numbers</h2>
+<p>They are free to quote, with attribution, under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. The same figures are machine readable at <a href="/api/failure-rates.json">/api/failure-rates.json</a>, rebuilt every week from the production database, with the method and the limits in the file itself.</p>
+<pre><code>RunVouch (2026). How often does an unattended job actually fail?
+{_st["runs30"]:,} runs by {_st["agents30"]} scheduled agents over 30 days, measured {TODAY}.
+https://runvouch.com/how-often-jobs-fail</code></pre>
+<p><b>Check it before you quote it.</b> Every run behind these counts is hashed into a public daily Merkle root, chained to the day before and anchored in Bitcoin: the day files are at <a href="{API}/proof/">{API}/proof/</a> and you can recompute one in your browser at <a href="/verify">/verify</a>. The fleet that produced them is public run by run at <a href="/fleet/datasignals">/fleet/datasignals</a>. If a number here moves, the chain says whether the history moved with it.</p>
+<p>Writing about agent reliability and want something specific broken out, per kind, per job type or over a longer window? Ask on <a href="/contact?topic=data">contact</a> and we will run the query and publish the answer here.</p>
 <p class="small muted">Figures from the production database on {TODAY}, over the preceding 30 days. TEST alerts excluded. Nothing on this page is typed in by hand.</p>
 </div></main>"""
+    _dataset_ld = {"@context": "https://schema.org", "@type": "Dataset",
+                   "name": "Failure rates of unattended scheduled jobs and AI agents",
+                   "description": f"Counts of runs, failures and alerts by kind over 30 days from a production fleet of {_st['agents30']} scheduled jobs, with a tamper-evident hash chain behind every run.",
+                   "url": BASE + "/how-often-jobs-fail", "license": "https://creativecommons.org/licenses/by/4.0/",
+                   "creator": {"@type": "Organization", "name": "RunVouch", "url": BASE},
+                   "isAccessibleForFree": True, "dateModified": TODAY,
+                   "measurementTechnique": "Every run reports start and end to the RunVouch API; alerts are raised by eight detectors in the same transaction that ends the run; each finished run is hashed into a daily Merkle root anchored with OpenTimestamps.",
+                   "distribution": [{"@type": "DataDownload", "encodingFormat": "application/json",
+                                     "contentUrl": BASE + "/api/failure-rates.json"}],
+                   "variableMeasured": [{"@type": "PropertyValue", "name": k, "value": v} for k, v in _soorten.items()]}
+    (OUT / "api").mkdir(parents=True, exist_ok=True)
+    (OUT / "api" / "failure-rates.json").write_text(json.dumps({
+        "source": "RunVouch, https://runvouch.com/how-often-jobs-fail",
+        "license": "CC BY 4.0",
+        "generated": TODAY,
+        "window_days": 30,
+        "fleet": {"agents": _st["agents30"], "description": "one production fleet running a data business: scrapers, refreshes, health checks, report builders and a handful of LLM jobs"},
+        "runs": {"finished": _st["runs30"], "failed": _st["fails30"], "ok": _st["ok30"],
+                 "failure_rate_percent": round(100 * _st["fails30"] / _st["runs30"], 2)},
+        "alerts_by_kind": _soorten,
+        "kind_meaning": _KIND_UITLEG,
+        "median_seconds_to_alert": round(_st["lag"], 1) if _st["lag"] is not None else None,
+        "proof": {"days_sealed": _st["days"], "days_anchored_in_bitcoin": _st["anchored"],
+                  "runs_in_chain": _st["day_runs"], "first_day": _st["first_day"],
+                  "day_files": API + "/proof/", "verify_in_browser": BASE + "/verify"},
+        "limits": ["One fleet, not an industry average.",
+                   "Mostly small scheduled jobs; the median run takes about a second.",
+                   "The record is what each client reported: a client that misreports its own cost produces a faithful record of the misreport.",
+                   "A job nobody registered produces no alerts, so unmonitored work is invisible here by definition.",
+                   "TEST alerts are excluded."],
+    }, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     # ── Observability of waakhond ──────────────────────────────────────────────
     # Dertien vs-pagina's vergelijken ons met een genoemd product. Geen enkele beantwoordt de vraag die daarvoor
     # komt: welk soort gereedschap heb ik hier eigenlijk nodig. Die vraag stelt iedereen die drie tabbladen open
@@ -1130,10 +1168,10 @@ curl localhost:8787/health</code></pre>
          "when the answer is one of the others.",
          _keuze, [ORG_LD], article=True)
 
-    page("/how-often-jobs-fail", "How often does an unattended job actually fail? Real numbers from 4,000 runs",
+    page("/how-often-jobs-fail", f"How often does an unattended job actually fail? Real numbers from {_st['runs30']:,} runs",
          f"Measured over {_st['runs30']:,} runs by {_st['agents30']} scheduled agents in 30 days: {_fp:.1f} percent failed, "
          f"{_tot_alerts} alerts in total, broken out by kind. The rarest failure is the one no heartbeat monitor can see.",
-         _faal, [ORG_LD], article=True)
+         _faal, [ORG_LD, _dataset_ld], article=True)
 
     page("/stats", "RunVouch in numbers: our own agents, last 30 days",
          f"Real figures from the fleet that runs RunVouch itself: {_st['runs30']} runs by {_st['agents30']} agents in 30 days, {_pct:.1f}% failed, {_st['noev']} green runs without evidence, median time to alert {_lag}. Updated weekly.",
@@ -1563,7 +1601,7 @@ API base: {API} (header X-API-Key).
 - [Verify a run yourself]({BASE}/verify): one real sealed run, hashes recomputed in your browser, no account
 - [Run it yourself]({BASE}/self-hosted): MIT, one server file and SQLite, five commands, and when Healthchecks.io is the better answer
 - [Observability, a heartbeat, or a watchdog?]({BASE}/observability-or-watchdog): which of the three categories a given situation needs, including when the answer is one of the others
-- [How often does an unattended job actually fail?]({BASE}/how-often-jobs-fail): measured over 4,000 real runs, every alert broken out by kind, rebuilt weekly from the production database
+- [How often does an unattended job actually fail?]({BASE}/how-often-jobs-fail): measured over thousands of real runs, every alert broken out by kind, rebuilt weekly from the production database. Machine-readable and free to quote under CC BY 4.0: {BASE}/api/failure-rates.json
 - [RunVouch in numbers]({BASE}/stats): real 30-day figures from our own fleet, rebuilt weekly
 - [Pricing]({BASE}/pricing) · [Security]({BASE}/security) · [Privacy]({BASE}/privacy) · [Changelog]({BASE}/changelog)
 """)
