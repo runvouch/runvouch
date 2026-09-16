@@ -1019,6 +1019,8 @@ if _st:
     _rij = "".join(
         f'<tr><td><b>{k}</b></td><td>{n}</td><td>{_KIND_UITLEG.get(k, "")}</td></tr>'
         for k, n in _st["kinds"])
+    _maand_nu = TODAY[:7]
+    _archief = sorted({f.name[len("failure-rates-"):-len(".json")] for f in (OUT / "api").glob("failure-rates-2*.json")} | {_maand_nu})
     _faal = f"""<main><div class="wrap doc"><h1>How often does an unattended job actually fail?</h1>
 <p class="lead muted">Nobody publishes this, so here are our own numbers: {_st["runs30"]:,} runs by {_st["agents30"]} scheduled agents over 30 days, with every alert broken out by kind. Measured, not estimated, and rebuilt from the production database every week.</p>
 
@@ -1047,6 +1049,7 @@ if _st:
 <pre><code>RunVouch (2026). How often does an unattended job actually fail?
 {_st["runs30"]:,} runs by {_st["agents30"]} scheduled agents over 30 days, measured {TODAY}.
 https://runvouch.com/how-often-jobs-fail</code></pre>
+<p>Quoting it in something that has to stay true? Use the frozen copy of the month, which stops changing when the month does: <a href="/api/failure-rates-{_maand_nu}.json">/api/failure-rates-{_maand_nu}.json</a>. Months published so far: {", ".join(f'<a href="/api/failure-rates-{m}.json">{m}</a>' for m in _archief)}.</p>
 <p><b>Check it before you quote it.</b> Every run behind these counts is hashed into a public daily Merkle root, chained to the day before and anchored in Bitcoin: the day files are at <a href="{API}/proof/">{API}/proof/</a> and you can recompute one in your browser at <a href="/verify">/verify</a>. The fleet that produced them is public run by run at <a href="/fleet/datasignals">/fleet/datasignals</a>. If a number here moves, the chain says whether the history moved with it.</p>
 <p>Writing about agent reliability and want something specific broken out, per kind, per job type or over a longer window? Ask on <a href="/contact?topic=data">contact</a> and we will run the query and publish the answer here.</p>
 <p class="small muted">Figures from the production database on {TODAY}, over the preceding 30 days. TEST alerts excluded. Nothing on this page is typed in by hand.</p>
@@ -1082,6 +1085,11 @@ https://runvouch.com/how-often-jobs-fail</code></pre>
                    "A job nobody registered produces no alerts, so unmonitored work is invisible here by definition.",
                    "TEST alerts are excluded."],
     }, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    # Een citaat heeft een doel nodig dat niet meer verandert. Het weekbestand hierboven beweegt elke week mee,
+    # dus er staat per maand ook een kopie naast: die groeit binnen de maand mee en ligt daarna stil. Wie ons
+    # aanhaalt wijst naar de maand, niet naar een getal dat morgen anders is.
+    _maand = OUT / "api" / f"failure-rates-{TODAY[:7]}.json"
+    _maand.write_text((OUT / "api" / "failure-rates.json").read_text(encoding="utf-8"), encoding="utf-8")
     # ── Observability of waakhond ──────────────────────────────────────────────
     # Dertien vs-pagina's vergelijken ons met een genoemd product. Geen enkele beantwoordt de vraag die daarvoor
     # komt: welk soort gereedschap heb ik hier eigenlijk nodig. Die vraag stelt iedereen die drie tabbladen open

@@ -22,7 +22,7 @@
 <p><b>Can the job finish and still have failed?</b> This is the one that decides. A scraper that returns an empty list, a report builder whose upstream went quiet, an agent that hit a rate limit and gave up gracefully. All three exit zero, ping their monitor and show green. If that is your situation, neither of the first two categories will tell you.</p>
 
 <h2>What that looks like in numbers</h2>
-<p>Over 30 days our own fleet of 77 scheduled jobs produced 73 alerts across 5,565 runs. 12 of them were "the run never started", which is the part a heartbeat catches. The rest were not: failures with an exit code, cost or duration drifting away from a job's own baseline, and runs that reported success while the file they promised was missing.</p>
+<p>Over 30 days our own fleet of 77 scheduled jobs produced 73 alerts across 5,570 runs. 12 of them were "the run never started", which is the part a heartbeat catches. The rest were not: failures with an exit code, cost or duration drifting away from a job's own baseline, and runs that reported success while the file they promised was missing.</p>
 <p>Full breakdown with what each kind means: <a href="/how-often-jobs-fail">how often does an unattended job actually fail</a>.</p>
 
 <h2>They stack, and that is normal</h2>
