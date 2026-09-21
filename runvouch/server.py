@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS public_fleets(slug TEXT PRIMARY KEY, account_id INTEG
 CREATE TABLE IF NOT EXISTS public_agents(agent_id INTEGER PRIMARY KEY, label TEXT, kind TEXT);
 CREATE INDEX IF NOT EXISTS ix_run_leaves_ended ON run_leaves(ended);
 CREATE TABLE IF NOT EXISTS viewer_keys(id INTEGER PRIMARY KEY, account_id INTEGER, key_hash TEXT UNIQUE, name TEXT, created REAL, last_used REAL);
+CREATE TABLE IF NOT EXISTS key_requests(token_hash TEXT PRIMARY KEY, account_id INTEGER, ts REAL, used INTEGER DEFAULT 0);
 """
 with _lock:
     # A database from before run ids were namespaced per account has runs and run_leaves keyed on the run id
@@ -1318,13 +1319,17 @@ def signup(body: SignupIn, request: Request):
     email = body.email.lower().strip()
     existing = q1("SELECT id, plan FROM accounts WHERE email=?", email)
     if existing:
-        # Lost key or second signup: rotate and mail the fresh key to the address on file. Only the mailbox
-        # owner can read it, so this is safe, and it keeps the founder out of the loop.
-        key = rotate_key(existing["id"])
+        # Lost key or second signup: mail a confirmation link. The key itself only changes when the link is
+        # opened AND the button on it is pressed. Until 21 September 2026 this branch rotated on the spot, so
+        # anyone who typed a paying customer's address killed that customer's production key from the public
+        # form, with no mailbox access and no way back. The old key keeps working until the owner confirms.
+        token = secrets.token_urlsafe(32)
         with tx() as db:
+            db.execute("INSERT OR REPLACE INTO key_requests(token_hash, account_id, ts, used) VALUES(?,?,?,0)",
+                       (key_hash(token), existing["id"], time.time()))
             db.execute("INSERT INTO signups(ip, ts, source) VALUES(?,?,?)", (ip, time.time(), bron))
-        _send_billing("key", email, existing["plan"], None, key)
-        return {"sent": True, "plan": existing["plan"], "note": "This address already has an account. A fresh key is on its way to your inbox; the old key stopped working."}
+        _send_billing("key_confirm", email, existing["plan"], None, token)
+        return {"sent": True, "plan": existing["plan"], "note": "This address already has an account. Check your inbox: the link there gives you a fresh key. Your current key keeps working until you use it."}
     acc = create_account(email.split("@")[0], "free", email)
     with tx() as db:
         db.execute("INSERT INTO signups(ip, ts, source) VALUES(?,?,?)", (ip, time.time(), bron))
@@ -1333,6 +1338,56 @@ def signup(body: SignupIn, request: Request):
     _send_billing("signup", email, "free", None, acc["api_key"])
     return {"api_key": acc["api_key"], "plan": "free", "agents_allowed": PLAN_LIMITS["free"],
             "note": "Store this key now; it is not shown again (a copy is in your inbox)."}
+
+
+KEY_CONFIRM_TTL = 3600
+
+
+def _key_request(token: str):
+    """De openstaande aanvraag bij dit token, of None als hij niet bestaat, al gebruikt is of verlopen."""
+    r = q1("SELECT * FROM key_requests WHERE token_hash=?", key_hash(token or ""))
+    if not r or r["used"] or time.time() - r["ts"] > KEY_CONFIRM_TTL:
+        return None
+    return r
+
+
+def _key_pagina(titel: str, body: str) -> HTMLResponse:
+    return HTMLResponse(f"<!doctype html><meta charset=utf-8><title>{titel}</title>"
+                        "<style>body{font:16px/1.6 system-ui,sans-serif;max-width:38rem;margin:4rem auto;padding:0 1rem}"
+                        "code{background:#f4f4f5;padding:.2rem .4rem;border-radius:.3rem}"
+                        "button{font:inherit;padding:.6rem 1.2rem;border-radius:.4rem;border:0;background:#111;color:#fff}</style>"
+                        f"<h1>{titel}</h1>{body}")
+
+
+@app.get("/key/confirm", include_in_schema=False)
+def key_confirm_pagina(t: str = ""):
+    """De knop staat hier met opzet: een mailscanner die elke link opent, mag geen sleutel omdraaien."""
+    if not _key_request(t):
+        return _key_pagina("Link expired", "<p>This link was already used or is older than an hour. "
+                                           "Ask for a new one on <a href=\"https://runvouch.com\">runvouch.com</a>.</p>")
+    return _key_pagina("One more click",
+                       "<p>Press the button to replace your API key. The current key stops working at that moment.</p>"
+                       f"<form method=post><input type=hidden name=t value=\"{t}\"><button>Give me a new key</button></form>")
+
+
+@app.post("/key/confirm", include_in_schema=False)
+async def key_confirm(request: Request):
+    # Zelf uitlezen in plaats van Form(): dat vraagt python-multipart, en een urlencoded
+    # formulier met een veld is die afhankelijkheid niet waard.
+    velden = urllib.parse.parse_qs((await request.body()).decode("utf-8", "replace"))
+    t = (velden.get("t") or [""])[0]
+    r = _key_request(t)
+    if not r:
+        return _key_pagina("Link expired", "<p>This link was already used or is older than an hour.</p>")
+    acc = q1("SELECT email, plan FROM accounts WHERE id=?", r["account_id"])
+    key = rotate_key(r["account_id"])
+    with tx() as db:
+        db.execute("UPDATE key_requests SET used=1 WHERE token_hash=?", (key_hash(t),))
+    if acc and acc["email"]:
+        _send_billing("key", acc["email"], acc["plan"], None, key)
+    return _key_pagina("Your new key",
+                       f"<p>Set it as <code>RUNVOUCH_KEY</code> wherever your agents run. A copy is in your inbox.</p>"
+                       f"<p><code>{key}</code></p><p>The previous key no longer works.</p>")
 
 
 class ContactIn(BaseModel):
@@ -1502,6 +1557,13 @@ def billing_email(kind: str, to: str, plan: str, ends_at: Optional[str] = None, 
                 f"  3. rv run nightly-report --evidence-file out/report.html -- your-command\n\n"
                 f"Then set where alerts go: https://runvouch.com/app (paste the key). Docs per runtime: https://runvouch.com/docs\n\n"
                 f"Lost the key later? Enter the same e-mail on runvouch.com again and a fresh one is mailed to you. Questions: reply to this mail." + sig)
+    if kind == "key_confirm":
+        # api_key draagt hier het eenmalige token, niet een sleutel: de sleutel bestaat pas na bevestiging.
+        return ("Confirm: a fresh RunVouch key",
+                f"Hi,\n\nSomeone asked for a RunVouch key with this address ({name} plan). If that was you, open "
+                f"this link and press the button:\n\n    {PUBLIC_URL}/key/confirm?t={api_key}\n\n"
+                f"Your current key keeps working until you do. The link is good for one hour and can be used once.\n\n"
+                f"If this was not you, ignore this mail. Nothing changed." + sig)
     if kind == "key":
         return ("Your new RunVouch key",
                 f"Hi,\n\nYou asked for a key with an address that already has a RunVouch account ({name} plan). Here is a fresh one; the previous key no longer works:\n\n    {api_key}\n\n"

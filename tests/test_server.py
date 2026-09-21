@@ -165,8 +165,8 @@ def test_keys_hashed_and_signup():
     k = r.json()["api_key"]
     assert c.get("/v1/me", headers={"X-API-Key": k}).json()["email"] == "new.user@example.com"
     r2 = c.post("/signup", json={"email": "new.user@example.com"})
-    assert r2.status_code == 200 and r2.json()["sent"] is True          # re-signup mails a fresh key, old key dies
-    assert c.get("/v1/me", headers={"X-API-Key": k}).status_code == 401
+    assert r2.status_code == 200 and r2.json()["sent"] is True          # re-signup mails a confirmation link
+    assert c.get("/v1/me", headers={"X-API-Key": k}).status_code == 200  # de oude sleutel blijft tot bevestiging
     k = c.post("/admin/accounts", params={"name": "t2", "plan": "free"}, headers={"X-Admin-Token": "adm"}).json()["api_key"]
     assert c.post("/signup", json={"email": "not-an-email"}).status_code == 422
     nk = c.post("/v1/me/rotate-key", headers={"X-API-Key": k}).json()["api_key"]
@@ -353,9 +353,49 @@ def test_signup_mails_key_and_reissues(monkeypatch):
     assert r["api_key"].startswith("rv_") and sent[-1][0] == "signup" and sent[-1][2] == r["api_key"]
     assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 200
     r2 = c.post("/signup", json={"email": "fresh.user@example.com"})
-    assert r2.status_code == 200 and r2.json()["sent"] is True and sent[-1][0] == "key"
-    assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 401      # old key revoked
+    assert r2.status_code == 200 and r2.json()["sent"] is True and sent[-1][0] == "key_confirm"
+    token = sent[-1][2]
+    assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 200      # tot bevestiging blijft hij geldig
+
+    # De GET toont alleen een knop: een mailscanner die elke link opent, mag niets omdraaien.
+    pagina = c.get("/key/confirm", params={"t": token})
+    assert pagina.status_code == 200 and "<form method=post" in pagina.text
+    assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 200
+
+    bevestig = c.post("/key/confirm", data={"t": token})
+    assert bevestig.status_code == 200 and sent[-1][0] == "key"
+    assert c.get("/v1/agents", headers={"X-API-Key": r["api_key"]}).status_code == 401      # nu pas ingetrokken
     assert c.get("/v1/agents", headers={"X-API-Key": sent[-1][2]}).status_code == 200        # mailed key works
+    # Eenmalig: hetzelfde token doet niets meer.
+    herhaal = c.post("/key/confirm", data={"t": token})
+    assert "expired" in herhaal.text.lower()
+    assert c.get("/v1/agents", headers={"X-API-Key": sent[-1][2]}).status_code == 200
+
+
+def test_bevestigingslink_van_een_ander_adres_raakt_niemand(monkeypatch):
+    """Het formulier stond open voor misbruik: wie het adres van een klant intypte, brak diens sleutel."""
+    sent = []
+    monkeypatch.setattr(server, "SIGNUP_PER_IP_PER_DAY", 1000)
+    monkeypatch.setattr(server, "_send_billing", lambda kind, to, plan, ends_at=None, api_key=None: sent.append((kind, to, api_key)))
+    klant = c.post("/signup", json={"email": "betalend@example.com"}).json()["api_key"]
+    c.post("/signup", json={"email": "betalend@example.com"})          # een vreemde typt het adres in
+    assert sent[-1][0] == "key_confirm" and sent[-1][1] == "betalend@example.com"
+    assert c.get("/v1/agents", headers={"X-API-Key": klant}).status_code == 200
+
+
+def test_verlopen_of_onbekend_token_doet_niets(monkeypatch):
+    sent = []
+    monkeypatch.setattr(server, "SIGNUP_PER_IP_PER_DAY", 1000)
+    monkeypatch.setattr(server, "_send_billing", lambda kind, to, plan, ends_at=None, api_key=None: sent.append((kind, to, api_key)))
+    k = c.post("/signup", json={"email": "verlopen@example.com"}).json()["api_key"]
+    c.post("/signup", json={"email": "verlopen@example.com"})
+    token = sent[-1][2]
+    with server.tx() as db:
+        db.execute("UPDATE key_requests SET ts=? WHERE token_hash=?",
+                   (time.time() - server.KEY_CONFIRM_TTL - 1, server.key_hash(token)))
+    assert "expired" in c.post("/key/confirm", data={"t": token}).text.lower()
+    assert "expired" in c.post("/key/confirm", data={"t": "onzin"}).text.lower()
+    assert c.get("/v1/agents", headers={"X-API-Key": k}).status_code == 200
 
 
 def test_owner_digest_once_per_day(monkeypatch):
