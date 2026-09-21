@@ -23,10 +23,18 @@ def tg(text):
     except Exception: pass
 
 def link_ok(u):
-    try:
-        r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"}), timeout=20); return r.status < 400
-    except urllib.error.HTTPError as e: return e.code in (401, 403, 405, 429)  # exists but blocks bots
-    except Exception: return False
+    # A 3xx is a working link, not a dead one. On 21 September 2026 a finished, paid-for article was
+    # held because langfuse.com answers 308 Permanent Redirect on its old docs paths, and urllib on
+    # Python 3.10 (this venv) does not follow 308 - it raises. The link opens fine in a browser.
+    # Two attempts as well: one timeout at the wrong second should not cost an article either.
+    for poging in (1, 2):
+        try:
+            r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"}), timeout=20); return r.status < 400
+        except urllib.error.HTTPError as e:
+            return e.code < 400 or e.code in (401, 403, 405, 429)  # redirect, or exists but blocks bots
+        except Exception:
+            if poging == 2: return False
+            time.sleep(3)
 
 topics = json.load(open(TOPICS)); arts = json.load(open(ARTICLES))
 done = {a["slug"] for a in arts["articles"]}
