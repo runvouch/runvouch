@@ -68,7 +68,11 @@ def telegram(text: str) -> None:
 
 def main() -> int:
     os.makedirs(OUT, exist_ok=True)
-    r = subprocess.run([CLAUDE, "-p", BRIEF, "--output-format", "json", "--max-turns", "120",
+    # Sonnet en 60 beurten. De run van 15 september kostte $10.91 op het standaardmodel, meer dan een
+    # derde van alle agentkosten van die maand, voor elf minuten zoeken, pagina's ophalen en samenvatten.
+    # Dat werk vraagt geen duurder model, en de run was binnen de helft van de 120 beurten klaar. De
+    # kostenregel hieronder meldt wat het nu echt wordt, zodat de volgende run het zelf laat zien.
+    r = subprocess.run([CLAUDE, "-p", BRIEF, "--model", "sonnet", "--output-format", "json", "--max-turns", "60",
                         "--allowedTools", "WebSearch,WebFetch,Read"], capture_output=True, text=True, timeout=3000, cwd=ROOT)
     try:
         antwoord = json.loads(r.stdout or "{}")
