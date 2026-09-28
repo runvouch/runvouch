@@ -61,6 +61,7 @@ def main() -> int:
         # Without this the walk ended in a bare traceback: no report file, no Telegram, only a FAILED alert
         # with nothing in it (14 September 2026, a second run next to the green one of that morning).
         uitvoer, fout = "", f"walk did not finish within {TIJD // 60} minutes"
+    antwoord = {}
     try:
         antwoord = json.loads(uitvoer or "{}")
         out = antwoord.get("result", "").strip()
@@ -70,7 +71,15 @@ def main() -> int:
     except Exception:
         out = ""
     if not out:
-        out = "Koperswandeling kon niet worden afgerond: " + (fout or "geen uitvoer")[-500:]
+        # 28 september 2026: de wandeling liep wel en kostte 5,20 dollar, maar result kwam leeg
+        # terug. Dit bestand bewaarde toen alleen "geen uitvoer" en gooide de ruwe JSON weg,
+        # waardoor niet te zien was waarom de tekst ontbrak terwijl de kosten er wel stonden.
+        # Nu gaat de reden uit de JSON mee en blijft de JSON zelf naast het rapport staan.
+        reden = fout or "; ".join(f"{k}={antwoord[k]}" for k in
+                                  ("subtype", "is_error", "num_turns", "duration_ms") if k in antwoord)
+        if uitvoer:
+            open(os.path.join(OUT, time.strftime("%Y-%m-%d") + ".json"), "w").write(uitvoer)
+        out = "Koperswandeling kon niet worden afgerond: " + (reden or "geen uitvoer")[-500:]
     path = os.path.join(OUT, time.strftime("%Y-%m-%d") + ".md")
     open(path, "w").write(out + "\n")
     print(out)
