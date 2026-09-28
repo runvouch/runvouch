@@ -1,16 +1,15 @@
 {
  "alerts_by_kind": {
   "DRIFT": 26,
-  "FAILED": 30,
-  "MISSED": 12,
-  "NO_EVIDENCE": 2,
+  "FAILED": 21,
+  "MISSED": 13,
   "STALLED": 3
  },
  "fleet": {
   "agents": 77,
   "description": "one production fleet running a data business: scrapers, refreshes, health checks, report builders and a handful of LLM jobs"
  },
- "generated": "2026-09-16",
+ "generated": "2026-09-28",
  "kind_meaning": {
   "BUDGET_DAY": "one agent went over its daily cost cap",
   "BUDGET_RUN": "one run went over its cost cap",
@@ -32,17 +31,17 @@
  "median_seconds_to_alert": 0.0,
  "proof": {
   "day_files": "https://api.runvouch.com/proof/",
-  "days_anchored_in_bitcoin": 22,
-  "days_sealed": 22,
+  "days_anchored_in_bitcoin": 33,
+  "days_sealed": 34,
   "first_day": "2026-08-25",
-  "runs_in_chain": 5315,
+  "runs_in_chain": 8876,
   "verify_in_browser": "https://runvouch.com/verify"
  },
  "runs": {
-  "failed": 30,
-  "failure_rate_percent": 0.54,
-  "finished": 5571,
-  "ok": 5541
+  "failed": 21,
+  "failure_rate_percent": 0.25,
+  "finished": 8473,
+  "ok": 8452
  },
  "source": "RunVouch, https://runvouch.com/how-often-jobs-fail",
  "window_days": 30
