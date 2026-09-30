@@ -87,6 +87,33 @@ def _agent_row(name):
     return [a for a in c.get("/v1/agents", headers=H).json() if a["name"] == name][0]
 
 
+def test_rv_run_can_state_the_cadence_it_expects():
+    """`rv run NAME --cadence 7d -- cmd` registers the schedule before it starts the command.
+
+    A job that only calls `rv run` gets an agent without a cadence, and MISSED never applies to
+    it. The trechtermeting unit was written with this flag on 16 September 2026 before it existed,
+    so rv exited 2 every week and the run never started. A job that dies before the start call is
+    invisible to its own watchdog: no run, no FAILED, no alert. Nobody noticed for two weeks.
+    """
+    import runvouch.cli as cli
+    echte_api, echte_run = cli.api, cli.subprocess.run
+
+    class _Proc:
+        returncode = 0
+        stdout = stderr = ""
+    cli.subprocess.run = lambda cmd, **kw: _Proc()
+    cli.api = lambda method, path, body=None, params=None, soft=False, **kw: c.request(
+        method, path, json=body, headers=H).json()
+    try:
+        cli.main(["run", "wekelijks", "--cadence", "7d", "--grace", "6h", "--", "echo", "hi"])
+    except SystemExit as e:
+        assert e.code == 0
+    finally:
+        cli.api, cli.subprocess.run = echte_api, echte_run
+    rij = _agent_row("wekelijks")
+    assert rij["cadence_s"] == 7 * 86400 and rij["grace_s"] == 6 * 3600
+
+
 def test_changing_one_agent_setting_leaves_the_others_alone():
     """POST /v1/agents replaces the agent, so the CLI has to send the current values back.
 

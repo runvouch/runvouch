@@ -63,14 +63,16 @@ def agent_payload(args):
         if a.get("name") == args.name:
             nu = a
             break
+    # getattr, because `rv run` carries only --cadence and --grace of these
+    vlag = lambda naam: getattr(args, naam, None)
     gegeven = {
         "cadence_s": dur(args.cadence) if args.cadence else None,
         "grace_s": dur(args.grace) if args.grace else None,
-        "max_runtime_s": dur(args.max_runtime) if args.max_runtime else None,
-        "cap_run_cost": args.cap_run_cost,
-        "cap_day_cost": args.cap_day_cost,
-        "cap_run_tokens": args.cap_run_tokens,
-        "evidence_required": True if args.evidence else None,
+        "max_runtime_s": dur(vlag("max_runtime")) if vlag("max_runtime") else None,
+        "cap_run_cost": vlag("cap_run_cost"),
+        "cap_day_cost": vlag("cap_day_cost"),
+        "cap_run_tokens": vlag("cap_run_tokens"),
+        "evidence_required": True if vlag("evidence") else None,
     }
     body = {"name": args.name}
     for veld, waarde in gegeven.items():
@@ -93,6 +95,8 @@ def main(argv=None):
     a.add_argument("--resume", action="store_true", help="watch it again")
     r = sub.add_parser("run"); r.add_argument("name"); r.add_argument("--evidence-file", action="append", default=[])
     r.add_argument("--evidence-url", action="append", default=[]); r.add_argument("--source", default="cron")
+    r.add_argument("--cadence", help="how often this job is supposed to run (7d, 24h); without it MISSED never applies")
+    r.add_argument("--grace", help="how late it may be before MISSED fires (default 15m)")
     r.add_argument("--log", help="append the command's stdout+stderr to this file (rv writes it, so it can double as evidence)")
     s = sub.add_parser("start"); s.add_argument("name"); s.add_argument("--source", default="custom")
     t = sub.add_parser("tool"); t.add_argument("run_id"); t.add_argument("tool"); t.add_argument("--input"); t.add_argument("--cost", type=float, default=0)
@@ -135,6 +139,14 @@ def main(argv=None):
         if not cmd:
             sys.exit("rv run NAME -- CMD ...")
         args.evidence_file = [os.path.abspath(f) for f in args.evidence_file]
+        if args.cadence or args.grace:
+            # A job that starts through `rv run` registers itself, but the server cannot guess how
+            # often it is supposed to run, so MISSED never applies to it. Saying it here keeps the
+            # schedule and the expectation in one line. The trechtermeting unit was written this way
+            # on 16 September 2026, the flag did not exist, and rv exited 2 before the run could
+            # start: every week since, the one measurement of signups and paying customers failed
+            # without leaving a run, so nothing noticed.
+            api("POST", "/v1/agents", agent_payload(args), soft=True)
         r0 = api("POST", "/v1/runs/start", {"agent": args.name, "source": args.source, "meta": {"cmd": " ".join(cmd)}}, soft=True)
         if r0 and r0.get("paused"):
             # The only answer that stops the command: the server says this agent is paused, because a
