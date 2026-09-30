@@ -3,7 +3,7 @@
 
 Twice a month: what did the competition change (prices, features, positioning), who is new in the two niches,
 where are we visible and where not, and which gaps are open that we could close first. Report ONLY what is measured
-(a URL, a price, a date), never guesses. Goes to the owner's Telegram and to data/marktwacht/YYYY-MM.md.
+(a URL, a price, a date), never guesses. Goes to the owner's Telegram and to data/marktwacht/YYYY-MM-DD.md.
 """
 import json, os, re, sqlite3, subprocess, sys, time, urllib.parse, urllib.request
 
@@ -49,8 +49,11 @@ Deliver, in Dutch, plain text, no em dashes, no separator lines, max 70 lines:
    RunVouch does not, and which data source or delivery channel does any competitor have that DataSignals Lab does not?
    One line each: what it is, who has it (URL), estimated build time for one developer, and whether a competitor could
    copy it back within a month (if yes: low priority, it is maintenance, not an edge). Before writing a line, check it
-   against the inventory above: if we already have it, leave it out. Start this section with the exact
-   line "BOUWLIJST" so it can be filed automatically. Write "BOUWLIJST\ngeen" if nothing was found."""
+   against the inventory above: if we already have it, leave it out. Check it as well against the build list of earlier
+   runs, appended below under AL OP DE BOUWLIJST: if the item is already there, leave it out, even if you would word it
+   differently or estimate the build time differently. Only genuinely new gaps belong in this section. Put the word
+   BOUWLIJST alone on its own line to open the section, with nothing before or after it on that line, and use that word
+   nowhere else in the report. Write "BOUWLIJST\ngeen" if nothing new was found."""
 
 
 def telegram(text: str) -> None:
@@ -66,13 +69,32 @@ def telegram(text: str) -> None:
         print("telegram:", e, file=sys.stderr)
 
 
+def eerdere_bouwlijst(grens: int = 6000) -> str:
+    """Wat er al op de bouwlijst staat, nieuwste boven, afgekapt op grens tekens.
+
+    Zonder deze terugkoppeling heeft de lijst geen geheugen. Over 1, 15 en 30 september leverden drie runs
+    38 regels op die grotendeels dezelfde zes gaten waren, in andere woorden en met bouwtijden die per run
+    verschoven: SMS-alerts stond er drie keer, Discord drie keer, escalatie drie keer, en Discord ging van
+    1 dag naar 0,5 dag naar 2 tot 3 dagen zonder dat er iets aan de markt veranderde. Het document dat het
+    gat met de markt moet tonen liet zo vooral drift zien.
+    """
+    bl = os.path.join(OUT, "bouwlijst.md")
+    if not os.path.exists(bl):
+        return ""
+    _, _, rest = open(bl).read().partition("\n\n")
+    return rest.strip()[:grens]
+
+
 def main() -> int:
     os.makedirs(OUT, exist_ok=True)
+    eerder = eerdere_bouwlijst()
+    brief = BRIEF + ("\n\nAL OP DE BOUWLIJST (uit eerdere runs, nieuwste boven). Neem hier niets van over in "
+                     "sectie 6:\n" + eerder if eerder else "")
     # Sonnet en 60 beurten. De run van 15 september kostte $10.91 op het standaardmodel, meer dan een
     # derde van alle agentkosten van die maand, voor elf minuten zoeken, pagina's ophalen en samenvatten.
     # Dat werk vraagt geen duurder model, en de run was binnen de helft van de 120 beurten klaar. De
     # kostenregel hieronder meldt wat het nu echt wordt, zodat de volgende run het zelf laat zien.
-    r = subprocess.run([CLAUDE, "-p", BRIEF, "--model", "sonnet", "--output-format", "json", "--max-turns", "60",
+    r = subprocess.run([CLAUDE, "-p", brief, "--model", "sonnet", "--output-format", "json", "--max-turns", "60",
                         "--allowedTools", "WebSearch,WebFetch,Read"], capture_output=True, text=True, timeout=3000, cwd=ROOT)
     try:
         antwoord = json.loads(r.stdout or "{}")
