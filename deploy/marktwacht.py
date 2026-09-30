@@ -5,7 +5,7 @@ Twice a month: what did the competition change (prices, features, positioning), 
 where are we visible and where not, and which gaps are open that we could close first. Report ONLY what is measured
 (a URL, a price, a date), never guesses. Goes to the owner's Telegram and to data/marktwacht/YYYY-MM.md.
 """
-import json, os, sqlite3, subprocess, sys, time, urllib.parse, urllib.request
+import json, os, re, sqlite3, subprocess, sys, time, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLAUDE = os.path.expanduser("~/.npm-global/bin/claude")
@@ -88,8 +88,12 @@ def main() -> int:
     path = os.path.join(OUT, stamp + ".md")
     open(path, "w").write(out + "\n")
     # the build list accumulates in one file, newest on top, so the gap between us and the market is one document
-    if "BOUWLIJST" in out:
-        lijst = out[out.index("BOUWLIJST") + len("BOUWLIJST"):].strip()
+    # only a line that is exactly BOUWLIJST opens the section. On 30 September the report opened with
+    # "BOUWLIJST-onderzoek is klaar", index() matched that first word at position 0 and the whole report
+    # landed in bouwlijst.md. Take the last standalone marker line, so a mention in the prose cannot win.
+    merk = list(re.finditer(r"(?m)^[ \t]*BOUWLIJST[ \t]*$", out))
+    if merk:
+        lijst = out[merk[-1].end():].strip()
         bl = os.path.join(OUT, "bouwlijst.md")
         oud = open(bl).read() if os.path.exists(bl) else "# Bouwlijst uit de marktwacht (nieuwste boven)\n\n"
         kop, _, rest = oud.partition("\n\n")
