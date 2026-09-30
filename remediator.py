@@ -25,7 +25,9 @@ RETRY_EVERY = 24 * 3600          # one retry + one repair attempt per agent per 
 MAX_REPAIRS_PER_DAY = 3
 NEVER = {"blogmotor", "blog-writer", "blog-queue", "reddit-scout", "clawhub-publish",   # content jobs: a human decides
          "verkoopmails", "events-api-kassa",   # sends mail / touches money: never re-run blindly, only alert
-         "koperswandeling"}   # 40-minute Claude walk: on 14 sep 2026 re-run for a 7 sep alert right after a green run
+         "koperswandeling",   # 40-minute Claude walk: on 14 sep 2026 re-run for a 7 sep alert right after a green run
+         "marktwacht", "kwartaalmeting"}   # paid Claude research runs: on 30 sep 2026 a false MISSED cost $3.29 for a
+                                           # report nobody asked for, one day before the scheduled run of 1 October
 # where a job's code lives -> which git repo to fix and how to publish the fix
 REPOS = [
     (HOME + "/apify/landing-live/", HOME + "/apify/landing", "git fetch -q hub && git rebase -q hub/main && git push -q hub HEAD:main"),
