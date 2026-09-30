@@ -87,6 +87,34 @@ def _agent_row(name):
     return [a for a in c.get("/v1/agents", headers=H).json() if a["name"] == name][0]
 
 
+def test_changing_one_agent_setting_leaves_the_others_alone():
+    """POST /v1/agents replaces the agent, so the CLI has to send the current values back.
+
+    On 30 September 2026 the expectation check advised `rv agent marktwacht --cadence 410h` to
+    silence a false MISSED. That command used to send empty fields for everything else, and the
+    upsert would have dropped the 4 dollar run cap and the 6 hour grace on a job whose only work
+    is a paid research run. The listing now carries those fields so the CLI can preserve them.
+    """
+    import runvouch.cli as cli
+    c.post("/v1/agents", json={"name": "wachter", "cadence_s": 86400, "grace_s": 21600,
+                               "max_runtime_s": 3600, "cap_run_cost": 4.0, "evidence_required": True}, headers=H)
+    rij = _agent_row("wachter")
+    assert rij["grace_s"] == 21600 and rij["cap_run_cost"] == 4.0 and rij["evidence_required"] is True
+
+    echte = cli.api
+    cli.api = lambda method, path, body=None, params=None, soft=False, **kw: c.request(
+        method, path, json=body, headers=H).json()
+    try:
+        cli.main(["agent", "wachter", "--cadence", "410h"])
+    finally:
+        cli.api = echte
+    na = _agent_row("wachter")
+    assert na["cadence_s"] == 410 * 3600, "de gevraagde wijziging gaat wel door"
+    assert na["grace_s"] == 21600, "de marge blijft staan"
+    assert na["cap_run_cost"] == 4.0, "het kostenplafond blijft staan"
+    assert na["evidence_required"] is True, "de bewijsplicht blijft staan"
+
+
 def test_rv_run_skips_a_paused_agent_but_never_an_outage():
     """The brake works in the client, so it must not slam on for anything but an explicit pause."""
     import runvouch.cli as cli

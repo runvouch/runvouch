@@ -1830,7 +1830,13 @@ def list_agents(acc=Depends(account_from_key)):
         last = q1("SELECT * FROM runs WHERE agent_id=? ORDER BY started DESC LIMIT 1", a["id"])
         open_alerts = q1("SELECT COUNT(*) n FROM alerts WHERE agent_id=? AND acked=0", a["id"])["n"]
         cost24 = q1("SELECT COALESCE(SUM(cost),0) s FROM runs WHERE agent_id=? AND started>?", a["id"], time.time() - 86400)["s"]
+        # grace and the caps are listed too. Without them a caller that wants to change one
+        # setting has nothing to send back for the rest, and POST /v1/agents replaces the whole
+        # agent: `rv agent x --cadence 26h` used to wipe a cost cap and a grace window that way.
         out.append({"name": a["name"], "cadence_s": a["cadence_s"], "paused": bool(a["paused"]),
+                    "grace_s": a["grace_s"], "max_runtime_s": a["max_runtime_s"],
+                    "cap_run_cost": a["cap_run_cost"], "cap_day_cost": a["cap_day_cost"],
+                    "cap_run_tokens": a["cap_run_tokens"], "evidence_required": bool(a["evidence_required"]),
                     "last_run": dict(last) if last else None, "open_alerts": open_alerts, "cost_24h": round(cost24, 4),
                     "state": _state(a, last, open_alerts), "ping_url": ping_url(a)})
     return out
