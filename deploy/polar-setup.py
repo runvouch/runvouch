@@ -46,6 +46,24 @@ def items(path):
         page += 1
 
 
+def sync_description(product, plan, desc):
+    """Bring the product blurb in line with PLANS, because that is what the buyer reads at the till.
+
+    The description used to be sent only when a product was created. The limits in PLANS moved to
+    50 and 1000 agents on 16 September 2026 and nobody sent that to Polar, so the buyer walk of
+    21 September still measured "15 agents" in the live Solo checkout and "100 agents, Slack &
+    PagerDuty" in Team, while the pricing page and PLAN_LIMITS in the server said 50 and 1000, and
+    Slack sits in Free. The last screen before paying contradicted the page that did the selling,
+    and re-running this script would not have fixed it: --prices moved only the amount.
+    """
+    huidig = (product.get("description") or "").strip()
+    if huidig == desc.strip():
+        print(f"{plan}: description already matches PLANS")
+        return
+    call("PATCH", f"/v1/products/{product['id']}", {"description": desc})
+    print(f"{plan}: description {huidig[:50]!r} -> {desc[:50]!r}")
+
+
 env, product_plans = {}, []
 for plan, name, cents, desc in PLANS:
     found = [p for p in items("/v1/products/?is_archived=false") if p["name"] == name]
@@ -53,6 +71,7 @@ for plan, name, cents, desc in PLANS:
         if not found:
             sys.exit(f"{name} does not exist yet; run once without --prices first")
         product = found[0]
+        sync_description(product, plan, desc)
         levend = [p for p in product.get("prices", []) if not p.get("is_archived")]
         if any(p.get("price_amount") == cents for p in levend):
             print(f"{plan}: already at ${cents / 100:.2f}, nothing to do")
@@ -66,6 +85,8 @@ for plan, name, cents, desc in PLANS:
         "name": name, "description": desc, "recurring_interval": "month",
         "prices": [{"amount_type": "fixed", "price_amount": cents, "price_currency": "usd"}],
         "metadata": {"plan": plan}})
+    if found:
+        sync_description(product, plan, desc)
     links = [l for l in items("/v1/checkout-links/") if (l.get("metadata") or {}).get("plan") == plan]
     link = links[0] if links else call("POST", "/v1/checkout-links/", {
         "payment_processor": "stripe", "products": [product["id"]], "allow_discount_codes": True,
