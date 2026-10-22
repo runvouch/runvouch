@@ -49,6 +49,12 @@ else:
 # er als vaste tekst en niet als PROCESSOR-variabele: die geeft de HUIDIGE provider, en dan
 # leest de regel van 25 augustus alsof Polar er toen al stond (gemeld 7 sep 2026).
 RELEASES = [
+    ("0.3.4", "2026-10-22", ["<code>rv proof RUN_ID [--verify]</code>: the tamper-evident proof of a finished run, checked against the public day file.",
+                             "<code>rv agent NAME --pause</code> and <code>--resume</code>: a switched-off job is not a missed job.",
+                             "<code>rv agent NAME --no-drift</code> for LLM rounds that have no normal duration or output size.",
+                             "<code>rv run NAME --cadence 24h</code> states the expected cadence from the job itself.",
+                             "A ping URL per agent, so a crontab line, an n8n node or a Docker HEALTHCHECK can report without a client.",
+                             "A crossed cost cap pauses the agent on Solo and Team instead of only raising an alert."]),
     ("0.3.3", "2026-08-26", ["<code>pip install runvouch</code> and <code>npm install runvouch</code>: client plus the <code>rv</code> CLI, hosted API by default.",
                              "Listed in the MCP registry with a verifiable proof link.",
                              "Subscriptions moved from Lemon Squeezy to Polar, with billing mail on its webhook."]),

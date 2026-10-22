@@ -1,6 +1,6 @@
 {
   "name": "runvouch",
-  "version": "0.2.0",
+  "version": "0.3.4",
   "description": "The watchdog for scheduled Claude Code agents: proof the run did the job, and an alert the moment it does not. Missed runs, silent failures (green is not done), API errors that end the turn, retry storms, runaway cost, drift. Email, Telegram, Slack or webhook.",
   "author": {
     "name": "RunVouch"

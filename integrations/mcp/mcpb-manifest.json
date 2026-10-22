@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "runvouch",
   "display_name": "RunVouch",
-  "version": "0.3.2",
+  "version": "0.3.4",
   "description": "Watchdog for unattended AI agents: agent health, alerts, run reports with evidence and cost.",
   "long_description": "Ask Claude which of your scheduled agents are healthy, read open alerts (missed runs, silent failures, retry storms, cost caps, drift), and report runs with evidence. Free for 3 agents at runvouch.com.",
   "author": { "name": "RunVouch", "url": "https://runvouch.com" },

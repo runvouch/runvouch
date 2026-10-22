@@ -86,7 +86,7 @@ SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID", "")
 SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET", "")
 SLACK_STATE_TTL = 600  # seconds an Add to Slack link stays valid
 
-app = FastAPI(title="RunVouch", version="0.2.0")
+app = FastAPI(title="RunVouch", version=VERSION)
 if CORS_ORIGINS:
     app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
@@ -2287,7 +2287,7 @@ async def mcp_http(request: Request):
         return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}, status_code=400)
     mid, m, p = msg.get("id"), msg.get("method"), msg.get("params") or {}
     if m == "initialize":
-        return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": p.get("protocolVersion", "2025-06-18"), "capabilities": {"tools": {}}, "serverInfo": {"name": "runvouch", "version": "0.3.0"}}})
+        return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": p.get("protocolVersion", "2025-06-18"), "capabilities": {"tools": {}}, "serverInfo": {"name": "runvouch", "version": VERSION}}})
     if m in ("notifications/initialized", "ping"):
         return JSONResponse({"jsonrpc": "2.0", "id": mid, "result": {}}) if mid is not None else PlainTextResponse("", status_code=202)
     if m == "tools/list":

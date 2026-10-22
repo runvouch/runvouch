@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// rv — RunVouch CLI (Node 18+, zero dependencies). Fails open: monitoring can never break your job.
-//   rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence]
+// rv: RunVouch CLI (Node 18+, zero dependencies). Fails open: monitoring can never break your job.
+//   rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence] [--no-drift|--drift] | --pause | --resume
 //   rv run    NAME [--evidence-file PATH] [--evidence-url URL] [--source cron] [--log FILE] -- CMD ARGS...
 //   rv status | rv alerts [--ack ID]
 // Env: RUNVOUCH_KEY (free key at https://runvouch.com/app), RUNVOUCH_URL (default https://api.runvouch.com)
@@ -12,7 +12,7 @@ const USAGE = fs.readFileSync(__filename, 'utf8').split('\n').slice(1, 6).map(l 
 async function api(method, p, body, soft) {
   if (!KEY) { if (soft) { console.error('runvouch: RUNVOUCH_KEY not set, running unmonitored'); return null; } die('RUNVOUCH_KEY not set'); }
   try {
-    const r = await fetch(URL_ + p, { method, headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json', 'User-Agent': 'runvouch-node-cli/0.3' }, body: body ? JSON.stringify(body) : undefined });
+    const r = await fetch(URL_ + p, { method, headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json', 'User-Agent': 'runvouch-node-cli/0.3.4' }, body: body ? JSON.stringify(body) : undefined });
     if (!r.ok) throw new Error(`RunVouch ${r.status}: ${(await r.text()).slice(0, 200)}`);
     return await r.json();
   } catch (e) { if (soft) { console.error('runvouch:', e.message, '(running unmonitored)'); return null; } die(e.message); }
@@ -37,11 +37,20 @@ const one = (f, k, d) => (f[k] ? f[k][0] : d);
   const { _, flags } = parse(argv);
   if (cmd === 'agent') {
     const name = _[0] || die(USAGE);
-    console.log(JSON.stringify(await api('POST', '/v1/agents', {
-      name, cadence_s: flags.cadence ? dur(one(flags, 'cadence')) : null, grace_s: dur(one(flags, 'grace', '15m')), max_runtime_s: dur(one(flags, 'max-runtime', '1h')),
+    if (flags.pause || flags.resume) { console.log(JSON.stringify(await api('POST', `/v1/agents/${encodeURIComponent(name)}/pause?paused=${flags.pause ? 'true' : 'false'}`, {}))); return; }
+    // POST /v1/agents replaces the whole agent, so read the current settings first and only
+    // overwrite what the caller asked for (the Python client does the same since 0.3.4).
+    const nu = ((await api('GET', '/v1/agents', null, true)) || []).find(a => a.name === name) || {};
+    const given = {
+      cadence_s: flags.cadence ? dur(one(flags, 'cadence')) : null, grace_s: flags.grace ? dur(one(flags, 'grace')) : null,
+      max_runtime_s: flags['max-runtime'] ? dur(one(flags, 'max-runtime')) : null,
       cap_run_cost: flags['cap-run-cost'] ? parseFloat(one(flags, 'cap-run-cost')) : null, cap_day_cost: flags['cap-day-cost'] ? parseFloat(one(flags, 'cap-day-cost')) : null,
-      cap_run_tokens: flags['cap-run-tokens'] ? parseInt(one(flags, 'cap-run-tokens'), 10) : null, evidence_required: !!flags.evidence,
-    })));
+      cap_run_tokens: flags['cap-run-tokens'] ? parseInt(one(flags, 'cap-run-tokens'), 10) : null, evidence_required: flags.evidence ? true : null,
+      drift_watch: flags['no-drift'] ? false : (flags.drift ? true : null),
+    };
+    const body = { name };
+    for (const [k, v] of Object.entries(given)) { const w = v !== null ? v : nu[k]; if (w !== null && w !== undefined) body[k] = w; }
+    console.log(JSON.stringify(await api('POST', '/v1/agents', body)));
   } else if (cmd === 'run') {
     const name = _[0]; if (!name || !tail.length) die('rv run NAME -- CMD ...');
     const evFiles = (flags['evidence-file'] || []).map(f => path.resolve(f));
