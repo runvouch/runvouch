@@ -26,7 +26,7 @@
 <li><span class="t">04:00 price-scraper</span><span class="m">$0.41 · 12 tool calls · output 118 KB</span><span class="pill ok">vouched</span></li>
 <li><span class="t">05:00 lead-enricher</span><span class="m">$7.90 this run · <b>daily cap $5 hit</b></span><span class="pill bad">budget</span></li>
 </ul>
-<div class="alertbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:.15rem"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> <span><b>Telegram, 03:34 (example)</b>: repo-janitor: same tool + same input 41×. Each call looks fine; together it's a loop. <a href="/docs/api">Pause agent</a></span></div></div>
+<div class="alertbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:.15rem"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> <span><b>Telegram, 03:34 (example)</b>: repo-janitor: same tool + same input 41×. Each call looks fine. Together it's a loop. <a href="/docs/api">Pause agent</a></span></div></div>
 </div></section>
 <a class="ticker" href="#how" aria-label="Example alerts"><span class="tk-label">examples</span><div class="tk-wrap"><div class="tk-track"><span><b>MISSED</b> nightly-report, no run started for 16 min</span><span><b>NO_EVIDENCE</b> inbox-triage, digest.html unchanged, <em>green ≠ done</em></span><span><b>RETRY_STORM</b> repo-janitor, 41× identical tool call</span><span><b>BUDGET_DAY</b> lead-enricher, <em>$7.90 &gt; cap $5.00</em></span><span><b>VOUCHED</b> price-scraper, $0.41, evidence ok</span><span><b>MISSED</b> nightly-report, no run started for 16 min</span><span><b>NO_EVIDENCE</b> inbox-triage, digest.html unchanged, <em>green ≠ done</em></span><span><b>RETRY_STORM</b> repo-janitor, 41× identical tool call</span><span><b>BUDGET_DAY</b> lead-enricher, <em>$7.90 &gt; cap $5.00</em></span><span><b>VOUCHED</b> price-scraper, $0.41, evidence ok</span></div></div></a>
 
@@ -34,7 +34,7 @@
 <span class="kicker">the problem</span><h2>"It ran" is the <span class="grad">wrong question</span></h2>
 <div class="grid g3">
 <div class="card"><div class="big grad">$1,800</div><h3>in two nights</h3><p>A Max subscriber scheduled overnight Claude Code runs. Nobody noticed until the bill. A per-run cost cap stops this at $2.</p></div>
-<div class="card"><div class="big grad">$437</div><h3>for 14,000 identical calls</h3><p>An agent got stuck on a missing file. Every single call looked normal in the logs; the pattern only exists across calls. That's a retry storm, RunVouch counts them and alerts at 8.</p></div>
+<div class="card"><div class="big grad">$437</div><h3>for 14,000 identical calls</h3><p>An agent got stuck on a missing file. Every single call looked normal in the logs. The pattern only exists across calls. That's a retry storm, RunVouch counts them and alerts at 8.</p></div>
 <div class="card"><div class="big grad">0 bytes</div><h3>green run, empty report</h3><p>The routine "succeeded". The report it was supposed to publish never changed. Ping monitors can't see that. Evidence checks can.</p></div>
 </div>
 <p class="small muted" style="margin-top:1rem">Sources: <a href="https://github.com/anthropics/claude-code/issues/37686" rel="noopener">Claude Code issue #37686</a> ($1,800+ in two days) · <a href="https://dev.to/magicrails/i-let-my-ai-agent-run-overnight-it-cost-437-dd7" rel="noopener">"I let my AI agent run overnight, it cost $437"</a>. <a href="/blog/">Read the write-ups →</a></p>
@@ -59,7 +59,7 @@ nightly-report   ok   $0.41   0 alerts</pre></div>
 <div class="grid g3">
 <div class="card"><h3>A record per run</h3><p>When a run ends, its facts (agent, start, end, status, cost, tokens, tool calls, evidence verdicts) become one JSON object and a sha256 leaf. Written once, never updated.</p></div>
 <div class="card"><h3>A public daily chain</h3><p>Every UTC day the leaves of all runs form a Merkle root, chained to the previous day. The day file is public at <a href="https://api.runvouch.com/proof/">api.runvouch.com/proof/</a>, no login.</p></div>
-<div class="card"><h3>A Bitcoin anchor</h3><p>Each day file is stamped with OpenTimestamps, so its existence is committed in a Bitcoin block. Check it with <code>ots verify</code>; no RunVouch code involved.</p></div>
+<div class="card"><h3>A Bitcoin anchor</h3><p>Each day file is stamped with OpenTimestamps, so its existence is committed in a Bitcoin block. Check it with <code>ots verify</code>. No RunVouch code involved.</p></div>
 </div>
 <pre>rv proof RUN_ID --verify   <span class="d"># recomputes the leaf and the Merkle path against the public day file, exit 0 or 1</span></pre>
 <p class="small muted"><a href="/verify"><b>Verify a real run in your browser</b></a>, no account: recompute the hashes and edit a field to watch it break. Who needs this: <a href="/verifiable-agent-runs">verifiable agent runs</a> · the mechanism, byte for byte: <a href="/docs/proof">docs/proof</a></p>
@@ -85,7 +85,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3><span class="tag">FAILED</span></h3><p>Non-zero exit or explicit failure, with the last stderr lines in the alert.</p></div>
 <div class="card"><h3><span class="tag">NO_EVIDENCE</span></h3><p>Run says ok, but the file didn't change, the URL 404s, the assertion is false. Green ≠ done.</p></div>
 <div class="card"><h3><span class="tag">RETRY_STORM</span></h3><p>Same tool, identical input, N times in one run. The invisible loop that burns money.</p></div>
-<div class="card"><h3><span class="tag">BUDGET</span></h3><p>Per-run and per-day cost or token caps. Alert, then pause the agent.</p></div>
+<div class="card"><h3><span class="tag">BUDGET</span></h3><p>Per-run and per-day cost or token caps. Alert on every plan, and on Solo and Team the agent is paused.</p></div>
 <div class="card"><h3><span class="tag">DRIFT</span></h3><p>Duration or output size off its recent baseline, and outside the range this job has actually produced. The agent is quietly doing something else.</p></div>
 <div class="card"><h3><span class="tag">STALLED</span></h3><p>Started, no end, no heartbeat past the max runtime. Hung on a prompt nobody will answer.</p></div>
 <div class="card"><h3><span class="tag">COST</span></h3><p>Tokens and dollars per run, read straight from Claude Code transcripts. Weekly cost report per agent.</p></div>
@@ -110,7 +110,7 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <tr><td>Knows the job ran on time</td><td>yes</td><td>no</td><td class="y">yes</td></tr>
 <tr><td>Knows the job actually <em>did</em> something (evidence)</td><td>no</td><td>no</td><td class="y">yes</td></tr>
 <tr><td>Detects retry storms across tool calls</td><td>no</td><td>manual, in traces</td><td>automatic</td></tr>
-<tr><td>Hard cost cap per run / per day</td><td>no</td><td>threshold alerts, no cap</td><td class="y">yes + pause</td></tr>
+<tr><td>Hard cost cap per run / per day</td><td>no</td><td>threshold alerts, no cap</td><td class="y">yes, and the agent is paused (Solo and Team)</td></tr>
 <tr><td>Setup</td><td>1 URL</td><td>SDK in your code</td><td>2 lines or a plugin</td></tr>
 <tr><td>Built for</td><td>ops teams, cron</td><td>ML teams debugging prompts</td><td>people running agents unattended</td></tr>
 <tr><td>Price</td><td>$0–85/mo</td><td>per seat / per million spans</td><td>$0 · $19 · $99</td></tr></table>
@@ -125,15 +125,15 @@ claude -p "build the report"</pre><p>Plugin hooks report start, tools, cost, sto
 <div class="card"><h3>Team</h3><div class="n">$99<small>/month</small></div><ul><li>1000 agents</li><li>90-day history</li><li>API export (CSV / JSON) for audits</li><li>Read-only dashboard for teammates (viewer keys)</li><li>PagerDuty incidents</li><li>Verifiable proof per run</li></ul><a class="btn ghost" href="https://buy.polar.sh/polar_cl_XzTkjGGHRdRqlXbCVfbWLiTBWAd4IA9cq6ZjX227pU1" data-ls="customer_email">Upgrade to Team, $99/mo</a></div>
 </div>
 <p class="small muted" style="margin-top:1rem">Running these jobs for clients instead of yourself? <a href="/for-agencies">What an agency shows the client</a>.</p>
-<div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Polar; upgrade with the same email you sign up with.</p>
+<div id="signup" style="margin-top:2rem"><h3>Get your key</h3><p class="muted">Only used to identify your account and match a future subscription. No newsletter, no card. Prices in USD, VAT handled at checkout by Polar. Upgrade with the same email you sign up with.</p>
 <form class="signup" onsubmit="return signup(event)"><input id="em" type="email" required placeholder="you@company.com" autocomplete="email"><button class="btn" type="submit">Get a free key</button></form>
 <div id="keybox" class="keybox"></div></div>
 </div></section>
 
 <section class="alt faq"><div class="wrap"><span class="kicker">faq</span><h2>Questions</h2>
-<details><summary>Why do you need my email for a free key?</summary><p>Because the key is the account. If you upgrade later, the payment is matched to the same email; if you lose the key, we can rotate it. We don't send marketing mail.</p></details>
+<details><summary>Why do you need my email for a free key?</summary><p>Because the key is the account. If you upgrade later, the payment is matched to the same email. If you lose the key, we can rotate it. We don't send marketing mail.</p></details>
 <details><summary>What does $19 buy that Free does not have?</summary><p>The brake. On every plan a cost cap alerts you the moment a run crosses it. On Solo and Team the next run is refused as well, so a loop that bills by the token stops instead of running until morning. Free is three agents, all eight detectors and every alert channel, so you can see what RunVouch does before you pay for it.</p></details>
-<details><summary>Does RunVouch see my prompts or data?</summary><p>No. It receives what your job reports: start/end, exit status, tool names and a hash of their input (for loop detection), cost/tokens, output size, and true/false evidence results. Evidence checks on files run on your machine; only the verdict is sent.</p></details>
+<details><summary>Does RunVouch see my prompts or data?</summary><p>No. It receives what your job reports: start/end, exit status, tool names and a hash of their input (for loop detection), cost/tokens, output size, and true/false evidence results. Evidence checks on files run on your machine. Only the verdict is sent.</p></details>
 <details><summary>What if RunVouch is down?</summary><p><code>rv run</code> fails open: your job still runs unmonitored and prints a warning. Monitoring must never break the thing it monitors.</p></details>
 <details><summary>Can I self-host?</summary><p>Yes. The server is a single MIT-licensed Python file with SQLite. The hosted version is the same code plus alerts, backups and the dashboard.</p></details>
 <details><summary>Where does it run?</summary><p>EU (Netherlands) infrastructure behind Cloudflare. Data stays in the EU.</p></details>

@@ -15,7 +15,7 @@ runvouch.agent("nightly-etl", cadence_s=86400, cap_run_cost=2, evidence_required
 with runvouch.vouch("nightly-etl", evidence=lambda: {"parquet": os.path.getsize("out.parquet") > 0}) as run:
     for f in files:
         run.tool("summarize", {"file": f}, cost=0.004)   <span class="d"># identical inputs 8x → RETRY_STORM</span>
-        summarize(f)</pre><p>An exception inside the block ends the run as <code>fail</code> with the error text in the alert; a clean exit ends it as <code>ok</code> and evaluates your evidence.</p><h2 id="langgraph">LangGraph</h2><pre>from langchain_core.callbacks import BaseCallbackHandler
+        summarize(f)</pre><p>An exception inside the block ends the run as <code>fail</code> with the error text in the alert. A clean exit ends it as <code>ok</code> and evaluates your evidence.</p><h2 id="langgraph">LangGraph</h2><pre>from langchain_core.callbacks import BaseCallbackHandler
 import runvouch
 
 class Vouch(BaseCallbackHandler):
@@ -32,7 +32,7 @@ import runvouch
 
 with runvouch.vouch("inbox-agent", evidence=lambda: {"replied": replied_count > 0}) as run:
     result = Runner.run_sync(agent, "Triage today's inbox")
-    run.tool("openai.run", None, tokens=result.context_wrapper.usage.total_tokens)</pre><p>Per-tool reporting is optional; per-run cost and evidence are enough for daily caps, drift and "green ≠ done".</p><h2 id="node">Node</h2><pre><span class="d">// npm install runvouch   (Node 18+; or: curl -fsSL https://runvouch.com/runvouch.js -o runvouch.js)</span>
+    run.tool("openai.run", None, tokens=result.context_wrapper.usage.total_tokens)</pre><p>Per-tool reporting is optional. Per-run cost and evidence are enough for daily caps, drift and "green ≠ done".</p><h2 id="node">Node</h2><pre><span class="d">// npm install runvouch   (Node 18+; or: curl -fsSL https://runvouch.com/runvouch.js -o runvouch.js)</span>
 const rv = require('runvouch');
 await rv.agent('nightly-report', { cadence_s: 86400, cap_run_cost: 2, evidence_required: true });
 

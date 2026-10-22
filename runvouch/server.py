@@ -2002,12 +2002,12 @@ async def _ping(token: str, signal: str, request: Request):
     return PlainTextResponse("OK")
 
 
-@app.api_route("/ping/{token}", methods=["GET", "POST", "HEAD"])
+@app.api_route("/ping/{token}", methods=["GET", "POST", "HEAD"], operation_id="ping_plain")
 async def ping(token: str, request: Request):
     return await _ping(token, "", request)
 
 
-@app.api_route("/ping/{token}/{signal}", methods=["GET", "POST", "HEAD"])
+@app.api_route("/ping/{token}/{signal}", methods=["GET", "POST", "HEAD"], operation_id="ping_signal")
 async def ping_signal(token: str, signal: str, request: Request):
     return await _ping(token, signal, request)
 

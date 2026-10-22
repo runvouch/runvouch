@@ -14,13 +14,13 @@
 <p>Process-level watchdogs answer one question: is the PID there. A polling loop passes that check perfectly. So does a hung tool call, and so does an agent that finished its task an hour ago and is now re-reading the same file because its stop condition never fired.</p>
 <p>The loop in #16808 is invisible per call because each call is identical and each call succeeds. It is only visible as a <em>pattern</em>: same tool, same input, again and again, inside one run. That is the unit a watchdog for agents has to reason about, the run, not the process and not the call.</p>
 <h2>The 60-second detection: same tool, identical input, N times</h2>
-<p>RunVouch hashes the input of every tool call it is told about. When the same tool with the same input hash appears eight times in one run, that is <code>RETRY_STORM</code> and you get a message. Call 8 of 1,535 happens within the first minute of that loop. The threshold is configurable; eight is where legitimate retries stop and loops start, in my experience.</p>
+<p>RunVouch hashes the input of every tool call it is told about. When the same tool with the same input hash appears eight times in one run, that is <code>RETRY_STORM</code> and you get a message. Call 8 of 1,535 happens within the first minute of that loop. The threshold is configurable. Eight is where legitimate retries stop and loops start, in my experience.</p>
 <pre>curl -X POST https://api.runvouch.com/v1/runs/tool \
   -H "X-API-Key: $RUNVOUCH_KEY" -H "Content-Type: application/json" \
   -d '{"run_id":"…","tool":"process","input":{"action":"log","sessionId":"X"},"cost":0.001}'</pre>
 <p>A loop that polls with a changing cursor does not match, because the input changes. Polling the same endpoint with the same arguments does, which is the point.</p>
 <h2>The backstop: a daily cap the agent cannot talk its way past</h2>
-<p>Loop detection needs tool-level reporting. If you only report run start and end, you still get the second line of defence: <code>cap_day_cost</code>. Register the agent with a daily cap and every run reports its cost; the moment the 24-hour sum crosses the cap you get <code>BUDGET_DAY</code>, and a webhook can pause the agent so the next scheduled task does not start.</p>
+<p>Loop detection needs tool-level reporting. If you only report run start and end, you still get the second line of defence: <code>cap_day_cost</code>. Register the agent with a daily cap and every run reports its cost. The moment the 24-hour sum crosses the cap you get <code>BUDGET_DAY</code>, and a webhook can pause the agent so the next scheduled task does not start.</p>
 <pre>rv agent openclaw-main --cadence 15m --grace 5m --cap-day-cost 10 --evidence</pre>
 <p>For OpenClaw specifically there is a <a href="/openclaw/runvouch/SKILL.md">skill</a> that teaches the agent to check in at start, per tool call and at the end, with evidence, and to stop repeating a call when RunVouch answers with an alert. Setup is in the <a href="/docs/openclaw">OpenClaw docs</a>.</p>
 <h2>Evidence closes the last gap</h2>

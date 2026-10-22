@@ -35,7 +35,7 @@ Mechanism and limits: https://runvouch.com/docs/proof · who needs it: https://r
 | `FAILED` | run ended non-zero / status=fail |
 | `NO_EVIDENCE` | run said ok but required proof (file written, URL 200, assertion) is missing, *green ≠ done* |
 | `RETRY_STORM` | same tool + identical input ≥ N times in one run (the invisible loop that costs $437) |
-| `BUDGET_RUN` / `BUDGET_DAY` | cost or tokens over the cap you set; the agent is paused and its next run is refused until `rv agent NAME --resume` |
+| `BUDGET_RUN` / `BUDGET_DAY` | cost or tokens over the cap you set. On Solo and Team the agent is paused and its next run is refused until `rv agent NAME --resume` |
 | `DRIFT` | duration / output size off its 7-run baseline (robust MAD), silently doing something else |
 | `STALLED` | started, no end and no heartbeat past max runtime |
 
@@ -44,11 +44,11 @@ Alerts go to e-mail, Telegram, Slack, any JSON webhook, PagerDuty (Team) and the
 ## Layout
 ```
 runvouch/server.py            FastAPI + SQLite, all detectors, dashboard at /
-runvouch/cli.py               `aw`, stdlib-only client: rv agent / rv run -- CMD / rv status / rv alerts
+runvouch/cli.py               `rv`, stdlib-only client: rv agent / rv run -- CMD / rv status / rv alerts / rv proof
 integrations/claude-code-plugin Claude Code plugin: SessionStart/PostToolUse/Stop hooks → RunVouch
 integrations/mcp                MCP server (stdio): runvouch_status/alerts/ack/runs/run_start/run_end
-site/index.html                 landing page
-tests/                          7 detector tests (pytest)
+site/build.py                   generates the site into site/public/ (served by the same server)
+tests/                          123 tests (pytest, no network)
 docs/SELF_HOSTING.md            run it yourself: Docker or venv, what differs from hosted
 ```
 
@@ -76,7 +76,7 @@ MCP: `claude mcp add runvouch -e RUNVOUCH_KEY=... -- python3 integrations/mcp/ru
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Hosted vs self-host
-Hosted at [runvouch.com](https://runvouch.com): free for 3 agents, $19 Solo, $99 Team, alerts, dashboard, backups, EU hosting. Self-host: this repo, MIT. Same code.
+Hosted at [runvouch.com](https://runvouch.com): free for 3 agents, $19 Solo, $99 Team, alerts, dashboard, a nightly database backup on the server, EU hosting. Self-host: this repo, MIT. Same code.
 
 ## Compare
 [vs Healthchecks.io](https://runvouch.com/vs/healthchecks) · [vs Cronitor](https://runvouch.com/vs/cronitor) · [vs Langfuse](https://runvouch.com/vs/langfuse)

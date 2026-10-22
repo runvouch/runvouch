@@ -15,7 +15,7 @@
 
 <h2 id="blind">The failure your error handling cannot see</h2>
 <p>A failed run is the easy case: the error workflow fires, Slack lights up, you fix it. The expensive case is the run that never happened. A workflow someone deactivated during a test, a schedule that did not survive an upgrade, a token that expired, a container that never came back after a reboot. None of those produce a failed execution, because none of them produce an execution at all. The execution list stays clean, the error workflow stays quiet, and the report the client pays for is simply not there. Weeks later they ask, and you are explaining instead of invoicing.</p>
-<p>The same hole exists outside n8n. Cron does not care whether your job ran; it only cares that it fired the command. A headless agent that exits 0 after writing nothing looks exactly like a good night.</p>
+<p>The same hole exists outside n8n. Cron does not care whether your job ran. It only cares that it fired the command. A headless agent that exits 0 after writing nothing looks exactly like a good night.</p>
 
 <h2 id="watch">What RunVouch watches, per client</h2>
 <ul>
@@ -36,7 +36,7 @@ curl -X POST https://api.runvouch.com/v1/fleets/acme/agents -H "X-API-Key: $RUNV
 <p class="small muted">The page is public JSON at <code>/public/fleet/acme.json</code>: run facts only, no cost, no evidence, no keys. Drop it in your own client portal or link it as is. Client pages are part of Team.</p>
 
 <h2 id="setup">Setting it up on an instance you do not own</h2>
-<p>Every agent gets a ping URL. At the end of the client workflow, one HTTP Request node to the success URL; on the error path, one to the /fail URL. That is the whole integration, and it works on their cloud instance, their VPS or their laptop. Where you do control the machine, wrap the command instead and you get cost, duration and evidence for free:</p>
+<p>Every agent gets a ping URL. At the end of the client workflow, one HTTP Request node to the success URL. On the error path, one to the /fail URL. That is the whole integration, and it works on their cloud instance, their VPS or their laptop. Where you do control the machine, wrap the command instead and you get cost, duration and evidence for free:</p>
 <pre>rv agent acme-nightly-report --cadence 24h --cap-run-cost 2 --evidence
 rv run acme-nightly-report --evidence-file /srv/acme/report.html -- python build_report.py</pre>
 <p>Guides per platform: <a href="/docs/n8n">n8n</a>, <a href="/docs/cron">cron and systemd</a>, <a href="/docs/claude-code">Claude Code</a>, <a href="/integrations/">everything else</a>.</p>
