@@ -2,7 +2,7 @@
 """
 rv: RunVouch client CLI. Zero dependencies (stdlib only) so it runs in any cron/agent environment.
 
-  rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence]
+  rv agent  NAME [--cadence 24h] [--cap-run-cost 2] [--cap-day-cost 10] [--evidence] [--no-drift]
   rv agent  NAME --pause | --resume   (a paused agent starts nothing and is never reported missed)
   rv run    NAME [--evidence-file PATH] [--evidence-url URL] [--source cron] -- CMD ARGS...
   rv start  NAME            -> prints run_id
@@ -73,6 +73,9 @@ def agent_payload(args):
         "cap_day_cost": vlag("cap_day_cost"),
         "cap_run_tokens": vlag("cap_run_tokens"),
         "evidence_required": True if vlag("evidence") else None,
+        # --no-drift switches the duration/output-size detector off for jobs without one normal
+        # level (LLM rounds); --drift switches it back on. Neither given: keep what the server has.
+        "drift_watch": False if vlag("no_drift") else (True if vlag("drift") else None),
     }
     body = {"name": args.name}
     for veld, waarde in gegeven.items():
@@ -88,6 +91,8 @@ def main(argv=None):
     a = sub.add_parser("agent"); a.add_argument("name"); a.add_argument("--cadence"); a.add_argument("--grace")
     a.add_argument("--max-runtime"); a.add_argument("--cap-run-cost", type=float); a.add_argument("--cap-day-cost", type=float)
     a.add_argument("--cap-run-tokens", type=int); a.add_argument("--evidence", action="store_true")
+    a.add_argument("--no-drift", action="store_true", help="no duration/output-size drift alerts for this agent (LLM rounds have no normal level)")
+    a.add_argument("--drift", action="store_true", help="switch drift alerts back on")
     # Zonder dit kon je een baan alleen via de API laten rusten. Zet je een cron-taak uit,
     # dan blijft de wacht hem missen: x-queue ging op 1 september 2026 uit de crontab en
     # meldde daarna negen keer MISSED voor werk dat niemand meer verwachtte.

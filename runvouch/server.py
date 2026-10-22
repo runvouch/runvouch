@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS agents(
   cadence_s INTEGER, grace_s INTEGER DEFAULT 900, max_runtime_s INTEGER DEFAULT 3600,
   cap_run_cost REAL, cap_day_cost REAL, cap_run_tokens INTEGER,
   evidence_required INTEGER DEFAULT 0, paused INTEGER DEFAULT 0, ping_token TEXT,
+  drift_watch INTEGER DEFAULT 1,
   UNIQUE(account_id, name));
 -- run ids are namespaced per account: the client picks the id, so "nightly-2026-09-06" belongs to
 -- whoever sent it and to nobody else. Uniqueness is (account_id, id), never id on its own.
@@ -185,7 +186,8 @@ with _lock:
     for _t, _col in (("runs", "leaf_hash TEXT"), ("tool_events", "account_id INTEGER"),
                      ("alerts", "attempts INTEGER DEFAULT 0"), ("alerts", "next_try REAL"),
                      ("agents", "ping_token TEXT"), ("signups", "source TEXT"), ("accounts", "source TEXT"),
-                     ("public_agents", "fleet_slug TEXT"), ("accounts", "nudged_at REAL")):
+                     ("public_agents", "fleet_slug TEXT"), ("accounts", "nudged_at REAL"),
+                     ("agents", "drift_watch INTEGER DEFAULT 1")):
         try:
             _db.execute(f"ALTER TABLE {_t} ADD COLUMN {_col}")
         except sqlite3.OperationalError:
@@ -528,6 +530,8 @@ def _median(xs: list[float]) -> float:
 
 def check_drift(agent: sqlite3.Row, run: sqlite3.Row) -> None:
     """Compare this run's duration / output size against trailing successful runs (robust MAD)."""
+    if "drift_watch" in agent.keys() and not agent["drift_watch"]:
+        return
     hist = qa("SELECT started, ended, output_bytes FROM runs WHERE agent_id=? AND status='ok' AND id!=? "
               "AND ended IS NOT NULL ORDER BY started DESC LIMIT ?", agent["id"], run["id"], DRIFT_HISTORY)
     if len(hist) < 4:
@@ -1140,6 +1144,12 @@ class AgentIn(BaseModel):
     cap_day_cost: Optional[float] = None
     cap_run_tokens: Optional[int] = None
     evidence_required: bool = False
+    # Duration and output-size drift assume one normal level. A job whose work is an LLM
+    # conversation (a research round, a buyer walk, a blog draft) has no normal level: the
+    # same prompt takes 8 or 30 minutes depending on what it finds. Ten of eleven DRIFT alerts
+    # on our own fleet between 22 September and 19 October 2026 were of that kind. The owner
+    # switches the detector off per agent; FAILED, MISSED, STALLED and BUDGET keep working.
+    drift_watch: bool = True
 
 
 class StartIn(BaseModel):
@@ -1812,14 +1822,14 @@ def upsert_agent(a: AgentIn, acc=Depends(account_from_key)):
     with tx() as db:
         # ping_token survives an update: the URL is pasted into crontabs and workflows elsewhere,
         # so re-registering an agent must not silently break every job that pings it.
-        db.execute("""INSERT INTO agents(account_id,name,created,cadence_s,grace_s,max_runtime_s,cap_run_cost,cap_day_cost,cap_run_tokens,evidence_required,ping_token)
-                      VALUES(?,?,?,?,?,?,?,?,?,?,?)
+        db.execute("""INSERT INTO agents(account_id,name,created,cadence_s,grace_s,max_runtime_s,cap_run_cost,cap_day_cost,cap_run_tokens,evidence_required,ping_token,drift_watch)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                       ON CONFLICT(account_id,name) DO UPDATE SET cadence_s=excluded.cadence_s, grace_s=excluded.grace_s,
                       max_runtime_s=excluded.max_runtime_s, cap_run_cost=excluded.cap_run_cost, cap_day_cost=excluded.cap_day_cost,
                       cap_run_tokens=excluded.cap_run_tokens, evidence_required=excluded.evidence_required,
-                      ping_token=COALESCE(agents.ping_token, excluded.ping_token)""",
+                      ping_token=COALESCE(agents.ping_token, excluded.ping_token), drift_watch=excluded.drift_watch""",
                    (acc["id"], a.name, time.time(), a.cadence_s, a.grace_s, a.max_runtime_s, a.cap_run_cost, a.cap_day_cost,
-                    a.cap_run_tokens, int(a.evidence_required), secrets.token_urlsafe(18)))
+                    a.cap_run_tokens, int(a.evidence_required), secrets.token_urlsafe(18), int(a.drift_watch)))
     return {"ok": True, "agent": a.name, "ping_url": ping_url(_agent(acc, a.name))}
 
 
@@ -1837,6 +1847,7 @@ def list_agents(acc=Depends(account_from_key)):
                     "grace_s": a["grace_s"], "max_runtime_s": a["max_runtime_s"],
                     "cap_run_cost": a["cap_run_cost"], "cap_day_cost": a["cap_day_cost"],
                     "cap_run_tokens": a["cap_run_tokens"], "evidence_required": bool(a["evidence_required"]),
+                    "drift_watch": bool(a["drift_watch"]),
                     "last_run": dict(last) if last else None, "open_alerts": open_alerts, "cost_24h": round(cost24, 4),
                     "state": _state(a, last, open_alerts), "ping_url": ping_url(a)})
     return out

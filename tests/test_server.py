@@ -200,6 +200,40 @@ def test_drift():
     assert alerts("DRIFT"), "output collapsed to 1% of baseline must alert"
 
 
+def test_drift_can_be_switched_off_per_agent():
+    """Een LLM-ronde heeft geen normale duur, dus de eigenaar zet de driftwacht per agent uit.
+
+    Waarom deze test bestaat: tien van de elf DRIFT-meldingen op de eigen vloot tussen
+    22 september en 19 oktober 2026 gingen over claude -p rondes (koperswandeling,
+    marktwacht, blog-writer, quality-round) waarvan de duur per definitie wisselt. De
+    andere detectoren blijven aan: een FAILED-run moet nog steeds melden.
+    """
+    c.post("/v1/agents", json={"name": "llm-ronde", "drift_watch": False}, headers=H)
+    assert c.get("/v1/agents", headers=H).json()[0]["name"] <= "zzz"  # listing werkt
+    rij = next(a for a in c.get("/v1/agents", headers=H).json() if a["name"] == "llm-ronde")
+    assert rij["drift_watch"] is False
+    voor = len(alerts("DRIFT"))
+    for i in range(6):
+        rid = c.post("/v1/runs/start", json={"agent": "llm-ronde"}, headers=H).json()["run_id"]
+        c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 10000 + i * 10}, headers=H)
+    rid = c.post("/v1/runs/start", json={"agent": "llm-ronde"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "ok", "output_bytes": 120}, headers=H)
+    assert len(alerts("DRIFT")) == voor, "met de driftwacht uit mag een ingestorte uitvoer niet melden"
+    rid = c.post("/v1/runs/start", json={"agent": "llm-ronde"}, headers=H).json()["run_id"]
+    c.post("/v1/runs/end", json={"run_id": rid, "status": "fail"}, headers=H)
+    assert any(a["agent"] == "llm-ronde" for a in alerts("FAILED")), "FAILED blijft gewoon werken"
+    # de client zet de vlag zonder de andere instellingen te wissen
+    import runvouch.cli as cli
+    echte = cli.api
+    cli.api = lambda method, path, body=None, params=None, soft=False, **kw: c.request(method, path, json=body, headers=H).json()
+    try:
+        cli.main(["agent", "llm-ronde", "--drift"])
+    finally:
+        cli.api = echte
+    rij = next(a for a in c.get("/v1/agents", headers=H).json() if a["name"] == "llm-ronde")
+    assert rij["drift_watch"] is True
+
+
 def test_plan_limit_and_state():
     fk = c.post("/admin/accounts", params={"name": "free"}, headers={"X-Admin-Token": "adm"}).json()["api_key"]
     for n in range(server.PLAN_LIMITS["free"]):

@@ -10,6 +10,7 @@ in reddit-scout.py so both paths write the same way. Anything without a link get
 import importlib.util
 import json
 import os
+import socket
 import re
 import sqlite3
 import subprocess
@@ -391,7 +392,15 @@ def main() -> int:
     tok, chat = creds()
     offset = int(open(OFFSET).read() or 0) if os.path.exists(OFFSET) else 0
     print("luistert op chat", chat, flush=True)
+    # De agent telegram-antwoord heeft bij rv een cadans van 24 uur, maar deze daemon meldde
+    # alleen een run als er een bericht binnenkwam. Op stille dagen volgde dan MISSED
+    # ("no run started for 2820 min"), vijf keer tussen 22 september en 15 oktober 2026,
+    # terwijl de daemon gewoon draaide. Een hartslag per etmaal bewijst dat hij leeft.
+    hartslag = 0.0
     while True:
+        if time.time() - hartslag > 12 * 3600:
+            meld_run(0.0, "hartslag")
+            hartslag = time.time()
         try:
             q = urllib.parse.urlencode({"timeout": 50, "offset": offset, "allowed_updates": json.dumps(["message"])})
             r = json.load(urllib.request.urlopen(urllib.request.Request(f"https://api.telegram.org/bot{tok}/getUpdates?{q}", headers={"User-Agent": UA}), timeout=70))
@@ -413,6 +422,11 @@ def main() -> int:
                     meld_run(kosten, "telegram")
         except KeyboardInterrupt:
             return 0
+        except (TimeoutError, socket.timeout):
+            # Long-poll van 50 s die door Telegram of het netwerk niet op tijd wordt
+            # beantwoord. Dat gebeurde tot 30 keer per dag en vulde het journaal met
+            # "fout: TimeoutError" zonder dat er iets mis was. Stil opnieuw.
+            continue
         except Exception as e:
             print("fout:", type(e).__name__, str(e)[:200], flush=True)
             time.sleep(15)
