@@ -2,7 +2,7 @@
  "alerts_by_kind": {
   "BUDGET_RUN": 1,
   "DRIFT": 11,
-  "FAILED": 39,
+  "FAILED": 40,
   "MISSED": 25
  },
  "fleet": {
@@ -38,10 +38,10 @@
   "verify_in_browser": "https://runvouch.com/verify"
  },
  "runs": {
-  "failed": 39,
-  "failure_rate_percent": 0.42,
-  "finished": 9339,
-  "ok": 9300
+  "failed": 40,
+  "failure_rate_percent": 0.43,
+  "finished": 9342,
+  "ok": 9302
  },
  "source": "RunVouch, https://runvouch.com/how-often-jobs-fail",
  "window_days": 30
